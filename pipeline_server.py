@@ -162,22 +162,15 @@ class PipelineHandler(BaseHTTPRequestHandler):
             # Check for checkpoint_id in the request
             checkpoint_id = req_data.get("checkpoint_id", None)
 
-            # Run the pipeline
-            result = run_pipeline(user_prompt, checkpoint_id)
+            # Run the pipeline (returns a markdown string)
+            result_text = run_pipeline(user_prompt, checkpoint_id)
 
             # Build response in OpenAI chat format
             response_text = (
                 f"## Pipeline Results\n\n"
-                f"### Request\n{result['request']}\n\n"
-                f"### Director's Task Breakdown\n{result['phases']['director']}\n\n"
-                f"### Task Outputs\n"
+                f"{result_text}"
             )
-            for tid, output in result["phases"].get("tasks", {}).items():
-                response_text += f"\n#### Task {tid}\n{output}\n"
 
-            response_text += f"\n### Integration Review\n{result['phases']['review']}\n"
-            response_text += f"\n### Final Approval\n{result['phases']['final_approval']}\n"
-            response_text += f"\n**Pipeline Passed:** {'Yes' if result['passed'] else 'No'}**\n"
 
             self._send_json({
                 "id": "pipeline-" + datetime.now().strftime("%Y%m%d%H%M%S"),
