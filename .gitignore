@@ -1,22 +1,26 @@
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
 *.egg-info/
 dist/
 build/
 
-# Pipeline output
+# Pipeline snapshots (runtime data)
+.pipeline_snapshots/
+offload_store/
 pipeline_output_*.md
-
-# Checkpoints
-.pipeline_checkpoints/
+bridge_log.txt
+midway.log
+render_log.txt
 
 # IDE
+.vs/
 .vscode/
-.idea/
-*.swp
-*.swo
+*.user
+*.suo
+*.sln.docstates
 
-# OS
+# System
 .DS_Store
 Thumbs.db

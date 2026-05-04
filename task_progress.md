@@ -1,0 +1,5 @@
+- [x] Understand the codebase
+- [x] Inject diagnostic logging into key operations
+- [ ] Build the binary
+- [ ] User runs game, reproduces bug, shares logs
+- [ ] Analyze logs to find root cause
