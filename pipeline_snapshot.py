@@ -316,11 +316,21 @@ class SnapshotManager:
         
         Before applying, verifies the MD5 content_hash stored in the manifest
         against the file on disk to detect silent file corruption.
+        Tracks files created during the run (phantom files) for mid-loop rollback.
         Returns list of (rel_path, success) tuples.
         """
         proposals = self._manifest["proposals"]
         if rel_paths is None:
             rel_paths = list(proposals.keys())
+
+        # Track phantom files — files that were created during the run
+        # (i.e., they have proposals but were never in originals_dir)
+        created_during_run = []
+        for rel_path in rel_paths:
+            safe = _safe_path(rel_path)
+            original = self.originals_dir / safe
+            if not original.exists():
+                created_during_run.append(rel_path)
 
         results = []
         for rel_path in rel_paths:
@@ -367,6 +377,10 @@ class SnapshotManager:
             results.append((rel_path, True, ""))
             print(f"  [Snapshot] Applied: {rel_path}")
 
+        # Store created_during_run for revert_all to use
+        self._manifest["created_during_run"] = list(set(
+            self._manifest.get("created_during_run", []) + created_during_run
+        ))
         self._manifest["applied"] = True
         self._manifest["applied_at"] = _timestamp()
         self._save_manifest()
@@ -374,7 +388,7 @@ class SnapshotManager:
 
     def revert_all(self) -> list:
         """
-        Restore all original files.
+        Restore all original files and remove phantom files created during the run.
         Returns list of (rel_path, success) tuples.
         """
         results = []
@@ -390,10 +404,80 @@ class SnapshotManager:
             results.append((rel_path, True, ""))
             print(f"  [Snapshot] Reverted: {rel_path}")
 
+        # Remove phantom files — files that were created during the run
+        # and have no original to restore to.
+        created_during_run = self._manifest.get("created_during_run", [])
+        for rel_path in created_during_run:
+            dest = PROJECT_ROOT / rel_path
+            if dest.exists():
+                try:
+                    os.unlink(str(dest))
+                    results.append((rel_path, True, "Phantom file removed"))
+                    print(f"  [Snapshot] Removed phantom file: {rel_path}")
+                except Exception as e:
+                    results.append((rel_path, False, f"Failed to remove phantom file: {e}"))
+                    print(f"  [Snapshot] ⚠ Failed to remove phantom file {rel_path}: {e}")
+
         self._manifest["reverted"] = True
         self._manifest["reverted_at"] = _timestamp()
         self._save_manifest()
         return results
+
+    def revert_to_cycle(self, rel_path: str, cycle_index: int) -> bool:
+        """
+        Revert a single file to a specific proposal cycle index.
+        Indexes the specific proposal in the manifest array, verifies the hash,
+        and copies that exact historical state to the project root.
+
+        Args:
+            rel_path: Relative path of the file (e.g. 'src/Engine.cpp').
+            cycle_index: Index into the proposals array for this file (0-based).
+
+        Returns:
+            True if revert succeeded, False otherwise.
+        """
+        proposals = self._manifest["proposals"].get(rel_path, [])
+        if not proposals:
+            print(f"  [Snapshot] No proposals found for {rel_path}")
+            return False
+
+        if cycle_index < 0 or cycle_index >= len(proposals):
+            print(f"  [Snapshot] Cycle index {cycle_index} out of range "
+                  f"(0..{len(proposals)-1}) for {rel_path}")
+            return False
+
+        proposal_entry = proposals[cycle_index]
+        proposed_path = Path(proposal_entry["file"])
+        if not proposed_path.exists():
+            print(f"  [Snapshot] Proposal file missing: {proposed_path}")
+            return False
+
+        # ── Integrity verification: hash check before copy ────────
+        expected_hash = proposal_entry.get("content_hash")
+        if expected_hash is not None:
+            try:
+                disk_bytes = proposed_path.read_bytes()
+                disk_hash = hashlib.md5(disk_bytes).hexdigest()
+                if disk_hash != expected_hash:
+                    print(f"  [Snapshot] ⛔ HASH MISMATCH on cycle {cycle_index} "
+                          f"for {rel_path}: expected {expected_hash[:10]}..., "
+                          f"got {disk_hash[:10]}...")
+                    return False
+                else:
+                    print(f"  [Snapshot] ✓ Hash verified: {rel_path} cycle {cycle_index} "
+                          f"[{disk_hash[:10]}...]")
+            except Exception as e:
+                print(f"  [Snapshot] Hash verification failed: {e}")
+                return False
+        else:
+            print(f"  [Snapshot] ⚠ No stored hash for {rel_path} — skipping integrity check")
+
+        # Copy the historical proposal state to the project root
+        dest = PROJECT_ROOT / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(proposed_path), str(dest))
+        print(f"  [Snapshot] Reverted {rel_path} to cycle {cycle_index}")
+        return True
 
     # ── Status / Info ─────────────────────────────────────────────────
 

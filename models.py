@@ -111,6 +111,7 @@ class Task:
         self.signals = []
         self.double_check = None
         self.completed = False
+        self.pinned_blocks: set = set()  # Block IDs pinned to prevent page-out
 
     def __repr__(self):
         return f"Task({self.agent}, parent={self.parent}, query={self.is_query}, iter={self.iteration})"

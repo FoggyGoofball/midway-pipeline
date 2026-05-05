@@ -16,3 +16,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+.vs/
+__pycache__/
+*.pyc
+.pipeline_snapshots/
+pipeline_output_*

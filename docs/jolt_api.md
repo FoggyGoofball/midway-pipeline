@@ -1,0 +1,279 @@
+# Jolt Physics API Reference <a name="jolt-api"></a>
+> Source: Jolt Physics GitHub (Raw Headers) | Generated: 2026-04-30
+> Focus: BroadPhase layers, Body creation, Core Systems
+
+## Table of Contents
+- [PhysicsSystem](#physicssystem)
+- [BodyInterface](#bodyinterface)
+- [BodyCreationSettings](#bodycreationsettings)
+- [ObjectLayerFilter](#objectlayerfilter)
+- [BroadPhaseLayerInterface](#broadphaselayerinterface)
+- [ConstraintSettings](#constraintsettings)
+- [TwoBodyConstraintSettings](#twobodyconstraintsettings)
+- [ShapeSettings](#shapesettings)
+
+---
+### class: PhysicsSystem <a name="physicssystem"></a>
+- `PhysicsSystem() : mContactManager(mPhysicsSettings) JPH_IF_ENABLE_ASSERTS(, mConstraintManager(&mBodyManager)) { }`
+- `void Init(uint inMaxBodies, uint inNumBodyMutexes, uint inMaxBodyPairs, uint inMaxContactConstraints, const BroadPhaseLayerInterface &inBroadPhaseLayerInterface, const ObjectVsBroadPhaseLayerFilter &inObjectVsBroadPhaseLayerFilter, const ObjectLayerPairFilter &inObjectLayerPairFilter)`
+- `void SetBodyActivationListener(BodyActivationListener *inListener) { mBodyManager.SetBodyActivationListener(inListener); }`
+- `BodyActivationListener * GetBodyActivationListener() const { return mBodyManager.GetBodyActivationListener(); }`
+- `void SetContactListener(ContactListener *inListener) { mContactManager.SetContactListener(inListener); }`
+- `ContactListener * GetContactListener() const { return mContactManager.GetContactListener(); }`
+- `SoftBodyContactListener * GetSoftBodyContactListener() const { return mSoftBodyContactListener; }`
+- `void SetCombineFriction(ContactConstraintManager::CombineFunction inCombineFriction) { mContactManager.SetCombineFriction(inCombineFriction); }`
+- `ContactConstraintManager::CombineFunction GetCombineFriction() const { return mContactManager.GetCombineFriction(); }`
+- `void SetCombineRestitution(ContactConstraintManager::CombineFunction inCombineRestitution) { mContactManager.SetCombineRestitution(inCombineRestitution); }`
+- `ContactConstraintManager::CombineFunction GetCombineRestitution() const { return mContactManager.GetCombineRestitution(); }`
+- `const SimShapeFilter * GetSimShapeFilter() const { return mSimShapeFilter; }`
+- `const SimCollideBodyVsBody &GetSimCollideBodyVsBody() const { return mSimCollideBodyVsBody; }`
+- `static void sDefaultSimCollideBodyVsBody(const Body &inBody1, const Body &inBody2, Mat44Arg inCenterOfMassTransform1, Mat44Arg inCenterOfMassTransform2, CollideShapeSettings &ioCollideShapeSettings, CollideShapeCollector &ioCollector, const ShapeFilter &inShapeFilter)`
+- `const PhysicsSettings & GetPhysicsSettings() const { return mPhysicsSettings; }`
+- `const BodyInterface & GetBodyInterface() const { return mBodyInterfaceLocking; }`
+- `BodyInterface & GetBodyInterface() { return mBodyInterfaceLocking; }`
+- `const BodyInterface & GetBodyInterfaceNoLock() const { return mBodyInterfaceNoLock; }`
+- `BodyInterface & GetBodyInterfaceNoLock() { return mBodyInterfaceNoLock; }`
+- `const BroadPhaseQuery & GetBroadPhaseQuery() const { return *mBroadPhase; }`
+- `const NarrowPhaseQuery & GetNarrowPhaseQuery() const { return mNarrowPhaseQueryLocking; }`
+- `const NarrowPhaseQuery & GetNarrowPhaseQueryNoLock() const { return mNarrowPhaseQueryNoLock; }`
+- `void AddConstraint(Constraint *inConstraint) { mConstraintManager.Add(&inConstraint, 1); }`
+- `void RemoveConstraint(Constraint *inConstraint) { mConstraintManager.Remove(&inConstraint, 1); }`
+- `void AddConstraints(Constraint **inConstraints, int inNumber) { mConstraintManager.Add(inConstraints, inNumber); }`
+- `void RemoveConstraints(Constraint **inConstraints, int inNumber) { mConstraintManager.Remove(inConstraints, inNumber); }`
+- `Constraints GetConstraints() const { return mConstraintManager.GetConstraints(); }`
+- `void OptimizeBroadPhase()`
+- `void AddStepListener(PhysicsStepListener *inListener)`
+- `void RemoveStepListener(PhysicsStepListener *inListener)`
+- `EPhysicsUpdateError Update(float inDeltaTime, int inCollisionSteps, TempAllocator *inTempAllocator, JobSystem *inJobSystem)`
+- `void SaveBodyState(const Body &inBody, StateRecorder &inStream) const`
+- `void RestoreBodyState(Body &ioBody, StateRecorder &inStream)`
+- `void DrawConstraints(DebugRenderer *inRenderer) { mConstraintManager.DrawConstraints(inRenderer); }`
+- `void DrawConstraintLimits(DebugRenderer *inRenderer) { mConstraintManager.DrawConstraintLimits(inRenderer); }`
+- `void DrawConstraintReferenceFrame(DebugRenderer *inRenderer) { mConstraintManager.DrawConstraintReferenceFrame(inRenderer); }`
+- `Vec3 GetGravity() const { return mGravity; }`
+- `const BodyLockInterfaceNoLock & GetBodyLockInterfaceNoLock() const { return mBodyLockInterfaceNoLock; }`
+- `const BodyLockInterfaceLocking & GetBodyLockInterface() const { return mBodyLockInterfaceLocking; }`
+- `const ObjectVsBroadPhaseLayerFilter &GetObjectVsBroadPhaseLayerFilter() const { return *mObjectVsBroadPhaseLayerFilter; }`
+- `const ObjectLayerPairFilter &GetObjectLayerPairFilter() const { return *mObjectLayerPairFilter; }`
+- `DefaultBroadPhaseLayerFilter GetDefaultBroadPhaseLayerFilter(ObjectLayer inLayer) const { return DefaultBroadPhaseLayerFilter(*mObjectVsBroadPhaseLayerFilter, inLayer); }`
+- `DefaultObjectLayerFilter GetDefaultLayerFilter(ObjectLayer inLayer) const { return DefaultObjectLayerFilter(*mObjectLayerPairFilter, inLayer); }`
+- `uint GetNumBodies() const { return mBodyManager.GetNumBodies(); }`
+- `uint32 GetNumActiveBodies(EBodyType inType) const { return mBodyManager.GetNumActiveBodies(inType); }`
+- `uint GetMaxBodies() const { return mBodyManager.GetMaxBodies(); }`
+- `BodyStats GetBodyStats() const { return mBodyManager.GetBodyStats(); }`
+- `void GetBodies(BodyIDVector &outBodyIDs) const { return mBodyManager.GetBodyIDs(outBodyIDs); }`
+- `void GetActiveBodies(EBodyType inType, BodyIDVector &outBodyIDs) const { return mBodyManager.GetActiveBodies(inType, outBodyIDs); }`
+- `const BodyID * GetActiveBodiesUnsafe(EBodyType inType) const { return mBodyManager.GetActiveBodiesUnsafe(inType); }`
+- `bool WereBodiesInContact(const BodyID &inBody1ID, const BodyID &inBody2ID) const { return mContactManager.WereBodiesInContact(inBody1ID, inBody2ID); }`
+- `AABox GetBounds() const { return mBroadPhase->GetBounds(); }`
+- `void ReportBroadphaseStats() { mBroadPhase->ReportStats(); }`
+- `#if defined(JPH_TRACK_SIMULATION_STATS) && defined(JPH_PROFILE_ENABLED)`
+- `void ReportSimulationStats() { mBodyManager.ReportSimulationStats(); }`
+
+---
+### class: BodyInterface <a name="bodyinterface"></a>
+- `Body * CreateBody(const BodyCreationSettings &inSettings)`
+- `Body * CreateSoftBody(const SoftBodyCreationSettings &inSettings)`
+- `Body * CreateBodyWithID(const BodyID &inBodyID, const BodyCreationSettings &inSettings)`
+- `Body * CreateSoftBodyWithID(const BodyID &inBodyID, const SoftBodyCreationSettings &inSettings)`
+- `Body * CreateBodyWithoutID(const BodyCreationSettings &inSettings) const`
+- `Body * CreateSoftBodyWithoutID(const SoftBodyCreationSettings &inSettings) const`
+- `void DestroyBodyWithoutID(Body *inBody) const`
+- `bool AssignBodyID(Body *ioBody)`
+- `bool AssignBodyID(Body *ioBody, const BodyID &inBodyID)`
+- `Body * UnassignBodyID(const BodyID &inBodyID)`
+- `void UnassignBodyIDs(const BodyID *inBodyIDs, int inNumber, Body **outBodies)`
+- `void DestroyBody(const BodyID &inBodyID)`
+- `void DestroyBodies(const BodyID *inBodyIDs, int inNumber)`
+- `void AddBody(const BodyID &inBodyID, EActivation inActivationMode)`
+- `void RemoveBody(const BodyID &inBodyID)`
+- `bool IsAdded(const BodyID &inBodyID) const`
+- `BodyID CreateAndAddBody(const BodyCreationSettings &inSettings, EActivation inActivationMode)`
+- `BodyID CreateAndAddSoftBody(const SoftBodyCreationSettings &inSettings, EActivation inActivationMode)`
+- `AddState AddBodiesPrepare(BodyID *ioBodies, int inNumber)`
+- `void AddBodiesFinalize(BodyID *ioBodies, int inNumber, AddState inAddState, EActivation inActivationMode)`
+- `void AddBodiesAbort(BodyID *ioBodies, int inNumber, AddState inAddState)`
+- `void RemoveBodies(BodyID *ioBodies, int inNumber)`
+- `void ActivateBody(const BodyID &inBodyID)`
+- `void ActivateBodies(const BodyID *inBodyIDs, int inNumber)`
+- `void ActivateBodiesInAABox(const AABox &inBox, const BroadPhaseLayerFilter &inBroadPhaseLayerFilter, const ObjectLayerFilter &inObjectLayerFilter)`
+- `void DeactivateBody(const BodyID &inBodyID)`
+- `void DeactivateBodies(const BodyID *inBodyIDs, int inNumber)`
+- `bool IsActive(const BodyID &inBodyID) const`
+- `void ResetSleepTimer(const BodyID &inBodyID)`
+- `TwoBodyConstraint * CreateConstraint(const TwoBodyConstraintSettings *inSettings, const BodyID &inBodyID1, const BodyID &inBodyID2)`
+- `void ActivateConstraint(const TwoBodyConstraint *inConstraint)`
+- `RefConst<Shape> GetShape(const BodyID &inBodyID) const`
+- `void SetShape(const BodyID &inBodyID, const Shape *inShape, bool inUpdateMassProperties, EActivation inActivationMode) const`
+- `void NotifyShapeChanged(const BodyID &inBodyID, Vec3Arg inPreviousCenterOfMass, bool inUpdateMassProperties, EActivation inActivationMode) const`
+- `void SetObjectLayer(const BodyID &inBodyID, ObjectLayer inLayer)`
+- `ObjectLayer GetObjectLayer(const BodyID &inBodyID) const`
+- `void SetPositionAndRotation(const BodyID &inBodyID, RVec3Arg inPosition, QuatArg inRotation, EActivation inActivationMode)`
+- `void SetPositionAndRotationWhenChanged(const BodyID &inBodyID, RVec3Arg inPosition, QuatArg inRotation, EActivation inActivationMode)`
+- `void GetPositionAndRotation(const BodyID &inBodyID, RVec3 &outPosition, Quat &outRotation) const`
+- `void SetPosition(const BodyID &inBodyID, RVec3Arg inPosition, EActivation inActivationMode)`
+- `RVec3 GetPosition(const BodyID &inBodyID) const`
+- `RVec3 GetCenterOfMassPosition(const BodyID &inBodyID) const`
+- `void SetRotation(const BodyID &inBodyID, QuatArg inRotation, EActivation inActivationMode)`
+- `Quat GetRotation(const BodyID &inBodyID) const`
+- `RMat44 GetWorldTransform(const BodyID &inBodyID) const`
+- `RMat44 GetCenterOfMassTransform(const BodyID &inBodyID) const`
+- `void MoveKinematic(const BodyID &inBodyID, RVec3Arg inTargetPosition, QuatArg inTargetRotation, float inDeltaTime)`
+- `void SetLinearAndAngularVelocity(const BodyID &inBodyID, Vec3Arg inLinearVelocity, Vec3Arg inAngularVelocity)`
+- `void GetLinearAndAngularVelocity(const BodyID &inBodyID, Vec3 &outLinearVelocity, Vec3 &outAngularVelocity) const`
+- `void SetLinearVelocity(const BodyID &inBodyID, Vec3Arg inLinearVelocity)`
+- `Vec3 GetLinearVelocity(const BodyID &inBodyID) const`
+- `void AddLinearVelocity(const BodyID &inBodyID, Vec3Arg inLinearVelocity)`
+- `void AddLinearAndAngularVelocity(const BodyID &inBodyID, Vec3Arg inLinearVelocity, Vec3Arg inAngularVelocity)`
+- `void SetAngularVelocity(const BodyID &inBodyID, Vec3Arg inAngularVelocity)`
+- `Vec3 GetAngularVelocity(const BodyID &inBodyID) const`
+- `Vec3 GetPointVelocity(const BodyID &inBodyID, RVec3Arg inPoint) const`
+- `void SetPositionRotationAndVelocity(const BodyID &inBodyID, RVec3Arg inPosition, QuatArg inRotation, Vec3Arg inLinearVelocity, Vec3Arg inAngularVelocity)`
+- `void AddImpulse(const BodyID &inBodyID, Vec3Arg inImpulse)`
+- `void AddImpulse(const BodyID &inBodyID, Vec3Arg inImpulse, RVec3Arg inPoint)`
+- `void AddAngularImpulse(const BodyID &inBodyID, Vec3Arg inAngularImpulse)`
+- `bool ApplyBuoyancyImpulse(const BodyID &inBodyID, RVec3Arg inSurfacePosition, Vec3Arg inSurfaceNormal, float inBuoyancy, float inLinearDrag, float inAngularDrag, Vec3Arg inFluidVelocity, Vec3Arg inGravity, float inDeltaTime)`
+- `EBodyType GetBodyType(const BodyID &inBodyID) const`
+- `void SetMotionType(const BodyID &inBodyID, EMotionType inMotionType, EActivation inActivationMode)`
+- `EMotionType GetMotionType(const BodyID &inBodyID) const`
+- `void SetMotionQuality(const BodyID &inBodyID, EMotionQuality inMotionQuality)`
+- `EMotionQuality GetMotionQuality(const BodyID &inBodyID) const`
+- `Mat44 GetInverseInertia(const BodyID &inBodyID) const`
+- `void SetRestitution(const BodyID &inBodyID, float inRestitution)`
+- `float GetRestitution(const BodyID &inBodyID) const`
+- `void SetFriction(const BodyID &inBodyID, float inFriction)`
+- `float GetFriction(const BodyID &inBodyID) const`
+- `void SetGravityFactor(const BodyID &inBodyID, float inGravityFactor)`
+- `float GetGravityFactor(const BodyID &inBodyID) const`
+- `void SetMaxLinearVelocity(const BodyID &inBodyID, float inLinearVelocity)`
+- `float GetMaxLinearVelocity(const BodyID &inBodyID) const`
+- `void SetMaxAngularVelocity(const BodyID &inBodyID, float inAngularVelocity)`
+- `float GetMaxAngularVelocity(const BodyID &inBodyID) const`
+- `void SetUseManifoldReduction(const BodyID &inBodyID, bool inUseReduction)`
+- `bool GetUseManifoldReduction(const BodyID &inBodyID) const`
+- `void SetIsSensor(const BodyID &inBodyID, bool inIsSensor)`
+- `bool IsSensor(const BodyID &inBodyID) const`
+- `void SetCollisionGroup(const BodyID &inBodyID, const CollisionGroup &inCollisionGroup)`
+- `const CollisionGroup & GetCollisionGroup(const BodyID &inBodyID) const`
+- `TransformedShape GetTransformedShape(const BodyID &inBodyID) const`
+- `uint64 GetUserData(const BodyID &inBodyID) const`
+- `void SetUserData(const BodyID &inBodyID, uint64 inUserData) const`
+- `const PhysicsMaterial * GetMaterial(const BodyID &inBodyID, const SubShapeID &inSubShapeID) const`
+- `void InvalidateContactCache(const BodyID &inBodyID)`
+
+---
+### class: BodyCreationSettings <a name="bodycreationsettings"></a>
+- `BodyCreationSettings(const ShapeSettings *inShape, RVec3Arg inPosition, QuatArg inRotation, EMotionType inMotionType, ObjectLayer inObjectLayer) : mPosition(inPosition), mRotation(inRotation), mObjectLayer(inObjectLayer), mMotionType(inMotionType), mShape(inShape) { }`
+- `BodyCreationSettings(const Shape *inShape, RVec3Arg inPosition, QuatArg inRotation, EMotionType inMotionType, ObjectLayer inObjectLayer) : mPosition(inPosition), mRotation(inRotation), mObjectLayer(inObjectLayer), mMotionType(inMotionType), mShapePtr(inShape) { }`
+- `const ShapeSettings * GetShapeSettings() const { return mShape; }`
+- `Shape::ShapeResult ConvertShapeSettings()`
+- `const Shape * GetShape() const`
+- `MassProperties GetMassProperties() const`
+- `void SaveBinaryState(StreamOut &inStream) const`
+- `void RestoreBinaryState(StreamIn &inStream)`
+- `void SaveWithChildren(StreamOut &inStream, ShapeToIDMap *ioShapeMap, MaterialToIDMap *ioMaterialMap, GroupFilterToIDMap *ioGroupFilterMap) const`
+- `static BCSResult sRestoreWithChildren(StreamIn &inStream, IDToShapeMap &ioShapeMap, IDToMaterialMap &ioMaterialMap, IDToGroupFilterMap &ioGroupFilterMap)`
+- `CollisionGroup mCollisionGroup`
+
+---
+### class: ObjectLayerFilter <a name="objectlayerfilter"></a>
+- `bool ShouldCollide([[maybe_unused]] ObjectLayer inLayer) const`
+- `String GetDescription() const`
+- `bool ShouldCollide([[maybe_unused]] ObjectLayer inLayer1, [[maybe_unused]] ObjectLayer inLayer2) const`
+- `DefaultObjectLayerFilter(const ObjectLayerPairFilter &inObjectLayerPairFilter, ObjectLayer inLayer) :`
+- `mObjectLayerPairFilter(inObjectLayerPairFilter),`
+- `mLayer(inLayer)`
+- `DefaultObjectLayerFilter(const DefaultObjectLayerFilter &inRHS) :`
+- `mObjectLayerPairFilter(inRHS.mObjectLayerPairFilter),`
+- `mLayer(inRHS.mLayer)`
+- `bool ShouldCollide(ObjectLayer inLayer) const override`
+- `return mObjectLayerPairFilter.ShouldCollide(mLayer, inLayer)`
+- `SpecifiedObjectLayerFilter(ObjectLayer inLayer) :`
+
+---
+### class: BroadPhaseLayerInterface <a name="broadphaselayerinterface"></a>
+- `#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)`
+- `bool ShouldCollide([[maybe_unused]] ObjectLayer inLayer1, [[maybe_unused]] BroadPhaseLayer inLayer2) const`
+- `bool ShouldCollide([[maybe_unused]] BroadPhaseLayer inLayer) const`
+- `DefaultBroadPhaseLayerFilter(const ObjectVsBroadPhaseLayerFilter &inObjectVsBroadPhaseLayerFilter, ObjectLayer inLayer) :`
+- `mObjectVsBroadPhaseLayerFilter(inObjectVsBroadPhaseLayerFilter),`
+- `mLayer(inLayer)`
+- `bool ShouldCollide(BroadPhaseLayer inLayer) const override`
+- `return mObjectVsBroadPhaseLayerFilter.ShouldCollide(mLayer, inLayer)`
+- `SpecifiedBroadPhaseLayerFilter(BroadPhaseLayer inLayer) :`
+
+---
+### class: ConstraintSettings <a name="constraintsettings"></a>
+- `void SaveBinaryState(StreamOut &inStream) const`
+- `static ConstraintResult sRestoreFromBinaryState(StreamIn &inStream)`
+- `Constraint(const ConstraintSettings &inSettings) :`
+- `mDrawConstraintSize(inSettings.mDrawConstraintSize),`
+- `mConstraintPriority(inSettings.mConstraintPriority),`
+- `mNumVelocityStepsOverride(uint8(inSettings.mNumVelocityStepsOverride)),`
+- `mNumPositionStepsOverride(uint8(inSettings.mNumPositionStepsOverride)),`
+- `mEnabled(inSettings.mEnabled),`
+- `mUserData(inSettings.mUserData)`
+- `JPH_ASSERT(inSettings.mNumVelocityStepsOverride < 256)`
+- `JPH_ASSERT(inSettings.mNumPositionStepsOverride < 256)`
+- `EConstraintType GetType() const { return EConstraintType::Constraint; }`
+- `uint32 GetConstraintPriority() const { return mConstraintPriority; }`
+- `uint GetNumVelocityStepsOverride() const { return mNumVelocityStepsOverride; }`
+- `uint GetNumPositionStepsOverride() const { return mNumPositionStepsOverride; }`
+- `bool GetEnabled() const { return mEnabled; }`
+- `uint64 GetUserData() const { return mUserData; }`
+- `bool IsActive() const { return mEnabled; }`
+- `void DrawConstraintLimits([[maybe_unused]] DebugRenderer *inRenderer) const { }`
+- `void DrawConstraintReferenceFrame([[maybe_unused]] DebugRenderer *inRenderer) const { }`
+- `float GetDrawConstraintSize() const { return mDrawConstraintSize; }`
+- `void SaveState(StateRecorder &inStream) const`
+- `void RestoreState(StateRecorder &inStream)`
+
+---
+### class: TwoBodyConstraintSettings <a name="twobodyconstraintsettings"></a>
+- `TwoBodyConstraint(Body &inBody1, Body &inBody2, const TwoBodyConstraintSettings &inSettings) : Constraint(inSettings), mBody1(&inBody1), mBody2(&inBody2) { }`
+- `EConstraintType GetType() const override { return EConstraintType::TwoBodyConstraint; }`
+- `bool IsActive() const override { return Constraint::IsActive() && (mBody1->IsActive() || mBody2->IsActive()) && (mBody2->IsDynamic() || mBody1->IsDynamic()); }`
+- `void DrawConstraintReferenceFrame(DebugRenderer *inRenderer) const override`
+- `Body * GetBody1() const { return mBody1; }`
+- `Body * GetBody2() const { return mBody2; }`
+- `void BuildIslands(uint32 inConstraintIndex, IslandBuilder &ioBuilder, BodyManager &inBodyManager) override`
+- `uint BuildIslandSplits(LargeIslandSplitter &ioSplitter) const override`
+
+---
+### class: ShapeSettings <a name="shapesettings"></a>
+- `void ClearCachedResult() { mCachedResult.Clear(); }`
+- `static ShapeFunctions & sGet(EShapeSubType inSubType) { return sRegistry[int(inSubType)]; }`
+- `Shape(EShapeType inType, EShapeSubType inSubType) : mShapeType(inType), mShapeSubType(inSubType) { }`
+- `Shape(EShapeType inType, EShapeSubType inSubType, const ShapeSettings &inSettings, [[maybe_unused]] ShapeResult &outResult) : mUserData(inSettings.mUserData), mShapeType(inType), mShapeSubType(inSubType) { }`
+- `EShapeType GetType() const { return mShapeType; }`
+- `EShapeSubType GetSubType() const { return mShapeSubType; }`
+- `uint64 GetUserData() const { return mUserData; }`
+- `bool MustBeStatic() const { return false; }`
+- `Vec3 GetCenterOfMass() const { return Vec3::sZero(); }`
+- `AABox GetWorldSpaceBounds(Mat44Arg inCenterOfMassTransform, Vec3Arg inScale) const { return GetLocalBounds().Scaled(inScale).Transformed(inCenterOfMassTransform); }`
+- `AABox GetWorldSpaceBounds(DMat44Arg inCenterOfMassTransform, Vec3Arg inScale) const`
+- `bounds.Translate(inCenterOfMassTransform.GetTranslation())`
+- `const Shape * GetLeafShape([[maybe_unused]] const SubShapeID &inSubShapeID, SubShapeID &outRemainder) const`
+- `void GetSupportingFace([[maybe_unused]] const SubShapeID &inSubShapeID, [[maybe_unused]] Vec3Arg inDirection, [[maybe_unused]] Vec3Arg inScale, [[maybe_unused]] Mat44Arg inCenterOfMassTransform, [[maybe_unused]] SupportingFace &outVertices) const { }`
+- `uint64 GetSubShapeUserData([[maybe_unused]] const SubShapeID &inSubShapeID) const { return mUserData; }`
+- `TransformedShape GetSubShapeTransformedShape(const SubShapeID &inSubShapeID, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale, SubShapeID &outRemainder) const`
+- `void DrawGetSupportFunction([[maybe_unused]] DebugRenderer *inRenderer, [[maybe_unused]] RMat44Arg inCenterOfMassTransform, [[maybe_unused]] Vec3Arg inScale, [[maybe_unused]] ColorArg inColor, [[maybe_unused]] bool inDrawSupportDirection) const { }`
+- `void DrawGetSupportingFace([[maybe_unused]] DebugRenderer *inRenderer, [[maybe_unused]] RMat44Arg inCenterOfMassTransform, [[maybe_unused]] Vec3Arg inScale) const { }`
+- `void CollectTransformedShapes(const AABox &inBox, Vec3Arg inPositionCOM, QuatArg inRotation, Vec3Arg inScale, const SubShapeIDCreator &inSubShapeIDCreator, TransformedShapeCollector &ioCollector, const ShapeFilter &inShapeFilter) const`
+- `void TransformShape(Mat44Arg inCenterOfMassTransform, TransformedShapeCollector &ioCollector) const`
+- `ShapeResult ScaleShape(Vec3Arg inScale) const`
+- `struct alignas(16) GetTrianglesContext { uint8 mData[4288]; }`
+- `void SaveBinaryState(StreamOut &inStream) const`
+- `static ShapeResult sRestoreFromBinaryState(StreamIn &inStream)`
+- `void SaveMaterialState([[maybe_unused]] PhysicsMaterialList &outMaterials) const { }`
+- `void SaveSubShapeState([[maybe_unused]] ShapeList &outSubShapes) const { }`
+- `void SaveWithChildren(StreamOut &inStream, ShapeToIDMap &ioShapeMap, MaterialToIDMap &ioMaterialMap) const`
+- `static ShapeResult sRestoreWithChildren(StreamIn &inStream, IDToShapeMap &ioShapeMap, IDToMaterialMap &ioMaterialMap)`
+- `Stats(size_t inSizeBytes, uint inNumTriangles) : mSizeBytes(inSizeBytes), mNumTriangles(inNumTriangles) { }`
+- `size_t mSizeBytes`
+- `uint mNumTriangles`
+- `Stats GetStatsRecursive(VisitedShapes &ioVisitedShapes) const`
+- `bool IsValidScale(Vec3Arg inScale) const`
+- `Vec3 MakeScaleValid(Vec3Arg inScale) const`
+
+---

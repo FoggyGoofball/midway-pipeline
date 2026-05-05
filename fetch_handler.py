@@ -24,6 +24,9 @@ PROJECT_ROOT = Path(__file__).parent.resolve()
 def handle_fetch_signal(fetch_tag: str) -> str:
     """Parse [FETCH:filepath#anchor] tag, return content under that header.
 
+    Uses non-greedy regex with lookahead to support nested brackets in
+    file paths and anchors (e.g., [FETCH:docs/memory.md#[SubHeader]]).
+
     Includes temporal read-depth calculation for archive navigation.
 
     Args:
@@ -32,7 +35,7 @@ def handle_fetch_signal(fetch_tag: str) -> str:
     Returns:
         Formatted markdown content of the section, or empty string on error.
     """
-    match = re.match(r"\[FETCH:([^#]+)#([^\]]+)\]", fetch_tag.strip())
+    match = re.match(r"\[FETCH:(.*?)#(.*?)\]", fetch_tag.strip())
     if not match:
         print(f"  [FETCH] Invalid format: {fetch_tag[:80]}")
         return ""
@@ -150,17 +153,23 @@ def read_offloaded_file(block_id: str) -> str:
 
 
 def handle_read_offloaded_signal(block_id: str, task_context: str = "",
-                                  token_budget: Optional[TokenBudget] = None) -> str:
+                                  token_budget: Optional[TokenBudget] = None,
+                                  task=None) -> str:
     """Process a [READ_OFFLOADED:<block_id>] signal with budget-aware paging.
 
     Args:
         block_id: Identifier of the offloaded block.
         task_context: Current task context text for potential page-out.
         token_budget: Token budget tracker for budget-aware retrieval.
+        task: Optional Task object whose pinned_blocks set will be updated.
 
     Returns:
         Reconstructed content or error message.
     """
+    # Pin this block to prevent it from being paged out again
+    if task is not None:
+        task.pinned_blocks.add(block_id)
+
     content = read_offloaded_file(block_id)
     if content.startswith("\n## Offloaded Context Retrieval: ERROR"):
         return content
@@ -173,30 +182,36 @@ def handle_read_offloaded_signal(block_id: str, task_context: str = "",
             if task_context and len(task_context) > 1000:
                 freed = _page_out_context(
                     task_context, int((estimated_tokens - available) * 3),
-                    token_budget)
+                    token_budget, pinned_blocks=(task.pinned_blocks if task else set()))
                 if freed > 0:
                     token_budget.used = max(0, token_budget.used - freed // 3)
             available = token_budget.hard_limit - token_budget.used
             if estimated_tokens > available:
+                # CONTEXT_OVERFLOW: pinning prevented freeing enough space
                 return (
-                    "\n## Offloaded Context Retrieval: WARNING\n"
+                    "\n## Offloaded Context Retrieval: CONTEXT_OVERFLOW\n"
                     f"**Block ID:** {block_id}\n"
-                    f"**Note:** Block needs ~{estimated_tokens} tokens but only "
-                    f"{available} available.\n\n"
+                    f"**Error:** Cannot free enough space — all non-pinned sections "
+                    f"have been exhausted. Block needs ~{estimated_tokens} tokens "
+                    f"but only {available} available.\n\n"
+                    f"**Pinned blocks preventing page-out:** "
+                    f"{', '.join(getattr(task, 'pinned_blocks', set())) if task else 'N/A'}\n"
                     f"**Preview (first 2000 chars):**\n"
-                    f"{content[:2000]}\n\n[... truncated -- increase budget to retrieve full block ...]\n"
+                    f"{content[:2000]}\n\n[... CONTEXT_OVERFLOW -- increase budget or reduce pinned blocks ...]\n"
                 )
     return content
 
 
 def _page_out_context(context_text: str, needed_chars: int,
-                       token_budget: Optional[TokenBudget] = None) -> int:
+                       token_budget: Optional[TokenBudget] = None,
+                       pinned_blocks: set = set()) -> int:
     """Page out sections of the active context to free space.
 
     Args:
         context_text: Current context text to page out from.
         needed_chars: Number of characters needed to free.
         token_budget: Token budget tracker.
+        pinned_blocks: Set of block_id strings to skip (avoid infinite swap-loops).
 
     Returns:
         Number of characters freed.
@@ -227,8 +242,11 @@ def _page_out_context(context_text: str, needed_chars: int,
             header = lines[idx].strip() if idx < len(lines) else "(paged)"
             body = [l.rstrip("\n") for l in lines[idx + 1:section_end]]
             id_base = re.sub(r'[^a-zA-Z0-9]', '_', header[:60]).strip('_').lower()
-            content_hash = hashlib.md5(section_text.encode("utf-8")).hexdigest()[:8]
+            content_hash = hashlib.md5(section_text.encode("utf-8")).hexdigest()[:16]
             block_id = f"paged_{id_base}_{content_hash}"
+            # Skip pinned blocks — prevents infinite swap-loops
+            if block_id in pinned_blocks:
+                continue
             store.store_block(block_id, header, body)
             offloaded_count += 1
             freed += section_len

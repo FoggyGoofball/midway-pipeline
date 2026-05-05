@@ -44,7 +44,7 @@ class TokenBudget:
             alpha_count = sum(1 for c in sample if c.isalnum())
             density = alpha_count / len(sample)
             if density > 0.60:
-                return len(text) // 2  # 1.5 char/token conservative
+                return int(len(text) * 2 // 3)  # ~1.5 chars/token (conservative for dense data)
         return len(text) // 3  # default: 1 token per 3 chars
 
     def check(self, text: str) -> bool:

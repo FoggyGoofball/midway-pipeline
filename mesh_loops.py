@@ -240,6 +240,12 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
         try:
             files = find_relevant_files(task.spec, task.agent)
             file_context = format_file_context(files, domain_key=task.agent)
+            # Save originals before Phase 4 modifications
+            if ctx.snapshot:
+                try:
+                    ctx.snapshot.save_originals_from_context(file_context)
+                except Exception as e:
+                    print(f"  [Snapshot] save_originals_from_context error: {e}")
         except Exception as e:
             print(f"  [FileReader] Error: {e}")
 
@@ -373,6 +379,34 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                 ctx.pending_queries[consult_task.task_id] = task
                 print(f"  [Signal] CONSULT: {task.agent} -> {target}: {signal['content'][:60]}...")
 
+            elif stype == "EXTRACT_SKELETON":
+                # Semantic compression: delegate to DOC agent to strip implementation bodies
+                block_id = signal.get("content", "")
+                if not block_id:
+                    print("  [EXTRACT_SKELETON] Empty block_id, skipping")
+                    continue
+                skeleton_query_spec = (
+                    f"Semantic Compression: EXTRACT_SKELETON\n"
+                    f"Requesting agent: {task.agent}\n"
+                    f"Their current task: {task.spec[:300]}\n"
+                    f"Offloaded block_id: {block_id}\n"
+                    f"---\n"
+                    f"Read the offloaded file corresponding to block_id '{block_id}'. "
+                    f"Return ONLY function signatures and class definitions, "
+                    f"stripping all implementation bodies. "
+                    f"Format as markdown code blocks."
+                )
+                doc_extract_task = Task(
+                    agent="DOC",
+                    spec=skeleton_query_spec,
+                    task_id=f"doc_extract_{task.task_id}",
+                    parent=task.task_id,
+                    is_query=True,
+                )
+                ctx.pending_fetches[doc_extract_task.task_id] = task
+                work_queue.appendleft(doc_extract_task)
+                print(f"  [Signal] EXTRACT_SKELETON: {task.agent} -> DOC (block_id: {block_id})")
+
             elif stype == "FETCH":
                 # Intercept [FETCH] signal: route through DOC oracle for reasoning.
                 fetch_depth = getattr(task, '_fetch_depth', 0)
@@ -456,12 +490,9 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
         # Save snapshot after each task
         if ctx.snapshot:
             try:
-                ctx.snapshot.save_proposal(
-                    ALL_DOMAINS.get(resolve_agent_name(task.agent), {}).get("name", task.agent),
-                    len(ctx.processed_ids),
-                    f"output_{task.task_id}.md",
-                    output,
-                )
+                persona = ALL_DOMAINS.get(resolve_agent_name(task.agent), {}).get("name", task.agent)
+                task_id_num = len(ctx.processed_ids)
+                ctx.snapshot.save_agent_output(persona, task_id_num, output)
             except Exception as e:
                 print(f"  [Snapshot] Save error: {e}")
 

@@ -410,10 +410,19 @@ AGENT_FILE_TOOLS_PROMPT = (
 
 
 def handle_file_read(signal_content: str, project_root: Path = None) -> str:
-    """Synchronous file read tool for agent progressive disclosure."""
-    pr = project_root or PROJECT_ROOT
+    """Synchronous file read tool for agent progressive disclosure.
+    
+    Includes strict path traversal boundary check — any path that resolves
+    outside PROJECT_ROOT is rejected with an error.
+    """
+    pr = (project_root or PROJECT_ROOT).resolve()
     path = signal_content.strip()
-    full_path = pr / path
+    full_path = (pr / path).resolve()
+    # Path traversal boundary check
+    try:
+        full_path.relative_to(pr)
+    except ValueError:
+        return f"\n## File Tool Result: ERROR\n**Path:** {path}\n**Error:** Path traversal forbidden.\n"
     if not full_path.is_file():
         return f"\n## File Tool Result: ERROR\n**Path:** {path}\n**Error:** File not found or is a directory.\n"
     try:
@@ -432,10 +441,19 @@ def handle_file_read(signal_content: str, project_root: Path = None) -> str:
 
 
 def handle_file_list(signal_content: str, project_root: Path = None) -> str:
-    """Synchronous directory listing tool for agent progressive disclosure."""
-    pr = project_root or PROJECT_ROOT
+    """Synchronous directory listing tool for agent progressive disclosure.
+    
+    Includes strict path traversal boundary check — any path that resolves
+    outside PROJECT_ROOT is rejected with an error.
+    """
+    pr = (project_root or PROJECT_ROOT).resolve()
     path = signal_content.strip()
-    full_path = pr / path
+    full_path = (pr / path).resolve()
+    # Path traversal boundary check
+    try:
+        full_path.relative_to(pr)
+    except ValueError:
+        return f"\n## File Tool Result: ERROR\n**Path:** {path}\n**Error:** Path traversal forbidden.\n"
     if not full_path.is_dir():
         return f"\n## File Tool Result: ERROR\n**Path:** {path}\n**Error:** Directory not found.\n"
     try:

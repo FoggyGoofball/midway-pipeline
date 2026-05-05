@@ -18,28 +18,42 @@ from models import SignalType, MeshSignal
 # sections: target agent, content payload, and optional source/hash tag.
 
 SIGNAL_PATTERNS: Dict[str, str] = {
-    "QUERY": r"\[QUERY:([^\]]+):([^\]]+)\]",
-    "DELEGATE": r"\[DELEGATE:([^\]]+):([^\]]+)\]",
-    "RESULT": r"\[RESULT:([^\]]+)\]",
+    # Multi-argument signals (target:content) — no nested brackets expected
+    "QUERY": r"\[QUERY:([^\]]+):([^\]]*)\]",
+    "DELEGATE": r"\[DELEGATE:([^\]]+):([^\]]*)\]",
+    "REVISE": r"\[REVISE:([^\]]+):([^\]]*)\]",
+    "VETO": r"\[VETO:([^\]]+):([^\]]*)\]",
+    "OBJECT": r"\[OBJECT:([^\]]+):([^\]]*)\]",
+    "RECOURSE": r"\[RECOURSE:([^\]]+):([^\]]*)\]",
+    "CONSULT": r"\[CONSULT:([^\]]+):([^\]]*)\]",
+    # Single-content signals — may contain nested brackets (e.g. file paths
+    # with anchors like [FETCH:docs/memory.md#[SubHeader]]).
+    # Uses lookahead: captures any content not followed by a sole closing bracket,
+    # allowing balanced nested brackets inside the content to pass through.
+    "RESULT": r"\[RESULT:((?:[^\[\]]|\[[^\]]*\])*)\]",
+    "FETCH": r"\[FETCH:((?:[^\[\]]|\[[^\]]*\])*)\]",
+    "READ_OFFLOADED": r"\[READ_OFFLOADED:((?:[^\[\]]|\[[^\]]*\])*)\]",
+    "EXTRACT_SKELETON": r"\[EXTRACT_SKELETON:((?:[^\[\]]|\[[^\]]*\])*)\]",
     "APPROVE": r"\[APPROVE\]",
-    "REVISE": r"\[REVISE:([^\]]+):([^\]]+)\]",
-    "VETO": r"\[VETO:([^\]]+):([^\]]+)\]",
-    "OBJECT": r"\[OBJECT:([^\]]+):([^\]]+)\]",
-    "RECOURSE": r"\[RECOURSE:([^\]]+):([^\]]+)\]",
-    "CONSULT": r"\[CONSULT:([^\]]+):([^\]]+)\]",
-    "FETCH": r"\[FETCH:([^\]]+)\]",
-    "READ_OFFLOADED": r"\[READ_OFFLOADED:([^\]]+)\]",
 }
 
 # Double-check pattern — captures a structured agent self-review section
 # containing the three marked sections, allowing bullet items across lines.
-# NOTE: Multiple heading variants are supported for backward compatibility
-# with existing characterization tests (e.g. "Original prompt:" vs "Original Prompt:").
+# Highly permissive of markdown variations: missing hyphens, extra hashes,
+# bolded headers, varied capitalization, asterisk vs dash bullets.
 DOUBLE_CHECK_PATTERN: str = (
-    r"## Double-Check\s*\n"
-    r"\*\*[Oo]riginal [Pp]rompt:\*\*\s*(.*?)\n"
-    r"\*\*(?:What This Addresses|My output addresses):\*\*\s*((?:(?:\*(?:.|\n)*?)+?|.+?))\n"
-    r"\*\*(?:What Remains Unresolved|Unresolved items):\*\*\s*((?:(?:\*(?:.|\n)*?)+?|.+?))(?=\n##|\Z)"
+    r"#{2,4}\s*[Dd]ouble[-\s]*[Cc]heck\s*\n"
+    r"(?:\*\*)?[Oo]riginal[-\s]*[Pp]rompt:?\*{0,2}\s*(.*?)\n"
+    r"(?:\*\*)?(?:[Ww]hat\s+[Tt]his\s+[Aa]ddresses"
+    r"|[Mm]y\s+[Oo]utput\s+[Aa]ddresses"
+    r"|[Aa]ddresses):?\*{0,2}\s*"
+    r"(.*?)"  # Addresses content — any text up to next section header
+    r"\n?"
+    r"(?:\*\*)?(?:[Ww]hat\s+[Rr]emains\s+[Uu]nresolved"
+    r"|[Uu]nresolved\s+[Ii]tems"
+    r"|[Uu]nresolved"
+    r"|[Rr]emaining\s+[Ii]ssues):?\*{0,2}\s*"
+    r"(.*?)\s*$"  # Unresolved content — any remaining text
 )
 
 
@@ -60,7 +74,7 @@ def extract_signals(text: str) -> List[Dict[str, Any]]:
             if signal_type == "APPROVE":
                 signal["target"] = None
                 signal["content"] = None
-            elif signal_type in ("RESULT", "FETCH", "READ_OFFLOADED"):
+            elif signal_type in ("RESULT", "FETCH", "READ_OFFLOADED", "EXTRACT_SKELETON"):
                 signal["target"] = None
                 signal["content"] = groups[0].strip()
             else:

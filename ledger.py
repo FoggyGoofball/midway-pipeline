@@ -97,6 +97,30 @@ def _normalize_fix_fingerprint(fix_input: str) -> str:
     return normalized.strip()
 
 
+def check_insanity_similarity(normalized: str, seen_set: set, threshold: float = 0.95) -> bool:
+    """Check if normalized text is >threshold similar to any entry in seen_set.
+
+    Uses difflib.SequenceMatcher for rapid similarity comparison (quick_ratio
+    is O(n) and avoids the full O(n^2) matching). This is more robust than
+    exact hash matching against stochastic LLM output that may produce
+    semantically identical fix prompts with minor variations.
+
+    Args:
+        normalized: The normalized fix_input string.
+        seen_set: Set of previously seen normalized strings.
+        threshold: Similarity ratio threshold (default 0.95 = 95%).
+
+    Returns:
+        True if any entry exceeds the threshold similarity.
+    """
+    from difflib import SequenceMatcher
+    for seen in seen_set:
+        ratio = SequenceMatcher(None, normalized, seen).quick_ratio()
+        if ratio > threshold:
+            return True
+    return False
+
+
 def log_to_session_timeline(user_input: str, agent_assigned: str,
                             tools_accessed: str, final_output: str) -> None:
     """Append an entry to the session timeline in REVERSE chronological order.

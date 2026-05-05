@@ -44,6 +44,7 @@ from pipeline import (
     handle_fetch_signal, read_offloaded_file, handle_read_offloaded_signal,
     _append_to_ledger, _page_out_context, _normalize_fix_fingerprint,
     log_to_session_timeline, search_memory, ledger_toc,
+    check_insanity_similarity,
     TagSuggester, TokenBudget,
     HAS_SNAPSHOT, SnapshotManager,
     generate_failure_report,
@@ -158,30 +159,37 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             cmake_build = subprocess.run(
                 ["cmake", "--build", "."],
                 capture_output=True, text=True, cwd=ctx.project_root,
-                shell=True,
+                shell=True, timeout=30,
             )
             if cmake_build.returncode != 0:
                 err_tail = "\n".join(cmake_build.stderr.splitlines()[-50:])
                 ctx.pre_flight_errors += f"\n## C++ Compiler Errors:\n```\n{err_tail}\n```"
         else:
             make_process = subprocess.run(
-                ["make", "-j4"], capture_output=True, text=True, cwd=ctx.project_root
+                ["make", "-j4"], capture_output=True, text=True,
+                cwd=ctx.project_root, timeout=30,
             )
             if make_process.returncode != 0:
                 err_tail = "\n".join(make_process.stderr.splitlines()[-50:])
                 ctx.pre_flight_errors += f"\n## C++ Compiler Errors:\n```\n{err_tail}\n```"
+    except subprocess.TimeoutExpired:
+        ctx.pre_flight_errors += "\n## Compiler Timeout:\n```\nC++ build timed out after 30s\n```\n"
     except Exception:
         pass
 
     for lf in ctx.project_root.rglob("*.lua"):
         try:
             lua_proc = subprocess.run(
-                ["luac", "-p", str(lf)], capture_output=True, text=True
+                ["luac", "-p", str(lf)], capture_output=True, text=True, timeout=30,
             )
             if lua_proc.returncode != 0:
                 ctx.pre_flight_errors += (
                     f"\n## Lua Syntax Error in {lf.name}:\n```\n{lua_proc.stderr}\n```"
                 )
+        except subprocess.TimeoutExpired:
+            ctx.pre_flight_errors += (
+                f"\n## Lua Syntax Error in {lf.name}:\n```\nluac timed out after 30s\n```\n"
+            )
         except Exception:
             pass
 
@@ -322,18 +330,16 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 f"### Architect Fix Cycle {ctx.review_cycle}\n{fix_output}\n"
             )
 
-            # ── Insanity Detector ──────────────────────────────────
-            finger_hash = hashlib.md5(
-                _normalize_fix_fingerprint(fix_input).encode("utf-8")
-            ).hexdigest()
-            if finger_hash in ctx.seen_code_hashes_set:
+    # ── Insanity Detector (similarity-based) ──────────────
+            normalized = _normalize_fix_fingerprint(fix_input)
+            if check_insanity_similarity(normalized, ctx.seen_code_hashes_set, threshold=0.95):
                 print(
                     f"\n  [Insanity Detector] ⛔ Infinite fix loop detected! "
-                    f"Fingerprint {finger_hash[:12]}..."
+                    f"Similar input >95% matches previous cycle — circuit breaker tripped."
                 )
                 ctx.review_verdict = "BLOCKED"
                 break
-            ctx.seen_code_hashes_set.add(finger_hash)
+            ctx.seen_code_hashes_set.add(normalized)
             continue
 
         break
