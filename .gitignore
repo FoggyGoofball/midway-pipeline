@@ -1,26 +1,18 @@
 # Python
 __pycache__/
 *.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
 
-# Pipeline snapshots (runtime data)
-.pipeline_snapshots/
+# Pipeline runtime artifacts
+.pipeline_checkpoints/
 offload_store/
 pipeline_output_*.md
-bridge_log.txt
-midway.log
-render_log.txt
+pipeline.py.bkup_thin
+pipeline_inventory.json
 
-# IDE
-.vs/
-.vscode/
-*.user
-*.suo
-*.sln.docstates
-
-# System
+# OS
 .DS_Store
 Thumbs.db
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,204 @@
+# Midway Pipeline — Quick Start Guide
+
+The **Midway Mesh Consensus Pipeline** is an AI-assisted development pipeline
+that automates the feature-request → code-review → merge workflow for the
+*Midway to Nowhere* game engine.
+
+It uses local LLMs (via [Ollama](https://ollama.ai)) to generate, review, and
+iterate on code changes for C++, Lua, and GLSL source files.
+
+---
+
+## Prerequisites
+
+1. **Python 3.10+** — with these packages:
+   ```bash
+   pip install requests
+   ```
+
+2. **Ollama** installed and running:
+   ```bash
+   # Windows: download from https://ollama.ai/download
+   # Start the service (it'll run as a background process)
+   ```
+
+3. **Models pulled** (takes 5-15 minutes depending on bandwidth):
+   ```bash
+   ollama pull qwen2.5-coder:7b
+   ollama pull phi3:14b
+   ollama pull llama3.1:8b-instruct-q4_K_M
+   ollama pull qwen2.5-coder:1.5b
+   ollama pull llama3.2:1b
+   ```
+
+---
+
+## Quick Start
+
+From the **`midway/`** project root (where this pipeline repo lives as
+`midway-pipeline/`):
+
+```bash
+# Basic feature request
+run_pipeline.bat "add a jackpot feature to the plinko attraction"
+
+# Resume from a checkpoint
+run_pipeline.bat --checkpoint cp_abc123 "continue where I left off"
+
+# List saved checkpoints
+run_pipeline.bat --list-checkpoints
+
+# Chat mode (bypass pipeline — just ask a question)
+run_pipeline.bat --chat "what attractions currently exist?"
+
+# Direct Python invocation
+python midway-pipeline/pipeline.py "add particle effects to crumbling facade"
+```
+
+---
+
+## How It Works
+
+```
+User Prompt
+    │
+    ▼
+┌─────────────────┐
+│  Intent Router  │ ← Classifies: MODIFICATION, QUERY, or CHAT
+└────────┬────────┘
+         │ (if MODIFICATION)
+         ▼
+┌─────────────────┐
+│  Director       │ ← Decomposes feature request into 1-5 tasks
+└────────┬────────┘
+         │
+         ▼
+    ┌─────────┐
+    │ Agents  │ ← Each agent (C++, Lua, etc.) generates code
+    └────┬────┘
+         │
+         ▼
+    ┌────────┐
+    │ Review │ ← Cross-agent consensus + review
+    └────┬───┘
+         │
+         ▼
+    ┌─────────────┐
+    │ Final Merge │ ← Synthesized output + file patch generation
+    └─────────────┘
+         │
+         ▼
+    pipeline_output_<timestamp>.md
+```
+
+---
+
+## Module Overview
+
+The pipeline is fully modular. Key files inside `midway-pipeline/`:
+
+| Module | File | Purpose |
+|--------|------|---------|
+| **Orchestrator** | `pipeline.py` | Thin entry point (~350 lines) — imports everything else |
+| **System Prompts** | `_prompts.py` | All LLM system prompts |
+| **Helpers** | `_pipeline_helpers.py` | File scanning, task execution, failure reports |
+| **Mesh API** | `_mesh_api.py` | Distributed task submission/status |
+| **Mesh Loops** | `mesh_loops.py` | Phases 0.5-8 iteration loops (fetches, tasks) |
+| **Mesh Finalize** | `mesh_finalize.py` | Code merge, consensus, final approval |
+| **Models** | `models.py` | Dataclasses: Signal, Task, ConsensusResult, PipelineContext |
+| **Signals** | `signals.py` | Signal parsing/extraction from LLM output |
+| **Domain Registry** | `domain_registry.py` | Agent definitions, persona maps, domain config |
+| **Ollama Client** | `ollama_client.py` | HTTP client for Ollama API |
+| **Ledger** | `ledger.py` | Session timeline, anchor TOC, fix fingerprinting |
+| **Checkpoint** | `checkpoint.py` | Save/resume pipeline state |
+| **File References** | `file_references.py` | Parse and fetch referenced files |
+| **GDD Extractor** | `gdd_extractor.py` | Section extraction from Game Design Document |
+| **Tag Suggester** | `tagsuggester.py` | Post-pipeline tag auto-detection |
+| **Fetch Handler** | `fetch_handler.py` | Signal-driven file fetch and offload |
+| **Token Budget** | `token_budget.py` | Context window management |
+| **Offload Store** | `offload_store.py` | Disk-based context offloading |
+| **Tests** | `tests/` | Pytest suite (80+ tests) |
+
+---
+
+## Common Tasks
+
+### Run the test suite
+```bash
+cd midway-pipeline
+pytest -v
+```
+
+### Run a specific test
+```bash
+cd midway-pipeline
+pytest tests/test_full_pipeline_dry_run.py -v
+```
+
+### View saved checkpoints
+```bash
+run_pipeline.bat --list-checkpoints
+```
+
+### Resume from a specific checkpoint
+```bash
+run_pipeline.bat --checkpoint cp_abc123 "continue feature"
+```
+
+---
+
+## Output
+
+Pipeline output is saved to the `midway/` project root as:
+
+```
+pipeline_output_20260405_143022.md
+```
+
+The final output contains all generated code, review feedback, and merge
+instructions. These files are **gitignored** — they won't pollute the repo.
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `Connection refused` | Ensure Ollama is running (`ollama serve` or background service) |
+| `Model not found` | Run `ollama pull <model>` for each model listed in Prerequisites |
+| `ImportError` | Run `pip install requests` |
+| Pipeline seems stuck | Checkpoints auto-save — Ctrl+C, then resume with `--checkpoint <id>` |
+| Output too long | The pipeline truncates files at 4000-6000 chars to fit context windows |
+
+---
+
+## File Scanning
+
+The pipeline scans the **`midway/` project root** for relevant files when
+processing a feature request. **It explicitly excludes** the pipeline system
+itself (`midway-pipeline/`), pipeline runtime artifacts (`.pipeline_checkpoints/`,
+`offload_store/`), and pipeline ledgers (`docs/memory/`, `docs/.pipeline_journal/`).
+
+This ensures the AI agents only see game engine source files, not pipeline
+metadata.
+
+---
+
+## Repository Structure
+
+```
+midway/                      ← Game engine project root (this repo)
+├── src/                     ← C++ game engine source
+├── attractions/             ← Lua attraction scripts
+├── assets/                  ← Game assets (shaders, textures, audio)
+├── docs/                    ← Documentation
+├── GDD/                     ← Game Design Document
+├── midway-pipeline/         ← Pipeline system (separate repo)
+│   ├── pipeline.py          ← Orchestrator entry point
+│   ├── _pipeline_helpers.py ← File scanning helpers
+│   ├── mesh_loops.py        ← Core iteration loops
+│   ├── tests/               ← Pytest suite
+│   └── QUICK_START.md       ← This file
+├── run_pipeline.bat         ← Convenience launcher
+└── .gitignore               ← (pipeline artifacts excluded)
+```
