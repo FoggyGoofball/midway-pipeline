@@ -74,12 +74,14 @@ class OffloadStore:
         try:
             self._load_index()
             full_text = "\n".join(body_lines) if isinstance(body_lines, list) else body_lines
+            content_hash = hashlib.sha256(full_text.encode("utf-8")).hexdigest()[:16]
             info = {
                 "header": header,
                 "char_count": len(full_text),
                 "token_estimate": len(full_text) // 3,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "full_text": full_text,
+                "content_hash": content_hash,
             }
             path = self._block_path(block_id)
             path.write_text(json.dumps(info, indent=2), encoding="utf-8")
