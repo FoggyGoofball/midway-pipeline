@@ -11,18 +11,26 @@ iterate on code changes for C++, Lua, and GLSL source files.
 
 ## Prerequisites
 
+### Dev PC (this machine)
 1. **Python 3.10+** — with these packages:
    ```bash
    pip install requests
    ```
+   The Python script (`pipeline.py`) runs here on your dev PC.
 
-2. **Ollama** installed and running:
+2. **Network access** to the Steam Deck at `192.168.0.16:11434` (OLLAMA_HOST).
+
+### Steam Deck (remote Ollama server)
+1. **Ollama** installed and running on the Steam Deck:
    ```bash
-   # Windows: download from https://ollama.ai/download
-   # Start the service (it'll run as a background process)
+   # On the Steam Deck (SSH or terminal):
+   ollama serve
    ```
+   Ollama listens on `0.0.0.0:11434` so the dev PC can reach it.
+   By default Ollama only binds to 127.0.0.1 — make sure it's configured
+   to accept LAN connections (e.g. `OLLAMA_HOST=0.0.0.0`).
 
-3. **Models pulled** (takes 5-15 minutes depending on bandwidth):
+2. **Models pulled** on the Steam Deck (takes 5-15 min depending on bandwidth):
    ```bash
    ollama pull qwen2.5-coder:7b
    ollama pull phi3:14b
@@ -30,6 +38,13 @@ iterate on code changes for C++, Lua, and GLSL source files.
    ollama pull qwen2.5-coder:1.5b
    ollama pull llama3.2:1b
    ```
+   These models stay on the Steam Deck — inference does not touch the dev PC.
+
+### Continue VS Code Extension
+The Continue extension on your dev PC is configured to relay code context
+to the Steam Deck's Ollama instance. The pipeline runs independently of
+Continue, using the same `OLLAMA_HOST` (`192.168.0.16:11434`).
+
 
 ---
 
