@@ -222,6 +222,14 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     ctx.project_root = PROJECT_ROOT
     ctx.session_mgr = session_mgr
 
+    # ── Pre-Flight: Ollama Health Check ────────────────────────────────────
+    try:
+        urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=1.0)
+    except Exception as e:
+        print(f"\n[FATAL ERROR] Cannot connect to Ollama at {OLLAMA_HOST}. Is it running?")
+        ctx.final_output = "Error: Ollama is offline."
+        return ctx.final_output
+
     # Session Timeline Init
     ctx.session_timeline_path = _get_session_timeline_path()
     os.makedirs(ctx.session_timeline_path.parent, exist_ok=True)
@@ -242,6 +250,55 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
             user_prompt = ctx.user_prompt
         else:
             print(f"  Checkpoint {checkpoint_id} not found, starting fresh")
+
+    # ── Resurrection Check ─────────────────────────────────────────────────
+    # If resuming from a BLOCKED checkpoint, skip Phases 1-3 and reconstruct
+    # state from the checkpoint data. Treat user_prompt as the manual fix.
+    # DIAGNOSTIC is handled in Phase 0.05 above.
+    if checkpoint_id and cp and cp.get("phase") == "BLOCKED":
+        _resumed_blocked = False
+        ckpt_data = cp["data"]
+
+        # Guardrail: Prevent resuming a blocked pipeline without an actual fix
+        auto_feed_triggers = {"continue", "next", "proceed", "c", "go", "next task"}
+        is_empty_or_trigger = (
+            not user_prompt
+            or user_prompt.strip().lower() in auto_feed_triggers
+        )
+
+        if is_empty_or_trigger:
+            print(f"  [Resurrection] Empty/Trigger prompt received. Remaining in BLOCKED state.")
+            ctx.output_parts.append("\n**PIPELINE PAUSED.**\n")
+            ctx.output_parts.append("You submitted an empty response or a 'continue' trigger. To resume the pipeline from this blocked state, you must provide a manual code fix or reply 'abort' to terminate the run.\n")
+            ctx.final_output = "\n".join(ctx.output_parts)
+            return ctx.final_output
+
+        _resumed_blocked = True
+        ctx.resumed_blocked = True
+
+        # Re-hydrate PipelineContext from BLOCKED checkpoint data
+        ctx.all_results_dict = ckpt_data.get("all_results", ctx.all_results_dict)
+        ctx.active_code_index = ckpt_data.get("active_code_index", ctx.active_code_index)
+        ctx.director_output = ckpt_data.get("director_output", ctx.director_output)
+        ctx.user_prompt = user_prompt
+
+        # Reconstruct task_map from saved work_queue
+        saved_work_queue = ckpt_data.get("work_queue", [])
+        for task_dict in saved_work_queue:
+            task_obj = Task(
+                agent=task_dict.get("agent", ""),
+                spec=task_dict.get("spec", ""),
+                parent=task_dict.get("parent"),
+                task_id=task_dict.get("task_id", ""),
+                iteration=task_dict.get("iteration", 0),
+            )
+            task_obj.completed = task_dict.get("completed", False)
+            task_obj.output = task_dict.get("output", "")
+            ctx.task_map[task_obj.task_id] = task_obj
+
+        print(f"  [Resurrection] BLOCKED checkpoint detected. Re-hydrated {len(saved_work_queue)} tasks from checkpoint data.")
+        print(f"  [Resurrection] User prompt: {user_prompt[:80]}...")
+        print(f"  [Resurrection] Skipping Phases 0.5-3. Resuming from Phases 4-8.")
 
     # Intent Classification
     if session_mgr and user_prompt.startswith("[CHAT_FORCED]"):

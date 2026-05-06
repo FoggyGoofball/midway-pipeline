@@ -68,10 +68,25 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
     Returns updated ctx with director_output, gdd_context, project_state, structure,
     and tasks_list populated. Handles resurrection path from BLOCKED checkpoint.
     """
+    # ── Resurrection Bypass ──────────────────────────────────────────────────
+    # If resuming from a BLOCKED checkpoint, skip Phases 0.5-3 entirely
+    # since the director_output, task_map, etc. are already re-hydrated.
+    if ctx.resumed_blocked:
+        print(f"  [Resurrection Bypass] Skipping Phases 0.5-3. State already re-hydrated from checkpoint.")
+        return ctx
+
     # ── Phase 0.5: Lead Producer (Scope Gate & Auto-Feeder) ───────────────
     blueprint_path = ctx.project_root / "docs" / "project_blueprint.md"
 
-    if not ctx.user_prompt:
+    # Define words that explicitly trigger the Auto-Feeder to pull the next task
+    auto_feed_triggers = {"continue", "next", "proceed", "c", "go", "next task"}
+    
+    is_auto_feed_request = (
+        not ctx.user_prompt 
+        or ctx.user_prompt.strip().lower() in auto_feed_triggers
+    )
+
+    if is_auto_feed_request:
         if blueprint_path.is_file():
             content = blueprint_path.read_text(encoding="utf-8")
             match = re.search(r"- \[ \] (Task \d+: .+)", content)

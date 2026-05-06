@@ -17,6 +17,7 @@ import re
 import sys
 import subprocess
 import textwrap
+import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -297,6 +298,10 @@ def execute_task(task, user_prompt: str, director_output: str,
     task.signals = extract_signals(output)
     task.double_check = extract_double_check(output)
     task.completed = True
+
+    # Thermal Pacing: Allow Steam Deck APU to dissipate heat
+    print(f"  [Thermal Pacing] Cooling down for 2.0s...")
+    time.sleep(2.0)
 
     return output
 
@@ -674,3 +679,14 @@ def generate_failure_report(user_prompt: str, consensus_checks: dict,
     parts.append("- docs/engine_lua_bridge_contract.md — C++/Lua API contract\n")
 
     return "\n".join(parts)
+
+
+def get_normalized_syntax(code: str) -> str:
+    """Strip comments and normalize whitespace for functional code comparison."""
+    # Remove C++ and Lua comments
+    code = re.sub(r'//.*?\n|/\*.*?\*/|--.*?\n', '', code, flags=re.DOTALL)
+    # Normalize whitespace
+    code = re.sub(r'\s+', ' ', code).strip()
+    # Normalize common structural tokens
+    code = code.replace('{ ', '{').replace(' }', '}').replace('( ', '(').replace(' )', ')')
+    return code

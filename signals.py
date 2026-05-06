@@ -18,23 +18,17 @@ from models import SignalType, MeshSignal
 # sections: target agent, content payload, and optional source/hash tag.
 
 SIGNAL_PATTERNS: Dict[str, str] = {
-    # Multi-argument signals (target:content) — no nested brackets expected
-    "QUERY": r"\[QUERY:([^\]]+):([^\]]*)\]",
-    "DELEGATE": r"\[DELEGATE:([^\]]+):([^\]]*)\]",
-    "REVISE": r"\[REVISE:([^\]]+):([^\]]*)\]",
-    "VETO": r"\[VETO:([^\]]+):([^\]]*)\]",
-    "OBJECT": r"\[OBJECT:([^\]]+):([^\]]*)\]",
-    "RECOURSE": r"\[RECOURSE:([^\]]+):([^\]]*)\]",
-    "CONSULT": r"\[CONSULT:([^\]]+):([^\]]*)\]",
-    # Single-content signals — may contain nested brackets (e.g. file paths
-    # with anchors like [FETCH:docs/memory.md#[SubHeader]]).
-    # Uses lookahead: captures any content not followed by a sole closing bracket,
-    # allowing balanced nested brackets inside the content to pass through.
-    "RESULT": r"\[RESULT:((?:[^\[\]]|\[[^\]]*\])*)\]",
-    "FETCH": r"\[FETCH:((?:[^\[\]]|\[[^\]]*\])*)\]",
-    "READ_OFFLOADED": r"\[READ_OFFLOADED:((?:[^\[\]]|\[[^\]]*\])*)\]",
-    "EXTRACT_SKELETON": r"\[EXTRACT_SKELETON:((?:[^\[\]]|\[[^\]]*\])*)\]",
+    "QUERY": r"\[QUERY:([^\]]+):([^\]]+)\]",
+    "DELEGATE": r"\[DELEGATE:([^\]]+):([^\]]+)\]",
+    "VETO": r"\[VETO:([^\]]+):([^\]]+)\]",
+    "OBJECT": r"\[OBJECT:([^\]]+):([^\]]+)\]",
+    "RECOURSE": r"\[RECOURSE:([^\]]+):([^\]]+)\]",
+    "CONSULT": r"\[CONSULT:([^\]]+):([^\]]+)\]",
     "APPROVE": r"\[APPROVE\]",
+    "RESULT": r"\[RESULT:(.*?)\]",
+    "REVISE": r"\[REVISE:([^\]]+):([^\]]+)\]",
+    "FETCH": r"\[FETCH:([^\]]+)#([^\]]+)\]",
+    "READ_OFFLOADED": r"\[READ_OFFLOADED:([^\]]+)\]",
 }
 
 # Double-check pattern — captures a structured agent self-review section
@@ -74,7 +68,7 @@ def extract_signals(text: str) -> List[Dict[str, Any]]:
             if signal_type == "APPROVE":
                 signal["target"] = None
                 signal["content"] = None
-            elif signal_type in ("RESULT", "FETCH", "READ_OFFLOADED", "EXTRACT_SKELETON"):
+            elif signal_type in ("RESULT", "FETCH", "READ_OFFLOADED"):
                 signal["target"] = None
                 signal["content"] = groups[0].strip()
             else:

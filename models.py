@@ -202,6 +202,14 @@ class PipelineContext(BaseModel):
     is_chat: bool = False
     session_mgr: Optional[Any] = None
 
+    def load_state(self, state: dict) -> None:
+        """Restore runtime accumulators from a saved checkpoint state dict.
+        Preserves static configuration fields (project_root, memory_dir, etc.).
+        Used for BLOCKED checkpoint resurrection."""
+        for key, value in state.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
     def reset_state(self) -> None:
         """Reset all runtime accumulators to their default values.
         Preserves static configuration fields (project_root, memory_dir, etc.)."""

@@ -1,3 +1,5715 @@
+## Session Event — 2026-05-06T11:22:10.808019
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T11:22:08.091108
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T11:22:05.395190
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T11:22:02.784269
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T11:22:00.165407
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T11:21:57.895608
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:35:19.970331
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:35:19.038802
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:35:18.708809
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:35:18.291429
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:35:17.864694
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:35:17.450140
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:34:51.150958
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:34:50.784309
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:34:50.377423
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:34:50.034445
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:34:49.119738
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:34:48.933381
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:33:13.524898
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:33:13.209579
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:33:12.760728
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:33:12.351348
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:33:12.006764
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:33:10.971665
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:32:25.765878
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:32:23.846598
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:32:22.580083
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:32:21.280668
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:32:18.944998
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:32:18.663948
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:28:41.564681
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:28:41.281512
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:28:41.034267
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:28:40.861182
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:28:40.665770
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:28:40.281442
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:27:55.961451
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:27:55.774992
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:27:55.569902
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:27:54.847693
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:27:54.633289
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:27:54.363415
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:12:47.554101
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:12:47.320985
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:12:47.137817
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:12:46.825967
+**Agent Assigned:** C++ Core
+**User Input:** Add test feature.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add test feature.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:12:46.586180
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
+## Session Event — 2026-05-06T09:12:46.434837
+**Agent Assigned:** C++ Core
+**User Input:** Add a test feature to the engine.
+**Tools/Files Accessed:** director, file_context(C++), ledger_toc(C++), review (x1)
+**Final Output:**
+
+## Phase 1: GDD Librarian
+
+No relevant GDD sections found.
+
+
+## Phase 2: Project Context
+
+## Current Project State
+
+### ✅ Implemented Systems
+- Implemented Systems
+
+### 🟢 Available Domains
+
+### 🔴 Unavailable Domains
+
+### ❌ Does NOT Exist
+- No networking/multiplayer code at all
+- No Box2D physics integration
+- No audio engine (SoLoud not integrated)
+- No save/load system
+- No boss encounters
+- No prize/augment runtime loading
+- No Barker billboarding system
+
+
+## Project Structure (relevant directories)
+
+### docs/
+  - completed_features.md
+  - todo.md
+  - memory/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+
+## Phase 4: Mesh Execution (1 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Review
+The implementation looks correct.
+VERDICT: PASS
+
+
+## Phase 7: Consensus Gate
+
+### Consensus Checks
+
+- ✅ All tasks executed
+
+- ✅ All sub-trees resolved
+
+- ✅ Double-check passed
+
+- ✅ No active VETOs
+
+- ❌ Review passed
+
+- ✅ No RECOURSE pending
+
+
+## Phase 8: Failure Report
+
+## Pipeline Failure Report
+
+**Feature request:** Add a test feature to the engine.
+
+**Consensus iterations exhausted:** 3
+
+
+### Failed Checks
+
+- ❌ Review passed
+
+
+### Suggested Manual Decomposition
+
+To resolve this manually, break into these sub-tasks:
+
+1. `/pipeline` "Re-run the original prompt with more specific constraints"
+
+
+### Cross-Reference
+
+- docs/rules_cpp.md — C++ engine rules
+
+- docs/rules_lua.md — Lua scripting rules
+
+- docs/rules_phys.md — Physics integration rules
+
+- docs/rules_shader.md — Shader development rules
+
+- docs/engine_lua_bridge_contract.md — C++/Lua API contract
+
+
+
+## Phase 8b: Lead Producer Scope Post-Mortem
+
+## Task Breakdown: Test Feature
+### Task 1: [C++] — Implement test feature
+
+---
 ## Session Event — 2026-05-05T14:34:03.242622
 **Agent Assigned:** C++ Core
 **User Input:** Add a test feature to the engine.

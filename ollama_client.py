@@ -33,11 +33,12 @@ DIRECTOR_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 # ── Timeouts & Budget ──────────────────────────────────────────────────────
 OLLAMA_TIMEOUT: int = 420
 OLLAMA_NUM_CTX: int = 32768
+OLLAMA_NUM_CTX_LARGE: int = 16384
 MAX_TOKENS: int = 12000
 
 
 def call_ollama_streamed(
-    system: str, user: str, label: str, model: Optional[str] = None
+    system: str, user: str, label: str, model: Optional[str] = None, params: Optional[dict] = None
 ) -> Generator[str, None, None]:
     """Generator: call Ollama's /api/chat with streaming, yield tokens.
 
@@ -58,6 +59,8 @@ def call_ollama_streamed(
         Individual tokens as strings from the Ollama response stream.
     """
     use_model = model or MODEL
+    is_large_model = "14b" in use_model.lower()
+    ctx_size = OLLAMA_NUM_CTX_LARGE if is_large_model else OLLAMA_NUM_CTX
     print(f"\n{'='*60}")
     print(f"  [{label}] Calling Ollama ({use_model}) [STREAMING]...")
     print(f"{'='*60}")
@@ -67,7 +70,7 @@ def call_ollama_streamed(
         "stream": True,
         "keep_alive": "0",
         "options": {
-            "num_ctx": OLLAMA_NUM_CTX,
+            "num_ctx": ctx_size,
             "num_predict": MAX_TOKENS,
             "use_mmap": True,
         },
@@ -76,6 +79,9 @@ def call_ollama_streamed(
             {"role": "user", "content": user},
         ],
     }
+
+    if params:
+        payload["options"].update(params)
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         f"{OLLAMA_HOST}/api/chat",
@@ -103,6 +109,14 @@ def call_ollama_streamed(
                                 yield token
                         except json.JSONDecodeError:
                             pass  # skip malformed lines
+    except urllib.error.HTTPError as e:
+        if e.code == 500 and is_large_model:
+            print(f"\n  [OOM Fallback] {use_model} ran out of memory. Retrying with {FALLBACK_REVIEWER_MODEL}...")
+            yield from call_ollama_streamed(system, user, label, FALLBACK_REVIEWER_MODEL, params)
+            return
+        msg = f"[SYSTEM ERROR: HTTP {e.code}] Could not reach Ollama at {OLLAMA_HOST}: {e.reason}"
+        print(msg)
+        yield msg
     except urllib.error.URLError as e:
         msg = f"[SYSTEM ERROR: OLLAMA TIMEOUT] Could not reach Ollama at {OLLAMA_HOST}: {e.reason}"
         print(msg)

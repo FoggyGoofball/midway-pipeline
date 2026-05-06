@@ -6,5 +6,5 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8766 "') do (
 )
 %SystemRoot%\System32\timeout.exe /T 1 /NoBreak >NUL
 echo Starting Midway Pipeline SSE Streaming Server...
-python pipeline_stream_server.py --port 8766
+python pipeline_stream_server.py --port 8765
 pause

@@ -1,0 +1,47 @@
+Midway to Nowhere — Autonomous Studio Roadmap
+This document outlines the strategic expansion of the Midway multi-agent pipeline from a codebase orchestrator into a fully autonomous game studio, integrating generative assets, automated playtesting, and CI/CD pipelines.
+
+Phase 6: The Art & Audio Department (ComfyUI Bridge)
+Integrate local generative AI (SDXL, 3D Mesh, Audio) into the mesh ecosystem via ComfyUI's REST API.
+
+The Asset Director: A new persona that translates GDD requirements into optimized generative prompts.
+
+New Mesh Signals: [GEN_TEXTURE:"..."], [GEN_MESH:"..."], [GEN_AUDIO:"..."].
+
+VRAM Ping-Pong: The orchestrator will dynamically unload Ollama (keep_alive: 0) before making HTTP requests to ComfyUI, preventing Steam Deck APU memory saturation.
+
+Phase 7: The Asset Ledger (Resource Management)
+Ensure code-writing agents are aware of newly generated art and audio assets.
+
+The Ledger: An automated docs/memory/asset_ledger.md document updated by the orchestrator after every successful ComfyUI generation.
+
+The Hook: C++ and Lua agents will query this ledger before hardcoding file paths, ensuring they use newly minted assets instead of placeholders.
+
+Phase 8: The Level Designer (Data-Driven Architecture)
+Decouple gameplay balancing from core C++ engine logic.
+
+The Persona: A specialized agent dedicated exclusively to modifying JSON/Lua configuration files (e.g., levels/plinko_hard.json).
+
+The Workflow: The Director will route level-tweaking requests to this agent rather than the C++ Core engineer, preventing unnecessary re-compilations for minor layout shifts.
+
+Phase 9: Headless Playtesting (The "QA Bot")
+Introduce automated Monte Carlo simulations to balance gameplay economy and mechanics.
+
+The Engine Hook: Implement a --headless --sim=[minigame] command-line flag in the Midway engine to run thousands of physics steps instantly.
+
+The Persona: The Economy Balancer.
+
+The Loop: This agent will trigger simulations, parse the JSON output (e.g., average payout rates), and issue [OBJECT] signals if the economy is broken, directing the Level Designer to adjust the configuration.
+
+Phase 10: The CI/CD Build Master
+Automate the compilation, packaging, and documentation of playable releases.
+
+The Trigger: Activates when a pipeline run achieves the APPROVED consensus state.
+
+The Actions:
+
+Triggers CMake/Make for a release build.
+
+Packages the executable and assets into a distributable zip.
+
+Triggers a Community Manager agent to parse the session_timeline.md and generate human-readable patch_notes.txt.

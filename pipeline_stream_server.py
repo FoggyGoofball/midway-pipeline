@@ -55,12 +55,164 @@ class StreamHandler(BaseHTTPRequestHandler):
             self._serve_health()
         elif parsed.path == "/stream":
             self._serve_stream(params)
+        elif parsed.path == "/v1/models":
+            self._serve_models()
         elif parsed.path == "/" or parsed.path == "":
             self._serve_index()
         else:
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"Not Found")
+
+    def do_POST(self):
+        """OpenAI-compatible POST /v1/chat/completions endpoint.
+
+        Accepts the standard OpenAI chat completions request format:
+        {
+            "model": "pipeline",
+            "messages": [{"role": "user", "content": "..."}],
+            "stream": true
+        }
+        Returns SSE-streamed response tokens.
+        """
+        parsed = urlparse(self.path)
+
+        if parsed.path not in ("/v1/chat/completions",):
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+            return
+
+        # Read request body
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length)
+        try:
+            req = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Invalid JSON"}).encode("utf-8"))
+            return
+
+        # Extract prompt from messages
+        messages = req.get("messages", [])
+        prompt = ""
+        for msg in messages:
+            if msg.get("role") in ("user", "system"):
+                content = msg.get("content", "")
+                if content:
+                    prompt = content
+
+        if not prompt:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "No user message found"}).encode("utf-8"))
+            return
+
+        stream_mode = req.get("stream", True)
+        model = req.get("model", "pipeline")
+
+        print(f"  [OpenAI POST] /v1/chat/completions — prompt='{prompt[:60]}...' stream={stream_mode}")
+
+        if stream_mode:
+            # SSE-stream the response
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            for event_type, data in stream_pipeline_generator(prompt, None, None):
+                try:
+                    if event_type == "token":
+                        chunk = {
+                            "id": "pipeline-" + datetime.now().strftime("%Y%m%d%H%M%S"),
+                            "object": "chat.completion.chunk",
+                            "created": int(datetime.now().timestamp()),
+                            "model": model,
+                            "choices": [{"delta": {"content": data}, "index": 0, "finish_reason": None}],
+                        }
+                    elif event_type == "announce":
+                        # Send announcements as a special chunk
+                        chunk = {
+                            "id": "pipeline-announce",
+                            "object": "chat.completion.chunk",
+                            "created": int(datetime.now().timestamp()),
+                            "model": model,
+                            "choices": [{"delta": {"content": f"\n{data}\n"}, "index": 0, "finish_reason": None}],
+                        }
+                    elif event_type == "done":
+                        # Send the final chunk with finish_reason
+                        chunk = {
+                            "id": "pipeline-done",
+                            "object": "chat.completion.chunk",
+                            "created": int(datetime.now().timestamp()),
+                            "model": model,
+                            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+                        }
+                    elif event_type == "error":
+                        chunk = {
+                            "id": "pipeline-error",
+                            "object": "chat.completion.chunk",
+                            "created": int(datetime.now().timestamp()),
+                            "model": model,
+                            "choices": [{"delta": {"content": f"\n[ERROR: {data}]\n"}, "index": 0, "finish_reason": "stop"}],
+                        }
+                    elif event_type == "close":
+                        break
+                    elif event_type == "ping":
+                        # SSE comment to keep connection alive
+                        self.wfile.write(": ping\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        continue
+                    else:
+                        continue
+
+                    sse_data = f"data: {json.dumps(chunk)}\n\n"
+                    self.wfile.write(sse_data.encode("utf-8"))
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    print("  [OpenAI POST] Client disconnected")
+                    break
+
+            print(f"  [OpenAI POST] Stream ended for '{prompt[:60]}...'")
+        else:
+            # Non-streaming: collect full response and return as JSON
+            from pipeline import run_pipeline
+            result = run_pipeline(prompt)
+            response_body = {
+                "id": "pipeline-" + datetime.now().strftime("%Y%m%d%H%M%S"),
+                "object": "chat.completion",
+                "created": int(datetime.now().timestamp()),
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": result},
+                    "finish_reason": "stop",
+                }],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(response_body).encode("utf-8"))
+
+    def _serve_models(self):
+        """Serve the list of available models (OpenAI-compatible)."""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        models_list = {
+            "object": "list",
+            "data": [
+                {"id": "pipeline", "object": "model", "created": int(datetime.now().timestamp()), "owned_by": "midway"},
+            ],
+        }
+        self.wfile.write(json.dumps(models_list).encode("utf-8"))
 
     def _serve_health(self):
         """Simple health check endpoint."""
