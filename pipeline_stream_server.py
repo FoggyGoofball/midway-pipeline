@@ -118,7 +118,7 @@ class StreamHandler(BaseHTTPRequestHandler):
         print(f"  [OpenAI POST] /v1/chat/completions — prompt='{prompt[:60]}...' stream={stream_mode}")
 
         if stream_mode:
-            # SSE-stream the response
+            # ── SSE-stream the response ────────────────────────────────────
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.send_header("Cache-Control", "no-cache")
@@ -126,62 +126,80 @@ class StreamHandler(BaseHTTPRequestHandler):
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
 
+            # ── Static Stream Identity (OpenAI SSE Protocol Requirement) ──
+            # Generate a single completion_id and created_timestamp before
+            # the loop. Every chunk uses these exact values so the client
+            # sees one coherent stream and does not ignore finish_reason.
+            import hashlib, time
+            raw_id = hashlib.md5((prompt + str(time.time())).encode()).hexdigest()[:12]
+            completion_id = f"chatcmpl-{raw_id}"
+            created_ts = int(time.time())
+            model = req.get("model", "pipeline")
+
+            # ── Initial Role Chunk ────────────────────────────────────────
+            # The OpenAI SSE protocol requires an initial chunk establishing
+            # the assistant role before any content-delivery chunks.
+            role_chunk = {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created_ts,
+                "model": model,
+                "choices": [{"delta": {"role": "assistant"}, "index": 0, "finish_reason": None}],
+            }
+            self.wfile.write(f"data: {json.dumps(role_chunk)}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
             for event_type, data in stream_pipeline_generator(prompt, None, None):
                 try:
                     if event_type == "token":
                         chunk = {
-                            "id": "pipeline-" + datetime.now().strftime("%Y%m%d%H%M%S"),
+                            "id": completion_id,
                             "object": "chat.completion.chunk",
-                            "created": int(datetime.now().timestamp()),
+                            "created": created_ts,
                             "model": model,
                             "choices": [{"delta": {"content": data}, "index": 0, "finish_reason": None}],
                         }
                     elif event_type == "announce":
-                        # Send announcements as a special chunk
                         chunk = {
-                            "id": "pipeline-announce",
+                            "id": completion_id,
                             "object": "chat.completion.chunk",
-                            "created": int(datetime.now().timestamp()),
+                            "created": created_ts,
                             "model": model,
                             "choices": [{"delta": {"content": f"\n{data}\n"}, "index": 0, "finish_reason": None}],
                         }
                     elif event_type == "done":
-                        # Send the final chunk with finish_reason, then the
-                        # [DONE] sentinel required by the OpenAI SSE protocol
-                        # (the Continue extension hangs on "generating"
-                        # without this termination signal).
+                        # Final chunk with synchronized completion_id and
+                        # finish_reason="stop". The [DONE] sentinel immediately
+                        # follows as required by the OpenAI SSE protocol.
                         chunk = {
-                            "id": "pipeline-done",
+                            "id": completion_id,
                             "object": "chat.completion.chunk",
-                            "created": int(datetime.now().timestamp()),
+                            "created": created_ts,
                             "model": model,
                             "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
                         }
-                        done_sse = f"data: {json.dumps(chunk)}\n\n"
-                        self.wfile.write(done_sse.encode("utf-8"))
+                        self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode("utf-8"))
                         self.wfile.write(b"data: [DONE]\n\n")
                         self.wfile.flush()
                         continue
                     elif event_type == "error":
                         chunk = {
-                            "id": "pipeline-error",
+                            "id": completion_id,
                             "object": "chat.completion.chunk",
-                            "created": int(datetime.now().timestamp()),
+                            "created": created_ts,
                             "model": model,
                             "choices": [{"delta": {"content": f"\n[ERROR: {data}]\n"}, "index": 0, "finish_reason": "stop"}],
                         }
                     elif event_type == "close":
                         break
                     elif event_type == "ping":
-                        # SSE comment to keep connection alive
                         self.wfile.write(": ping\n\n".encode("utf-8"))
                         self.wfile.flush()
                         continue
                     else:
                         continue
 
-                    sse_data = f"data: {json.dumps(chunk)}\n\n"
-                    self.wfile.write(sse_data.encode("utf-8"))
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode("utf-8"))
                     self.wfile.flush()
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     print("  [OpenAI POST] Client disconnected")
