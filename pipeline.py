@@ -171,6 +171,7 @@ from _prompts import (
     INTENT_CLASSIFIER_SYSTEM, CHAT_SYSTEM,
     CHAT_PATTERNS, SEARCH_MEMORY_SYSTEM,
     REASONING_GATE_DOMAINS, REASONING_GATE_SYSTEM,
+    ANALYST_SYSTEM,
 )
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -341,6 +342,52 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         enriched_input = "\n\n---\n\n".join(chat_context_parts)
 
         response = call_ollama(CHAT_SYSTEM, enriched_input, "Chat", CHAT_MODEL)
+        ctx.final_output = response
+        return response
+
+    # ── INFORMATIONAL Route: Analyst (Librarian-First, Read-Only) ──────────
+    if intent == "INFORMATIONAL":
+        print(f"\n{'='*70}")
+        print(f"  Informational Query Detected — Analyst Route")
+        print(f"{'='*70}")
+
+        # Phase A: Gather ALL source documents first (Librarian-first)
+        analyst_context_parts = [f"## User Question\n{user_prompt}"]
+
+        # 1. GDD — full text sections via the Librarian
+        try:
+            gdd_sections = recursive_librarian(user_prompt)
+            if gdd_sections.strip():
+                analyst_context_parts.append(
+                    "## Relevant GDD Sections\n" + gdd_sections
+                )
+        except Exception:
+            pass
+
+        # 2. Project state (completed features, todo, available domains)
+        try:
+            state = get_project_state(PROJECT_ROOT, domain_registry.ALL_DOMAINS)
+            if state.strip():
+                analyst_context_parts.append(
+                    "## Current Project State\n" + state
+                )
+        except Exception:
+            pass
+
+        # 3. Project directory structure
+        try:
+            structure = curate_project_structure(user_prompt, PROJECT_ROOT)
+            if structure.strip():
+                analyst_context_parts.append(
+                    "## Project Structure\n" + structure
+                )
+        except Exception:
+            pass
+
+        analyst_input = "\n\n---\n\n".join(analyst_context_parts)
+        print(f"  [Analyst] Gathered {len(analyst_context_parts)} context sources. Querying Analyst...")
+
+        response = call_ollama(ANALYST_SYSTEM, analyst_input, "Analyst", CHAT_MODEL)
         ctx.final_output = response
         return response
 

@@ -116,8 +116,12 @@ CHAT_PATTERNS = [
 INTENT_CLASSIFIER_SYSTEM = (
     "You are the INTENT CLASSIFIER for 'Midway to Nowhere'. "
     "Analyze the user's prompt and classify it as exactly one of: "
-    "MODIFICATION, QUERY, or CHAT.\n\n"
-    "MODIFICATION: User wants to build, add, fix, or modify game features/code.\n"
+    "MODIFICATION, INFORMATIONAL, QUERY, or CHAT.\n\n"
+    "MODIFICATION: User wants to build, add, fix, or modify game features/code. "
+    "NEVER classify as MODIFICATION if the user just wants information.\n"
+    "INFORMATIONAL: User is asking about the project's progress, architecture, "
+    "how something works, GDD contents, or wants a summary/status update. "
+    "The user wants a read-only answer.\n"
     "QUERY: User is asking about past work, memory ledgers, or wants information.\n"
     "CHAT: User is greeting, asking how things work generally, or having a conversation.\n\n"
     "Output ONLY the classification word."
@@ -128,13 +132,16 @@ def classify_intent(user_prompt: str, call_ollama_func, director_model: str) -> 
     """Zero-shot intent classification using the Director model."""
     intent = call_ollama_func(
         INTENT_CLASSIFIER_SYSTEM,
-        f"User prompt: '{user_prompt}'\n\nClassify as MODIFICATION, QUERY, or CHAT.",
+        f"User prompt: '{user_prompt}'\n\n"
+        f"Classify as MODIFICATION, INFORMATIONAL, QUERY, or CHAT.",
         "Intent Classifier",
         director_model,
     )
     intent_clean = intent.strip().upper()
     if "CHAT" in intent_clean:
         return "CHAT"
+    if "INFORMATIONAL" in intent_clean:
+        return "INFORMATIONAL"
     if "QUERY" in intent_clean:
         return "QUERY"
     return "MODIFICATION"

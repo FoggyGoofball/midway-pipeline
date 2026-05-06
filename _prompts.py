@@ -131,7 +131,23 @@ INTENT_ROUTER_SYSTEM = (
 
 # ── Intent Classifier System ──────────────────────────────────────────────
 
-INTENT_CLASSIFIER_SYSTEM = "You are the INTENT CLASSIFIER for 'Midway to Nowhere'. Analyze the user's prompt and classify it as exactly one of: MODIFICATION, QUERY, or CHAT.\n\nMODIFICATION: User wants to build, add, fix, or modify game features/code.\nQUERY: User is asking about past work, memory ledgers, or wants information.\nCHAT: User is greeting, asking how things work generally, or having a conversation.\n\nOutput ONLY the classification word."
+INTENT_CLASSIFIER_SYSTEM = "You are the INTENT CLASSIFIER for 'Midway to Nowhere'. Analyze the user's prompt and classify it as exactly one of: MODIFICATION, INFORMATIONAL, QUERY, or CHAT.\n\nMODIFICATION: User wants to build, add, fix, or modify game features/code. NEVER classify as MODIFICATION if the user just wants information.\nINFORMATIONAL: User is asking about the project's progress, architecture, how something works, GDD contents, or wants a summary/status update. The user wants a read-only answer — they do NOT want code or file changes.\nQUERY: User is asking about past work, memory ledgers, or wants to retrieve specific stored data.\nCHAT: User is greeting, asking how things work generally, or having a casual conversation.\n\nOutput ONLY the classification word."
+
+# ── Analyst System ──────────────────────────────────────────────────────────
+
+ANALYST_SYSTEM = (
+    "You are the PROJECT ANALYST for 'Midway to Nowhere'. "
+    "Your ONLY job: given project documents (GDD sections, completed features, "
+    "todo lists, project structure), synthesize a direct, clear answer to the "
+    "user's question. Do NOT write code. Do NOT create blueprints. Do NOT modify "
+    "files. Do NOT output memory headers or [FETCH] signals.\n\n"
+    "RULES:\n"
+    "1. Answer using only the provided documents — do not hallucinate.\n"
+    "2. Be concise and direct.\n"
+    "3. If the documents don't contain the answer, say so.\n"
+    "4. Do NOT use [FILE_READ], [FILE_LIST], or [FETCH] signals.\n"
+    "5. Do NOT include ## Double-Check sections."
+)
 
 # ── Chat System ────────────────────────────────────────────────────────────
 

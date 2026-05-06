@@ -104,32 +104,53 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
             ctx.final_output = "Failed to start."
             return ctx
     else:
-        scope_prompt = (
-            f"Analyze this prompt: '{ctx.user_prompt}'. "
-            f"If it requires modifying >{SCOPE_FILE_LIMIT} files or writing "
-            f">{SCOPE_LINE_LIMIT} lines, respond strictly with 'TOO_BROAD'. "
-            f"Otherwise respond 'NARROW'."
+        # ── Defensive Guard: Detect read-only / informational prompts ──
+        # Even if the INFORMATIONAL classifier miscategorized, the Scope Gate
+        # should NEVER route a read-only question to the Lead Producer.
+        read_only_keywords = [
+            "how is", "what is", "explain", "summarize", "status",
+            "progress", "tell me about", "describe", "list",
+            "show me", "overview", "what are", "how does",
+            "what does", "can you tell", "information about",
+            "context on", "update on", "report on"
+        ]
+        prompt_lower = ctx.user_prompt.lower().strip()
+        # If the prompt ends with '?' it's a question — never blueprint it
+        is_read_only_question = (
+            prompt_lower.endswith("?")
+            or any(prompt_lower.startswith(kw) for kw in read_only_keywords)
         )
-        scope_eval = call_ollama(
-            "You are a Lead Producer.", scope_prompt, "Scope Gate", REASONING_MODEL
-        )
+        if is_read_only_question:
+            print(f"\n  [Lead Producer] Prompt looks like a read-only question. "
+                  f"Passing through to Phase 1 (Librarian) instead of blueprint generation.")
+            print(f"  [Lead Producer] Prompt: {ctx.user_prompt[:80]}")
+        else:
+            scope_prompt = (
+                f"Analyze this prompt: '{ctx.user_prompt}'. "
+                f"If it requires modifying >{SCOPE_FILE_LIMIT} files or writing "
+                f">{SCOPE_LINE_LIMIT} lines, respond strictly with 'TOO_BROAD'. "
+                f"Otherwise respond 'NARROW'."
+            )
+            scope_eval = call_ollama(
+                "You are a Lead Producer.", scope_prompt, "Scope Gate", REASONING_MODEL
+            )
 
-        if "TOO_BROAD" in scope_eval.upper():
-            print(f"\n  [Lead Producer] Scope is TOO BROAD. Generating blueprint...")
-            blueprint_prompt = (
-                f"Create a step-by-step markdown blueprint to accomplish: "
-                f"{ctx.user_prompt}. Format as a checklist: "
-                f"'- [ ] Task 1: ...'"
-            )
-            blueprint = call_ollama(
-                "You are a Lead Producer.", blueprint_prompt,
-                "Blueprint Generation", REASONING_MODEL
-            )
-            blueprint_path.parent.mkdir(exist_ok=True)
-            blueprint_path.write_text(blueprint, encoding="utf-8")
-            print(f"  [Lead Producer] Saved to docs/project_blueprint.md.")
-            ctx.final_output = "Blueprint created. Run pipeline with no prompt to execute Task 1."
-            return ctx
+            if "TOO_BROAD" in scope_eval.upper():
+                print(f"\n  [Lead Producer] Scope is TOO BROAD. Generating blueprint...")
+                blueprint_prompt = (
+                    f"Create a step-by-step markdown blueprint to accomplish: "
+                    f"{ctx.user_prompt}. Format as a checklist: "
+                    f"'- [ ] Task 1: ...'"
+                )
+                blueprint = call_ollama(
+                    "You are a Lead Producer.", blueprint_prompt,
+                    "Blueprint Generation", REASONING_MODEL
+                )
+                blueprint_path.parent.mkdir(exist_ok=True)
+                blueprint_path.write_text(blueprint, encoding="utf-8")
+                print(f"  [Lead Producer] Saved to docs/project_blueprint.md.")
+                ctx.final_output = "Blueprint created. Run pipeline with no prompt to execute Task 1."
+                return ctx
 
     # ── Phase 1: GDD Librarian ────────────────────────────────────────────
     print(f"\n{'='*70}")
