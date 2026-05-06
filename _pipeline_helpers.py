@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 # ── Configuration re-exports (set by pipeline.py at import time) ───────────
 
-PROJECT_ROOT: Path = Path(__file__).parent.resolve()
+PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent / "midway"
 MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
 MAX_SUBTASKS_PER_AGENT = 5

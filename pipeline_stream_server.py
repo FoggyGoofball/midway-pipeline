@@ -146,7 +146,10 @@ class StreamHandler(BaseHTTPRequestHandler):
                             "choices": [{"delta": {"content": f"\n{data}\n"}, "index": 0, "finish_reason": None}],
                         }
                     elif event_type == "done":
-                        # Send the final chunk with finish_reason
+                        # Send the final chunk with finish_reason, then the
+                        # [DONE] sentinel required by the OpenAI SSE protocol
+                        # (the Continue extension hangs on "generating"
+                        # without this termination signal).
                         chunk = {
                             "id": "pipeline-done",
                             "object": "chat.completion.chunk",
@@ -154,6 +157,11 @@ class StreamHandler(BaseHTTPRequestHandler):
                             "model": model,
                             "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
                         }
+                        done_sse = f"data: {json.dumps(chunk)}\n\n"
+                        self.wfile.write(done_sse.encode("utf-8"))
+                        self.wfile.write(b"data: [DONE]\n\n")
+                        self.wfile.flush()
+                        continue
                     elif event_type == "error":
                         chunk = {
                             "id": "pipeline-error",
@@ -294,6 +302,10 @@ class StreamHandler(BaseHTTPRequestHandler):
                     sse = json.dumps({"type": "error", "content": data})
                 elif event_type == "done":
                     sse = json.dumps({"type": "done", "content": data})
+                    self.wfile.write(f"data: {sse}\n\n".encode("utf-8"))
+                    self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.flush()
+                    continue
                 elif event_type == "close":
                     break
                 else:

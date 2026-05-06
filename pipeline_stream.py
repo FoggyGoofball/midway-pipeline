@@ -44,12 +44,12 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
     """
     import pipeline as _pipeline
 
-    # ── Clear global state ───────────────────────────────────────────
-    _pipeline._DOC_CACHE.clear()
-    _pipeline._MESH_TASK_REGISTRY.clear()
-    _pipeline._MESH_RESULTS.clear()
-    _pipeline._MESH_WORK_QUEUE.clear()
-    _pipeline.PROGRESS_LISTENERS.clear()
+    # ── Reset pipeline state via PipelineContext singleton ──────────
+    # Replaces five legacy module-level .clear() calls with the
+    # authoritative single-method reset covering doc_cache, mesh
+    # registries, work queue, progress listeners, and all other
+    # runtime accumulators (all_results_dict, processed_ids, etc.).
+    _pipeline._CTX.reset_state()
 
     # ── Register progress listener for phase announcements ──────────
     def _phase_listener(phase: str, status: str, detail: str = ""):

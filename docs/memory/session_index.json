@@ -658,5 +658,49 @@
     "status": "completed",
     "message_count": 0,
     "session_id": "pipeline_20260506_112208_187d910b"
+  },
+  "pipeline_20260506_113552_b6517e3b": {
+    "start_time": "2026-05-06T11:35:52.455564",
+    "user_prompt": "what is the current state of midway to nowhere?",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260506_113552_b6517e3b"
+  },
+  "pipeline_20260506_113719_9f0d8dd1": {
+    "start_time": "2026-05-06T11:37:19.125915",
+    "user_prompt": "Given the following... please reply with a title for the chat that is 3-4 words in length, all words used should be directly related to the content of the chat, avoid using verbs unless they are direc",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260506_113719_9f0d8dd1"
+  },
+  "pipeline_20260506_115634_1cc46a57": {
+    "start_time": "2026-05-06T11:56:34.529570",
+    "user_prompt": "what is the current state of midway to nowhre based on the GDD and assosciated documents",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260506_115634_1cc46a57"
+  },
+  "pipeline_20260506_115823_ab8e6147": {
+    "start_time": "2026-05-06T11:58:23.173266",
+    "user_prompt": "Given the following... please reply with a title for the chat that is 3-4 words in length, all words used should be directly related to the content of the chat, avoid using verbs unless they are direc",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260506_115823_ab8e6147"
   }
 }

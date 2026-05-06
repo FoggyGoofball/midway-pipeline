@@ -126,8 +126,8 @@ def __getattr__(name):
 
 # ── PipelineContext Singleton ──────────────────────────────────────────────
 _CTX = PipelineContext(
-    project_root=Path(__file__).resolve().parent.parent,
-    memory_dir=Path(__file__).resolve().parent.parent / "docs" / "memory",
+    project_root=Path(__file__).resolve().parent.parent / "midway",
+    memory_dir=Path(__file__).resolve().parent.parent / "midway" / "docs" / "memory",
     session_id="",
     tasks=[],
     global_signals=[],
@@ -149,7 +149,7 @@ MODEL = EXECUTION_MODEL
 DIRECTOR_MODEL = "llama3.1:8b-instruct-q4_K_M"
 
 # Point to the game engine project root (midway/), not midway-pipeline/ itself
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent / "midway"
 MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
 MAX_SUBTASKS_PER_AGENT = 5
@@ -314,7 +314,33 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         print(f"\n{'='*70}")
         print(f"  Chat Mode Detected — Direct Response (bypassing pipeline)")
         print(f"{'='*70}")
-        response = call_ollama(CHAT_SYSTEM, user_prompt, "Chat", CHAT_MODEL)
+
+        # ── Inject project context so CHAT mode has awareness ────
+        # The CHAT_SYSTEM prompt says "use provided project context"
+        # but previously we sent zero context — the model had no
+        # access to GDD, docs, or project state.
+        chat_context_parts = [user_prompt]
+        try:
+            state = get_project_state(PROJECT_ROOT, domain_registry.ALL_DOMAINS)
+            if state.strip():
+                chat_context_parts.append(
+                    "The following is the current project state. "
+                    "Use it to inform your answer.\n\n" + state
+                )
+        except Exception:
+            pass
+        try:
+            structure = curate_project_structure(user_prompt, PROJECT_ROOT)
+            if structure.strip():
+                chat_context_parts.append(
+                    "The following is the project directory structure "
+                    "relevant to this query.\n\n" + structure
+                )
+        except Exception:
+            pass
+        enriched_input = "\n\n---\n\n".join(chat_context_parts)
+
+        response = call_ollama(CHAT_SYSTEM, enriched_input, "Chat", CHAT_MODEL)
         ctx.final_output = response
         return response
 
