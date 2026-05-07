@@ -21,6 +21,12 @@ class SignalType(str, Enum):
     OBJECT = "OBJECT"
     RECOURSE = "RECOURSE"
     CONSULT = "CONSULT"
+    APPEAL = "APPEAL"
+    MERGE = "MERGE"
+    REJECT = "REJECT"
+    MATH_EVAL = "MATH_EVAL"
+
+
 
 
 class MeshSignal(BaseModel):
@@ -159,7 +165,15 @@ class PipelineContext(BaseModel):
     # ── Insanity Detector ────────────────────────────────────────────────────
     seen_code_hashes: Set[str] = set()
 
+    # ── File Hash Dictionary for Pre-Merge Hash Locking (Task 2) ─────────────
+    file_hashes: Dict[str, str] = {}
+
+    # ── Tribunal / Appellate Court state (Tasks 3-4) ─────────────────────────
+    pending_appeals: List[Dict[str, Any]] = []
+    tribunal_verdicts: Dict[str, str] = {}
+
     # ── Runtime accumulators (populated during pipeline execution) ───────────
+
     all_results: List[Dict[str, Any]] = []
     all_results_dict: Dict[str, str] = {}
     all_vetos: List[Dict[str, Any]] = []
@@ -175,8 +189,12 @@ class PipelineContext(BaseModel):
     final_output: str = ""
     user_prompt: str = ""
 
+    # ── Pro Mode ──────────────────────────────────────────────────────────────
+    pro_mode: bool = False
+
     # ── Run-time accumulators (mesh_loops.py) ─────────────────────────────────
     director_output: str = ""
+
     gdd_context: str = ""
     project_state: str = ""
     structure: str = ""
@@ -201,6 +219,9 @@ class PipelineContext(BaseModel):
     seen_code_hashes_set: Set[str] = set()
     is_chat: bool = False
     session_mgr: Optional[Any] = None
+
+    # ── Circuit Breaker Retry Counts (Day 4) ──────────────────────────────
+    retry_counts: Dict[str, int] = {}
 
     def load_state(self, state: dict) -> None:
         """Restore runtime accumulators from a saved checkpoint state dict.

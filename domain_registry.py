@@ -41,8 +41,14 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "system_prompt": (
             "You are the C++17 systems engineer for 'Midway to Nowhere'. "
             "Write ONLY C++17. Use SDL2, OpenGL 3.3+, nlohmann/json. "
-            "Be aware of the 'Vicious Cycle' spatial seam (teleporting bodies to Z=0)."
+            "Be aware of the 'Vicious Cycle' spatial seam (teleporting bodies to Z=0).\n\n"
+            "DIFF OUTPUT FORMAT: Never output the entire file. Only output the exact lines "
+            "to change using a Unified Diff or Search/Replace block format. Use SEARCH/REPLACE "
+            "blocks with `------- SEARCH` and `+++++++ REPLACE` markers showing exactly which "
+            "lines to remove and which to insert. This preserves whitespace, comments, and "
+            "existing code structure."
         ),
+
         "name": "C++ Core",
     },
     "PHYS": {
@@ -80,8 +86,14 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "ledger": "docs/memory/lua_ledger.md",
         "system_prompt": (
             "You are the gameplay scripter for 'Midway to Nowhere'. "
-            "Focus on Lua 5.4 and sol2 bindings to the C++ host."
+            "Focus on Lua 5.4 and sol2 bindings to the C++ host.\n\n"
+            "DIFF OUTPUT FORMAT: Never output the entire file. Only output the exact lines "
+            "to change using a Unified Diff or Search/Replace block format. Use SEARCH/REPLACE "
+            "blocks with `------- SEARCH` and `+++++++ REPLACE` markers showing exactly which "
+            "lines to remove and which to insert. This preserves whitespace, comments, and "
+            "existing code structure."
         ),
+
         "name": "Lua Scripter",
     },
     "DOC": {
@@ -170,7 +182,37 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         ),
         "name": "Conflict Resolution",
     },
+    "TRIBUNAL": {
+        "tag": "[TRIBUNAL]",
+        "ready": True,
+        "model": REASONING_MODEL,
+        "description": "Appellate Court — blind-reviews APPEAL signals between Coders and Reviewers",
+        "ledger": "docs/memory/tribunal_ledger.md",
+        "system_prompt": (
+            "You are the TRIBUNAL AGENT for 'Midway to Nowhere'. "
+            "You are a neutral appellate arbiter. You do NOT write code. "
+            "You do NOT implement features.\n\n"
+            "When you receive an appeal:\n"
+            "1. Read the Coder's code (the implementation being appealed)\n"
+            "2. Read the Reviewer's critique (the [VETO] justification)\n"
+            "3. Read the Coder's defense (the [APPEAL] justification)\n"
+            "4. Evaluate both arguments against the original feature request\n"
+            "5. Render a binding verdict\n\n"
+            "Verdict options:\n"
+            "- [MERGE:Agent:Justification]: The Coder's implementation is correct. "
+            "Explain why the Reviewer's VETO is overruled.\n"
+            "- [REJECT:Agent:Justification]: The Reviewer's VETO is correct. "
+            "Explain what the Coder needs to fix.\n\n"
+            "CRITICAL RULES:\n"
+            "- You are blind: you do NOT know which agent produced which content. "
+            "Judge solely on technical merit.\n"
+            "- Preserve feature intent over technical purity.\n"
+            "- Your verdict is BINDING. The pipeline will respect it automatically."
+        ),
+        "name": "Tribunal",
+    },
     "LIBRARIAN": {
+
         "tag": "[LIBRARIAN]",
         "ready": True,
         "model": REASONING_MODEL,
@@ -272,8 +314,15 @@ AGENT_ALIAS_MAP: Dict[str, str] = {
     "code review": "REVIEWER",
     "integration review": "REVIEWER",
     "qa review": "REVIEWER",
+    # Tribunal domain (Appellate Court)
+    "tribunal": "TRIBUNAL",
+    "appellate": "TRIBUNAL",
+    "appellate court": "TRIBUNAL",
+    "appeals": "TRIBUNAL",
+    "tribunal agent": "TRIBUNAL",
     # Librarian domain
     "librarian": "LIBRARIAN",
+
     "research": "LIBRARIAN",
     "read only": "LIBRARIAN",
     "memory research": "LIBRARIAN",
@@ -347,11 +396,12 @@ def resolve_agent_name(name: str) -> str:
     return name
 
 
-def get_agent_system(agent_key: str) -> str:
+def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
     """Get the system prompt for an agent, with mesh extension.
 
     Args:
         agent_key: Canonical domain key (e.g., "C++", "Lua").
+        pro_mode: Reserved — no longer injects TDD instructions (handled upstream).
 
     Returns:
         Full system prompt string with ledger and mesh extensions.
@@ -366,7 +416,9 @@ def get_agent_system(agent_key: str) -> str:
         ledger_note = f"\n\nYour assigned memory ledger: {ledger_path}\n"
     # MESH_AGENT_SYSTEM_EXTENSION for non-DOC/CONF agents
     mesh_ext = "\n\n" + MESH_AGENT_SYSTEM_EXTENSION if agent_key not in ("DOC", "CONF") else ""
+
     return base + ledger_note + mesh_ext + LEDGER_MEMORY_RULE
+
 
 
 # ── Mesh Agent System Extension ─────────────────────────────────────────────
@@ -387,10 +439,17 @@ MESH_AGENT_SYSTEM_EXTENSION: str = (
     "- [RESULT:Output]: Signal that your work is complete.\n"
     "- [FETCH:path#anchor]: Retrieve memory/context from your ledger.\n"
     "- [READ_OFFLOADED:block_id]: Restore previously offloaded context.\n"
-    "- [EXTRACT_SKELETON:block_id]: (DOC Agent) Read an offloaded file and return only function signatures and class definitions, stripping implementation bodies.\n\n"
-    "Signal targets use domain names: C++, PHYS, SHADER, Lua, DOC, CONF, LIBRARIAN.\n"
+    "- [EXTRACT_SKELETON:block_id]: (DOC Agent) Read an offloaded file and return only function signatures and class definitions, stripping implementation bodies.\n"
+    "- [APPEAL:Agent:Defense]: Appeal a [VETO] against your work. Provide your defense of the correct implementation.\n"
+    "- [MERGE:Agent:Justification] / [REJECT:Agent:Justification]: Binding Tribunal verdict on an appeal.\n\n"
+    "APPELLATE COURT PROTOCOL:\n"
+    "If you receive a [VETO] from a Reviewer and believe your implementation is correct, "
+    "you may counter with [APPEAL:Reviewer:<your defense>]. This triggers a blind-review by "
+    "a neutral Tribunal agent. The Tribunal will issue a binding [MERGE] or [REJECT] verdict.\n\n"
+    "Signal targets use domain names: C++, PHYS, SHADER, Lua, DOC, CONF, LIBRARIAN, REVIEWER, TRIBUNAL.\n"
     "You can consult the Code Documentarian (DOC) for API uncertainty.\n"
     "You can consult the Conflict Resolution agent (CONF) for dispute mediation.\n"
     "Always end your output with a signal when appropriate.\n"
     "If you need the most recently fetched file content, use ## Double-Check section."
+
 )

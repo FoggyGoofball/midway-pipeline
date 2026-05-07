@@ -18,18 +18,26 @@ from models import SignalType, MeshSignal
 # sections: target agent, content payload, and optional source/hash tag.
 
 SIGNAL_PATTERNS: Dict[str, str] = {
-    "QUERY": r"\[QUERY:([^\]]+):([^\]]+)\]",
-    "DELEGATE": r"\[DELEGATE:([^\]]+):([^\]]+)\]",
-    "VETO": r"\[VETO:([^\]]+):([^\]]+)\]",
-    "OBJECT": r"\[OBJECT:([^\]]+):([^\]]+)\]",
-    "RECOURSE": r"\[RECOURSE:([^\]]+):([^\]]+)\]",
-    "CONSULT": r"\[CONSULT:([^\]]+):([^\]]+)\]",
-    "APPROVE": r"\[APPROVE\]",
-    "RESULT": r"\[RESULT:(.*?)\]",
-    "REVISE": r"\[REVISE:([^\]]+):([^\]]+)\]",
-    "FETCH": r"\[FETCH:([^\]]+)#([^\]]+)\]",
-    "READ_OFFLOADED": r"\[READ_OFFLOADED:([^\]]+)\]",
+    "QUERY": r"\[\s*\*?\*?\s*QUERY\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "DELEGATE": r"\[\s*\*?\*?\s*DELEGATE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "VETO": r"\[\s*\*?\*?\s*VETO\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "OBJECT": r"\[\s*\*?\*?\s*OBJECT\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "RECOURSE": r"\[\s*\*?\*?\s*RECOURSE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "CONSULT": r"\[\s*\*?\*?\s*CONSULT\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "APPROVE": r"\[\s*\*?\*?\s*APPROVE\s*\*?\*?\s*\]",
+    "RESULT": r"\[\s*\*?\*?\s*RESULT\s*\*?\*?\s*:\s*(.*?)\s*\]",
+    "REVISE": r"\[\s*\*?\*?\s*REVISE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "FETCH": r"\[\s*\*?\*?\s*FETCH\s*\*?\*?\s*:\s*([^\]]+)\s*#\s*([^\]]+)\s*\]",
+    "READ_OFFLOADED": r"\[\s*\*?\*?\s*READ_OFFLOADED\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
+    "FLUSH": r"\[\s*\*?\*?\s*FLUSH\s*\*?\*?\s*\]",
+    "APPEAL": r"\[\s*\*?\*?\s*APPEAL\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "MERGE": r"\[\s*\*?\*?\s*MERGE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "REJECT": r"\[\s*\*?\*?\s*REJECT\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+    "MATH_EVAL": r"\[\s*\*?\*?\s*MATH_EVAL\s*\*?\*?\s*:\s*(.*?)\]",
 }
+
+
+
 
 # Double-check pattern — captures a structured agent self-review section
 # containing the three marked sections, allowing bullet items across lines.
@@ -106,6 +114,7 @@ def get_verdict(review_text: str) -> str:
 
     Returns 'PASS', 'FAIL', or 'UNKNOWN'.
     FAIL is checked first (higher priority) to avoid false PASS on negative commentary.
+    All regexes are lenient to tolerate formatting drift (**bold**, extra spaces, etc.).
 
     Args:
         review_text: Review agent's output text.
@@ -113,17 +122,14 @@ def get_verdict(review_text: str) -> str:
     Returns:
         'PASS', 'FAIL', or 'UNKNOWN'.
     """
-    # Check FAIL first — bold or bare
-    if re.search(r"\*\*FAIL\*\*", review_text):
+    # Check FAIL first — tolerate markdown asterisks, spaces, underscores
+    if re.search(r"\s*\*?\*?\s*FAIL\s*\*?\*?\s*", review_text, re.IGNORECASE):
         return "FAIL"
-    if re.search(r"(?m)^FAIL$", review_text):
-        return "FAIL"
-    # Then check PASS
-    if re.search(r"\*\*PASS\*\*", review_text):
-        return "PASS"
-    if re.search(r"(?m)^PASS$", review_text):
+    # Then check PASS — lenient to formatting drift
+    if re.search(r"\s*\*?\*?\s*PASS\s*\*?\*?\s*", review_text, re.IGNORECASE):
         return "PASS"
     return "UNKNOWN"
+        
 
 
 def parse_signal(text: str, source: str = None) -> List[MeshSignal]:

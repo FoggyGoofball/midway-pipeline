@@ -49,10 +49,15 @@ from pipeline import (
     TagSuggester, TokenBudget,
     HAS_SNAPSHOT, SnapshotManager,
     generate_failure_report,
+    get_unavailable_domains_text,
+    # ── File Hash Locking ────────────────────────────────────────────
+    compute_file_hash, save_initial_file_hashes_from_context, verify_file_hashes,
 )
+
 
 # Re-export run_code_merge from mesh_finalize for backward compat
 from mesh_finalize import run_code_merge
+from _pipeline_helpers import atomic_write_text
 
 from models import PipelineContext, SignalType, MeshSignal, ConsensusResult
 
@@ -75,84 +80,39 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
         print(f"  [Resurrection Bypass] Skipping Phases 0.5-3. State already re-hydrated from checkpoint.")
         return ctx
 
-    # ── Phase 0.5: Lead Producer (Scope Gate & Auto-Feeder) ───────────────
     blueprint_path = ctx.project_root / "docs" / "project_blueprint.md"
 
     # Define words that explicitly trigger the Auto-Feeder to pull the next task
     auto_feed_triggers = {"continue", "next", "proceed", "c", "go", "next task"}
-    
+
     is_auto_feed_request = (
-        not ctx.user_prompt 
+        not ctx.user_prompt
         or ctx.user_prompt.strip().lower() in auto_feed_triggers
     )
 
-    if is_auto_feed_request:
-        if blueprint_path.is_file():
-            content = blueprint_path.read_text(encoding="utf-8")
-            match = re.search(r"- \[ \] (Task \d+: .+)", content)
-            if match:
-                ctx.user_prompt = match.group(1)
-                print(f"  [Lead Producer] Auto-feeding next task: {ctx.user_prompt}")
-                new_content = content.replace(f"- [ ] {ctx.user_prompt}", f"- [x] {ctx.user_prompt}", 1)
-                blueprint_path.write_text(new_content, encoding="utf-8")
-            else:
-                print("  [Lead Producer] Blueprint complete. Nothing to do.")
-                ctx.final_output = "Blueprint complete."
-                return ctx
-        else:
-            print("  [ERROR] No prompt provided and no blueprint found.")
-            ctx.final_output = "Failed to start."
-            return ctx
-    else:
-        # ── Defensive Guard: Detect read-only / informational prompts ──
-        # Even if the INFORMATIONAL classifier miscategorized, the Scope Gate
-        # should NEVER route a read-only question to the Lead Producer.
-        read_only_keywords = [
-            "how is", "what is", "explain", "summarize", "status",
-            "progress", "tell me about", "describe", "list",
-            "show me", "overview", "what are", "how does",
-            "what does", "can you tell", "information about",
-            "context on", "update on", "report on"
-        ]
-        prompt_lower = ctx.user_prompt.lower().strip()
-        # If the prompt ends with '?' it's a question — never blueprint it
-        is_read_only_question = (
-            prompt_lower.endswith("?")
-            or any(prompt_lower.startswith(kw) for kw in read_only_keywords)
-        )
-        if is_read_only_question:
-            print(f"\n  [Lead Producer] Prompt looks like a read-only question. "
-                  f"Passing through to Phase 1 (Librarian) instead of blueprint generation.")
-            print(f"  [Lead Producer] Prompt: {ctx.user_prompt[:80]}")
-        else:
-            scope_prompt = (
-                f"Analyze this prompt: '{ctx.user_prompt}'. "
-                f"If it requires modifying >{SCOPE_FILE_LIMIT} files or writing "
-                f">{SCOPE_LINE_LIMIT} lines, respond strictly with 'TOO_BROAD'. "
-                f"Otherwise respond 'NARROW'."
-            )
-            scope_eval = call_ollama(
-                "You are a Lead Producer.", scope_prompt, "Scope Gate", REASONING_MODEL
-            )
+    # ── Defensive Guard: Detect read-only / informational prompts ──
+    # Even if the INFORMATIONAL classifier miscategorized, the Scope Gate
+    # should NEVER route a read-only question to the Lead Producer.
+    read_only_keywords = [
+        "how is", "what is", "explain", "summarize", "status",
+        "progress", "tell me about", "describe", "list",
+        "show me", "overview", "what are", "how does",
+        "what does", "can you tell", "information about",
+        "context on", "update on", "report on"
+    ]
+    prompt_lower = ctx.user_prompt.lower().strip()
+    # If the prompt ends with '?' it's a question — never blueprint it
+    is_read_only_question = (
+        prompt_lower.endswith("?")
+        or any(prompt_lower.startswith(kw) for kw in read_only_keywords)
+    )
 
-            if "TOO_BROAD" in scope_eval.upper():
-                print(f"\n  [Lead Producer] Scope is TOO BROAD. Generating blueprint...")
-                blueprint_prompt = (
-                    f"Create a step-by-step markdown blueprint to accomplish: "
-                    f"{ctx.user_prompt}. Format as a checklist: "
-                    f"'- [ ] Task 1: ...'"
-                )
-                blueprint = call_ollama(
-                    "You are a Lead Producer.", blueprint_prompt,
-                    "Blueprint Generation", REASONING_MODEL
-                )
-                blueprint_path.parent.mkdir(exist_ok=True)
-                blueprint_path.write_text(blueprint, encoding="utf-8")
-                print(f"  [Lead Producer] Saved to docs/project_blueprint.md.")
-                ctx.final_output = "Blueprint created. Run pipeline with no prompt to execute Task 1."
-                return ctx
+    if is_auto_feed_request and not blueprint_path.is_file():
+        print("  [ERROR] No prompt provided and no blueprint found.")
+        ctx.final_output = "Failed to start."
+        return ctx
 
-    # ── Phase 1: GDD Librarian ────────────────────────────────────────────
+    # ── Phase 1: GDD Librarian (always runs — gathers design context) ──────
     print(f"\n{'='*70}")
     print(f"  Phase 1: GDD Librarian")
     print(f"{'='*70}")
@@ -164,7 +124,7 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
     else:
         ctx.output_parts.append("No relevant GDD sections found.\n")
 
-    # ── Phase 2: Project State & File Context ─────────────────────────────
+    # ── Phase 2: Project State & File Context (always runs) ────────────
     print(f"\n{'='*70}")
     print(f"  Phase 2: Project Context")
     print(f"{'='*70}")
@@ -176,7 +136,7 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
     ctx.structure = curate_project_structure(ctx.user_prompt)
     ctx.output_parts.append(ctx.structure + "\n")
 
-    # ── Auto-Fetch Referenced Files ───────────────────────────────────────────
+    # ── Auto-Fetch Referenced Files ───────────────────────────────────
     refs = parse_file_references(ctx.user_prompt)
     refs_block = fetch_referenced_files(refs)
     set_referenced_files_cache(refs_block)
@@ -186,6 +146,116 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
         )
         print(f"  [AutoRef] {len(refs)} file reference(s) parsed and cached for all agents")
 
+    # ── Auto-Feeder: extract next task from blueprint (for auto-feed requests) ──
+    if is_auto_feed_request:
+        if blueprint_path.is_file():
+            content = blueprint_path.read_text(encoding="utf-8")
+            match = re.search(
+                r"^[-\*]?\s*\[ \]\s*(?:Task \d+:\s*)?(.+)",
+                content, re.MULTILINE
+            )
+            if match:
+                raw_line = match.group(0)
+                task_text = match.group(1)
+                ctx.user_prompt = task_text.strip()
+                print(f"  [Lead Producer] Auto-feeding next task: {task_text.strip()}")
+                new_content = content.replace(raw_line, raw_line.replace("[ ]", "[x]", 1), 1)
+                atomic_write_text(blueprint_path, new_content)
+            else:
+                print("  [Lead Producer] Blueprint complete. Nothing to do.")
+                ctx.final_output = "Blueprint complete."
+                return ctx
+
+    # ── Phase 0.5: Lead Producer (Scope Gate) — only for fresh prompts ──
+    # Runs AFTER GDD/Project State gathering so the model can make informed decisions.
+    if not is_auto_feed_request:
+        gdd_snippet = ctx.gdd_context[:2000] if ctx.gdd_context else "(no GDD context)"
+        state_snippet = ctx.project_state[:2000] if ctx.project_state else "(no project state)"
+        if is_read_only_question:
+            print(f"\n  [Lead Producer] Prompt looks like a read-only question. "
+                  f"Passing through to Phase 1 (Librarian) instead of blueprint generation.")
+            print(f"  [Lead Producer] Prompt: {ctx.user_prompt[:80]}")
+        else:
+            scope_prompt = (
+                f"Analyze this prompt: '{ctx.user_prompt}'.\n\n"
+                f"## Relevant GDD Context\n{gdd_snippet}\n\n"
+                f"## Current Project State\n{state_snippet}\n\n"
+                f"Consider whether it requires modifying >{SCOPE_FILE_LIMIT} files or "
+                f"writing >{SCOPE_LINE_LIMIT} lines. Think step by step, then conclude "
+                f"with [VERDICT: NARROW] or [VERDICT: TOO_BROAD]."
+            )
+            scope_eval = call_ollama(
+                "You are a Lead Producer.", scope_prompt, "Scope Gate", REASONING_MODEL
+            )
+
+            verdict_match = re.search(r"\[\s*\*?\*?\s*VERDICT\s*\*?\*?\s*:\s*\*?\*?\s*TOO_BROAD\s*\*?\*?\s*\]", scope_eval, re.IGNORECASE)
+            if verdict_match:
+                print(f"\n  [Lead Producer] Scope is TOO_BROAD. Generating blueprint...")
+                unavailable_text = get_unavailable_domains_text()
+                hard_constraints = (
+                    f"HARD CONSTRAINTS — Do NOT plan for:\n"
+                    f"{unavailable_text}\n\n"
+                    f"This is a custom engine using SDL2/OpenGL/Jolt/Box2D/Lua. "
+                    f"Never reference Unreal, Unity, Godot, or proprietary engines. "
+                    f"If the user asks for features from unavailable domains, "
+                    f"substitute with wireframes, debug logging, or standard placeholders."
+                )
+                blueprint_prompt = (
+                    f"Create a step-by-step markdown blueprint to accomplish: "
+                    f"{ctx.user_prompt}.\n\n"
+                    f"{hard_constraints}\n\n"
+                    f"## GDD Context\n"
+                    f"{ctx.gdd_context[:3000] if ctx.gdd_context else '(none)'}\n\n"
+                    f"## Current Project State\n"
+                    f"{ctx.project_state[:2000] if ctx.project_state else '(none)'}\n\n"
+                    f"## Unavailable Domains\n"
+                    f"{unavailable_text}\n\n"
+                    f"## Project Structure\n"
+                    f"{ctx.structure[:2000] if ctx.structure else '(none)'}\n\n"
+                    f"Base your step-by-step tasks strictly on the provided GDD "
+                    f"and current project state. "
+                    f"Do NOT include tasks for unavailable domains. "
+                    f"Base tasks strictly on the provided GDD and current project state.\n\n"
+                    f"Format as a checklist:\n"
+                    f"'- [ ] Task 1: ...'"
+                )
+                blueprint = call_ollama(
+                    "You are a Lead Producer.", blueprint_prompt,
+                    "Blueprint Generation", REASONING_MODEL
+                )
+                blueprint_path.parent.mkdir(exist_ok=True)
+                atomic_write_text(blueprint_path, blueprint)
+                print(f"  [Lead Producer] Saved to docs/project_blueprint.md.")
+
+                # ── Blueprint Gate: user must approve before execution ──
+                print(f"\n{'='*50}")
+                print(f"  BLUEPRINT GATE — Review the architectural blueprint")
+                print(f"  Location: {blueprint_path}")
+                print(f"{'='*50}")
+                approval = input("  Do you approve this architectural blueprint? [Y/n]: ").strip().lower()
+                if approval in ("n", "no"):
+                    print(f"\n  [Blueprint Gate] Paused. Edit the blueprint at:")
+                    print(f"    {blueprint_path}")
+                    input("  Press Enter to continue after editing... ")
+                    print(f"  [Blueprint Gate] Continuing with updated blueprint.\n")
+
+                # ── Continuous Execution: extract first task & fall through ──
+                content = blueprint_path.read_text(encoding="utf-8")
+                first_match = re.search(
+                    r"^[-\*]?\s*\[ \]\s*(?:Task \d+:\s*)?(.+)",
+                    content, re.MULTILINE
+                )
+                if first_match:
+                    raw_line = first_match.group(0)
+                    task_text = first_match.group(1).strip()
+                    ctx.user_prompt = task_text
+                    new_content = content.replace(raw_line, raw_line.replace("[ ]", "[x]", 1), 1)
+                    atomic_write_text(blueprint_path, new_content)
+                    print(f"  [Lead Producer] Auto-feeding first task: {task_text}")
+                    print(f"  [Lead Producer] Continuing to Phase 3...")
+                else:
+                    print("  [Lead Producer] Blueprint generated but no tasks found — continuing with original prompt.")
+
     # ── Phase 3: Director ─────────────────────────────────────────────────
     print(f"\n{'='*70}")
     print(f"  Phase 3: Director — Task Decomposition")
@@ -193,15 +263,38 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
     ctx.output_parts.append("\n## Phase 3: Director — Task Decomposition\n")
 
     director_prompt = build_director_prompt()
+    # ── Director Context: Inject GDD context and project state ──
+    gdd_snippet = ctx.gdd_context[:2500] if ctx.gdd_context else "(no GDD context)"
+    state_snippet = ctx.project_state[:2000] if ctx.project_state else "(no project state)"
     director_input = (
-        f"{director_prompt}\n\n---\nUSER REQUEST:\n{ctx.user_prompt}"
+        f"{director_prompt}\n\n"
+        f"## Relevant GDD Context\n{gdd_snippet}\n\n"
+        f"## Current Project State\n{state_snippet}\n\n"
+        f"---\nUSER REQUEST:\n{ctx.user_prompt}"
     )
     ctx.director_output = call_ollama(
         DIRECTOR_SYSTEM, director_input, "Director", DIRECTOR_MODEL
     )
     ctx.output_parts.append(ctx.director_output + "\n")
 
+    # ── Pro Mode: MATH_HEAVY Gate ──────────────────────────────────────
+    if re.search(r"\[\s*\*?\*?\s*MATH_?HEAVY\s*\*?\*?\s*\]", ctx.director_output, re.IGNORECASE):
+        print(f"\n{'='*50}")
+        print(f"  MATH_HEAVY DETECTED — Complex 3D math / physics request")
+        print(f"{'='*50}")
+        warning_msg = (
+            "It looks like a lot of complex math needs to be calculated. "
+            "Should we turn on Pro Mode for rigorous test-driven consensus? [y/N]: "
+        )
+        user_input = input(f"  {warning_msg}").strip().lower()
+        if user_input in ("y", "yes"):
+            ctx.pro_mode = True
+            print(f"  [Pro Mode] ENABLED — TDD guardrails, multi-draft consensus, and test compilation active.")
+        else:
+            print(f"  [Pro Mode] Declined — continuing in standard mode.")
+
     # Parse tasks from Director output
+
     task_regex = r"### Task (\d+): \[([^\]]+)\] — (.+)"
     ctx.tasks_list = []
     for match in re.finditer(task_regex, ctx.director_output):
@@ -285,23 +378,167 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
         except Exception as e:
             print(f"  [FileReader] Error: {e}")
 
-        # Execute the task
-        output = execute_task(
-            task, ctx.user_prompt, ctx.director_output,
-            ctx.all_results_dict, file_context, ctx.gdd_context,
-        )
+        # ── Sibling Rolling Context ──────────────────────────────────
+        # Aggregate outputs of all previously completed sibling tasks
+        # (tasks with the same parent, or top-level tasks from same run).
+        sibling_parts = []
+        for completed_id, completed_output in ctx.all_results_dict.items():
+            # Skip the current task itself and non-sibling tasks
+            if completed_id == task.task_id:
+                continue
+            completed_task = ctx.task_map.get(completed_id)
+            if completed_task is None:
+                continue
+            # Consider siblings: same parent (or both top-level with parent=None)
+            same_parent = (completed_task.parent == task.parent)
+            if same_parent:
+                agent_name = ALL_DOMAINS.get(
+                    resolve_agent_name(completed_task.agent), {}
+                ).get("name", completed_task.agent)
+                sibling_parts.append(
+                    f"### Sibling Output: {agent_name} ({completed_id})\n"
+                    f"{completed_output[:800]}"
+                )
+        sibling_context = ""
+        if sibling_parts:
+            sibling_context = (
+                "## Previously Completed Sibling Tasks\n"
+                + "\n\n".join(sibling_parts)
+            )
+            print(f"  [Sibling Context] Injected {len(sibling_parts)} sibling output(s) for {task.task_id}")
+
+        # ── Pro Mode: Adversarial TDD (Test-First Generation) ────────
+        # If ctx.pro_mode is active, route the task to the 14B Reviewer/Director
+        # model first to write a failing gtest, then inject that test into the
+        # Coder's prompt as a "here is the test, make it pass" constraint.
+        pro_test_injection = ""
+        if ctx.pro_mode:
+            print(f"\n  [Pro Mode] Adversarial TDD: Routing {task.task_id} to Lead Architect for test generation...")
+            test_writer_system = (
+                "You are the Lead Test Architect. Your ONLY job is to write "
+                "a C++ Google Test (gtest) unit test that PROVES the expected "
+                "math, logic, or behavior described in the task specification. "
+                "Output ONLY the gtest source code as a single code block. "
+                "Do NOT modify any existing files. Do NOT write implementation code. "
+                "The test MUST fail initially (the implementation doesn't exist yet)."
+            )
+            test_writer_prompt = (
+                f"## Task Specification\n{task.spec}\n\n"
+                f"## User's Feature Request\n{ctx.user_prompt}\n\n"
+                f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
+                f"---\n"
+                f"Write a C++ Google Test (gtest) that asserts the expected "
+                f"behavior, math, or logic for this task. The test should define "
+                f"the function signatures and expected values that the implementation "
+                f"must satisfy. Output ONLY the gtest code in a ```cpp block. "
+                f"Use EXPECT_EQ, EXPECT_NEAR, ASSERT_TRUE, etc. as appropriate. "
+                f"If the task involves physics math, include numerical tolerance checks "
+                f"with EXPECT_NEAR."
+            )
+            test_code = call_ollama(
+                test_writer_system,
+                test_writer_prompt,
+                f"Test Architect ({task.task_id})",
+                REVIEWER_MODEL,  # 14B model
+            )
+            # Extract test code from code block
+            test_match = re.search(r"```(?:cpp)?\s*\n(.*?)```", test_code, re.DOTALL)
+            test_body = test_match.group(1).strip() if test_match else test_code.strip()
+            # Save the test file
+            test_dir = ctx.project_root / "tests"
+            test_dir.mkdir(parents=True, exist_ok=True)
+            test_file_path = test_dir / f"test_{task.task_id}.cpp"
+            atomic_write_text(test_file_path, test_body)
+            print(f"  [Pro Mode] Adversarial TDD: Saved test to {test_file_path}")
+            # Build the injection string for the Coder
+            pro_test_injection = (
+                f"\n\n---\n"
+                f"## ADVERSARIAL TDD: Failing Unit Test Written by Lead Architect\n"
+                f"Here is a failing unit test written by the Lead Architect:\n"
+                f"```cpp\n{test_body}\n```\n"
+                f"Write the C++ implementation to make this test pass. "
+                f"You are strictly forbidden from modifying the test file at `{test_file_path}`."
+            )
+
+        # ── Pro Mode: Multi-Draft Generation (N-Version Consensus) ────
+        # If ctx.pro_mode is True and the task is PHYS (complex math/physics),
+        # generate 3 drafts at different temperatures, then run them
+        # through a Tribunal agent to synthesize a master file.
+        if ctx.pro_mode and resolve_agent_name(task.agent) == "PHYS":
+            print(f"\n  [Pro Mode] N-Version Consensus: Generating 3 drafts for {task.task_id}...")
+        
+            temperatures = [0.2, 0.5, 0.8]
+            drafts = {}
+
+            for i, temp in enumerate(temperatures):
+                draft_label = f"{chr(65+i)} (t={temp})"
+                print(f"    Draft {draft_label}...")
+                draft_output = execute_task(
+                    task, ctx.user_prompt, ctx.director_output,
+                    ctx.all_results_dict, file_context, ctx.gdd_context,
+                    sibling_context=sibling_context,
+                    ollama_params={"temperature": temp},
+                )
+                drafts[f"draft_{chr(65+i)}"] = draft_output
+
+            # ── Tribunal Merge (Task 9) ──────────────────────────────
+            print(f"  [Pro Mode] Tribunal merging 3 drafts for {task.task_id}...")
+
+            tribunal_director_system = (
+                "You are the TRIBUNAL ARCHITECT. Your role is to evaluate "
+                "three different mathematical/physics approaches to the same "
+                "problem, discard hallucinations and incorrect logic, and "
+                "output a single, synthesized master solution.\n\n"
+                "CRITICAL RULES:\n"
+                "1. Identify and discard any hallucinated API calls or impossible physics.\n"
+                "2. Cross-validate assertions: if only one draft makes a claim, it's likely a hallucination.\n"
+                "3. If two drafts agree on an approach, preserve that consensus.\n"
+                "4. Output ONLY the merged, synthesized code — no commentary, no evaluation report.\n"
+                "5. Use SEARCH/REPLACE diff format if modifying existing files, or full file content for new files."
+            )
+
+            tribunal_prompt = (
+                f"## Original Task Specification\n{task.spec}\n\n"
+                f"## User's Feature Request\n{ctx.user_prompt}\n\n"
+                f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
+                f"## Draft A (temperature=0.2 — conservative)\n{drafts['draft_A'][:2000]}\n\n"
+                f"## Draft B (temperature=0.5 — balanced)\n{drafts['draft_B'][:2000]}\n\n"
+                f"## Draft C (temperature=0.8 — creative)\n{drafts['draft_C'][:2000]}\n\n"
+                f"---\n"
+                f"Evaluate the three approaches. Discard hallucinations. "
+                f"Cross-validate mathematical assertions. "
+                f"Output a single, synthesized master solution file."
+            )
+
+            tribunal_output = call_ollama(
+                tribunal_director_system,
+                tribunal_prompt,
+                f"Tribunal Merge ({task.task_id})",
+                DIRECTOR_MODEL,
+            )
+
+            # Save the synthesized master file as the final output
+            output = tribunal_output
+            print(f"  [Pro Mode] Tribunal merge complete for {task.task_id}")
+
+        else:
+            # Standard single-draft execution
+            # ── Blind Coder: Inject Adversarial TDD test into coder's prompt ──
+            if pro_test_injection:
+                task.context = (task.context or "") + pro_test_injection
+            output = execute_task(
+                task, ctx.user_prompt, ctx.director_output,
+                ctx.all_results_dict, file_context, ctx.gdd_context,
+                sibling_context=sibling_context,
+            )
+        
+
 
         ctx.all_results_dict[task.task_id] = output
         ctx.processed_ids.add(task.task_id)
 
-        # ── Disk-Write Interceptor: persist domain-agent output to ledger ──
-        if not task.is_query and not task.parent:
-            try:
-                _append_to_ledger(output, task.agent, task.spec)
-            except Exception as e:
-                print(f"  [LedgerWrite] ⚠ Error appending to ledger: {e}")
-
         if task.is_query:
+
             ctx.query_results[task.parent] = output
             print(f"  [Query Tracker] Saved answer for parent task {task.task_id}")
 
@@ -370,7 +607,13 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     "reason": signal["content"],
                     "task_id": task.task_id,
                 })
+                # Circuit Breaker: increment retry count for the vetoed task
+                veto_target = resolve_agent_name(signal["target"])
+                veto_target_tid = f"task_{veto_target}"
+                ctx.retry_counts[veto_target_tid] = ctx.retry_counts.get(veto_target_tid, 0) + 1
                 print(f"  [Signal] VETO: {task.agent} -> {signal['target']}: {signal['content'][:80]}...")
+                print(f"  [Circuit Breaker] {veto_target_tid} retry_count incremented to {ctx.retry_counts[veto_target_tid]} (VETO issued)")
+        
 
             elif stype == "OBJECT":
                 ctx.all_objects.append({
@@ -443,7 +686,136 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                 work_queue.appendleft(doc_extract_task)
                 print(f"  [Signal] EXTRACT_SKELETON: {task.agent} -> DOC (block_id: {block_id})")
 
+            elif stype == "APPEAL":
+                # Appellate Court Protocol (Task 3): Route appeal to Tribunal
+                appeal_target = resolve_agent_name(signal["target"])
+                appeal_defense = signal["content"]
+                print(f"  [Signal] APPEAL: {task.agent} appeals {appeal_target}'s VETO: {appeal_defense[:80]}...")
+
+                # Find the matching VETO to pair with this appeal
+                matched_veto = None
+                for v in reversed(ctx.all_vetos):
+                    if v["target"] == appeal_target or v["from"] == appeal_target:
+                        matched_veto = v
+                        break
+                if matched_veto is None:
+                    # Also check OBJECTs
+                    for o in reversed(ctx.all_objects):
+                        matched_veto = {"from": o["from"], "target": o["target"],
+                                        "reason": o["concern"], "task_id": o.get("task_id", "")}
+                        break
+
+                # Store the appeal and target task context for Tribunal resolution
+                ctx.pending_appeals.append({
+                    "appellant": task.agent,
+                    "respondent": appeal_target if matched_veto is None else matched_veto["from"],
+                    "defense": appeal_defense,
+                    "veto_reason": matched_veto["reason"] if matched_veto else "",
+                    "veto_task_id": matched_veto["task_id"] if matched_veto else "",
+                    "task_spec": task.spec,
+                })
+
+                # Queue a Tribunal agent to blind-review
+                tribunal_spec = (
+                    f"APPELLATE REVIEW\n"
+                    f"Appellant: {task.agent}\n"
+                    f"Respondent: {appeal_target if matched_veto is None else matched_veto['from']}\n"
+                    f"---\n"
+                    f"**Coder's Defense:** {appeal_defense}\n"
+                    f"**VETO Justification:** {matched_veto['reason'] if matched_veto else '(from OBJECT)'}\n"
+                    f"**Task Spec:** {task.spec}\n"
+                    f"---\n"
+                    f"As TRIBUNAL agent, perform a blind-review of the dispute. "
+                    f"Do NOT consider which agent produced which content. "
+                    f"Judge solely on technical merit and feature intent. "
+                    f"Issue a binding verdict: [MERGE:Tribunal:<justification>] "
+                    f"or [REJECT:Tribunal:<justification>]."
+                )
+                tribunal_task = Task(
+                    agent="TRIBUNAL",
+                    spec=tribunal_spec,
+                    task_id=f"tribunal_{task.task_id}",
+                    parent=task.task_id,
+                    is_query=True,
+                )
+                work_queue.appendleft(tribunal_task)
+                ctx.pending_queries[tribunal_task.task_id] = task
+                print(f"  [APPEAL] Tribunal task queued for blind-review of {task.agent}'s appeal")
+
+            elif stype == "MERGE":
+                # Tribunal MERGE verdict — overrule the VETO, keep the output
+                print(f"  [Signal] MERGE (Tribunal verdict — VETO overruled): {signal['content'][:80]}...")
+                # Store the verdict so finalizer knows it's binding
+                ctx.tribunal_verdicts[task.agent] = f"MERGE:{signal['content']}"
+
+                # Remove the matching VETO from all_vetos since it's been overruled
+                # The finalizer will check tribunal_verdicts and skip blocked VETOs
+                veto_task_id = signal.get("content", "")
+                ctx.all_vetos = [
+                    v for v in ctx.all_vetos
+                    if not (v.get("task_id") and veto_task_id and
+                            veto_task_id in v.get("task_id", ""))
+                ]
+
+            elif stype == "REJECT":
+                # Tribunal REJECT verdict — uphold the VETO, output must be fixed
+                print(f"  [Signal] REJECT (Tribunal verdict — VETO upheld): {signal['content'][:80]}...")
+                ctx.tribunal_verdicts[task.agent] = f"REJECT:{signal['content']}"
+
+            elif stype == "MATH_EVAL":
+                # Math Oracle: safely execute embedded Python math code via subprocess
+                math_code = signal.get("content", "").strip()
+                if math_code:
+                    print(f"  [MATH_EVAL] Executing: {math_code[:120]}...")
+                    try:
+                        proc = subprocess.run(
+                            ["python", "-c", math_code],
+                            capture_output=True, text=True, timeout=15.0,
+                        )
+                        stdout = proc.stdout.strip()
+                        stderr = proc.stderr.strip()
+                        if proc.returncode == 0 and stdout:
+                            proof_injection = (
+                                f"\n## Math Oracle Result\n"
+                                f"**Numerical Proof:**\n```\n{stdout}\n```\n"
+                            )
+                            task.context = (task.context or "") + proof_injection
+                            task.completed = False
+                            work_queue.appendleft(task)
+                            print(f"  [MATH_EVAL] Proof injected into {task.agent}")
+                        else:
+                            error_msg = (
+                                f"\n## Math Oracle Error\n"
+                                f"**Execution failed (exit code {proc.returncode}):**\n"
+                                f"```\n{stderr or '(no stderr)'}\n```\n"
+                            )
+                            task.context = (task.context or "") + error_msg
+                            task.completed = False
+                            work_queue.appendleft(task)
+                            print(f"  [MATH_EVAL] Execution failed for {task.agent}: {stderr[:100]}")
+                    except subprocess.TimeoutExpired:
+                        timeout_msg = (
+                            "\n## Math Oracle Error\n"
+                            "**Execution timed out after 15s.**\n"
+                        )
+                        task.context = (task.context or "") + timeout_msg
+                        task.completed = False
+                        work_queue.appendleft(task)
+                        print(f"  [MATH_EVAL] Timeout for {task.agent}")
+                    except Exception as e:
+                        exc_msg = (
+                            f"\n## Math Oracle Error\n"
+                            f"**Exception during execution:** {e}\n"
+                        )
+                        task.context = (task.context or "") + exc_msg
+                        task.completed = False
+                        work_queue.appendleft(task)
+                        print(f"  [MATH_EVAL] Exception for {task.agent}: {e}")
+
             elif stype == "FETCH":
+
+
+
                 # Intercept [FETCH] signal: route through DOC oracle for reasoning.
                 fetch_depth = getattr(task, '_fetch_depth', 0)
                 if fetch_depth >= 3:

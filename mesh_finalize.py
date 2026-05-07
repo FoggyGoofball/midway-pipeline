@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from models import PipelineContext, SignalType, MeshSignal, ConsensusResult
+from _pipeline_helpers import atomic_write_text
 from pipeline import (
     _CTX, PROJECT_ROOT, MEMORY_DIR, OLLAMA_HOST, MODEL, MAX_ITERATIONS,
     MAX_SUBTASKS_PER_AGENT, REVIEW_MAX_ITERATIONS, MAX_CONSENSUS_ITERATIONS,
@@ -164,6 +165,10 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             if cmake_build.returncode != 0:
                 err_tail = "\n".join(cmake_build.stderr.splitlines()[-50:])
                 ctx.pre_flight_errors += f"\n## C++ Compiler Errors:\n```\n{err_tail}\n```"
+                # Circuit Breaker: increment retry count for each task on build failure
+                for tid in list(ctx.all_results_dict.keys()):
+                    ctx.retry_counts[tid] = ctx.retry_counts.get(tid, 0) + 1
+                    print(f"  [Circuit Breaker] {tid} retry_count incremented to {ctx.retry_counts[tid]} (build failure)")
         else:
             make_process = subprocess.run(
                 ["make", "-j4"], capture_output=True, text=True,
@@ -172,10 +177,67 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             if make_process.returncode != 0:
                 err_tail = "\n".join(make_process.stderr.splitlines()[-50:])
                 ctx.pre_flight_errors += f"\n## C++ Compiler Errors:\n```\n{err_tail}\n```"
+                # Circuit Breaker: increment retry count for each task on build failure
+                for tid in list(ctx.all_results_dict.keys()):
+                    ctx.retry_counts[tid] = ctx.retry_counts.get(tid, 0) + 1
+                    print(f"  [Circuit Breaker] {tid} retry_count incremented to {ctx.retry_counts[tid]} (build failure)")
     except subprocess.TimeoutExpired:
         ctx.pre_flight_errors += "\n## Compiler Timeout:\n```\nC++ build timed out after 30s\n```\n"
     except Exception:
         pass
+
+    # ── Pro Mode: Unit Test Compilation & Execution ────────────────────
+    if ctx.pro_mode:
+        print("  [Pro Mode] Compiling and executing test suite...")
+        test_build_dir = ctx.project_root / "build" / "tests"
+        test_binary = test_build_dir / "run_tests"
+        if sys.platform == "win32":
+            test_binary = test_build_dir / "run_tests.exe"
+
+        # Build test target if cmake project is configured
+        test_build_ok = True
+        try:
+            test_build_proc = subprocess.run(
+                ["cmake", "--build", ".", "--target", "run_tests"],
+                capture_output=True, text=True, cwd=ctx.project_root,
+                shell=True, timeout=60,
+            )
+            if test_build_proc.returncode != 0:
+                test_build_ok = False
+                err_tail = "\n".join(test_build_proc.stderr.splitlines()[-50:])
+                ctx.pre_flight_errors += (
+                    f"\n## Test Suite Compilation Errors:\n```\n{err_tail}\n```\n"
+                )
+                print(f"  [Pro Mode] ⚠ Test suite failed to compile — treating as [VETO]")
+        except (subprocess.TimeoutExpired, Exception) as e:
+            test_build_ok = False
+            ctx.pre_flight_errors += (
+                f"\n## Test Suite Compilation Exception:\n```\n{e}\n```\n"
+            )
+
+        if test_build_ok and test_binary.is_file():
+            try:
+                test_run = subprocess.run(
+                    [str(test_binary)], capture_output=True, text=True,
+                    timeout=60,
+                )
+                if test_run.returncode != 0:
+                    test_stderr = test_run.stderr.strip() or test_run.stdout.strip()
+                    ctx.pre_flight_errors += (
+                        f"\n## Unit Test Failures:\n```\n{test_stderr[:2000]}\n```\n"
+                    )
+                    print(f"  [Pro Mode] ⛔ Tests FAILED — feeding errors back to domain agents")
+                else:
+                    print(f"  [Pro Mode] ✅ All unit tests passed!")
+            except subprocess.TimeoutExpired:
+                ctx.pre_flight_errors += (
+                    "\n## Unit Test Timeout:\n```\nTest binary timed out after 60s\n```\n"
+                )
+            except Exception as e:
+                ctx.pre_flight_errors += (
+                    f"\n## Unit Test Execution Error:\n```\n{e}\n```\n"
+                )
+
 
     for lf in ctx.project_root.rglob("*.lua"):
         try:
@@ -241,8 +303,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         )
 
     active_ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    active_ledger_path.write_text(
-        "\n".join(active_ledger_content), encoding="utf-8"
+    atomic_write_text(
+        active_ledger_path, "\n".join(active_ledger_content)
     )
     ctx.active_code_index = (
         "\n".join(active_toc)
@@ -258,6 +320,35 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
     while ctx.review_cycle < REVIEW_MAX_ITERATIONS:
         ctx.review_cycle += 1
         print(f"\n  [Review-Fix] Cycle {ctx.review_cycle}/{REVIEW_MAX_ITERATIONS}")
+
+        # ── Circuit Breaker: Check retry counts ─────────────────────────
+        for tid in list(ctx.all_results_dict.keys()):
+            count = ctx.retry_counts.setdefault(tid, 0)
+            if count >= 3:
+                print(
+                    f"\n{'='*70}\n"
+                    f"  ⛔ [CIRCUIT BREAKER TRIPPED] Task {tid} has failed {count} times.\n"
+                    f"  Breaking compilation loop to prevent infinite retry.\n"
+                    f"{'='*70}"
+                )
+                ctx.review_verdict = "BLOCKED"
+                # Generate SOS failure report with deadlock context
+                deadlock_report = generate_failure_report(
+                    ctx.user_prompt,
+                    ctx.consensus_checks or {},
+                    ctx.all_vetos, ctx.all_objects,
+                    ctx.all_results_dict, ctx.task_map,
+                    ctx.director_output,
+                )
+                print(f"\n{'='*70}")
+                print(f"  📋 [Circuit Breaker] Failure report generated:")
+                print(f"  Deadlock Context: Compiler Loop Exhausted (task {tid} failed {count}x)")
+                print(f"{'='*70}")
+                print(deadlock_report)
+                break
+        if ctx.review_verdict == "BLOCKED":
+            break
+        
 
         cycle_label = f"Integration Review (cycle {ctx.review_cycle})"
 
@@ -312,26 +403,86 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 if issues_match else ctx.review_output[:1000]
             )
 
-            print(f"  [Review-Fix] Review failed — architect fixing...")
-            fix_input = (
-                f"## Original Feature Request\n{ctx.user_prompt}\n\n"
-                f"## Review Issues (Cycle {ctx.review_cycle})\n{issues_text}\n\n"
-                f"{ctx.conflicts_str}"
-                f"## Active Code Index\n{ctx.active_code_index}\n\n"
-                f"Fix ALL issues listed above. Produce corrected code for all domains. "
-                f"Address every issue the Reviewer raised. "
-                f"If you believe an issue is a false positive, explain why."
-            )
-            fix_output = call_ollama(
-                ARCHITECT_FIX_SYSTEM, fix_input,
-                f"Architect Fix (cycle {ctx.review_cycle})"
-            )
+            print(f"  [Review-Fix] Review failed — routing critiques to original domain agents...")
             ctx.output_parts.append(
-                f"### Architect Fix Cycle {ctx.review_cycle}\n{fix_output}\n"
+                f"### Domain Agent Fix Cycle {ctx.review_cycle}\n"
+            )
+
+            # ── Domain-Aware Fix Loop ─────────────────────────────
+            # Instead of using a generic ARCHITECT_FIX_SYSTEM, iterate over
+            # failing task IDs and route the Reviewer's critique back to the
+            # *original domain agent* so it retains its strict C++/Lua rules.
+            task_ids_in_review = set()
+            for tid, _ in ctx.all_results_dict.items():
+                if tid in ctx.review_output or tid.replace("_", " ") in ctx.review_output:
+                    task_ids_in_review.add(tid)
+
+            if not task_ids_in_review:
+                # Fallback: use all tasks
+                task_ids_in_review = set(ctx.all_results_dict.keys())
+
+            domain_fix_outputs = {}
+            for tid in sorted(task_ids_in_review):
+                task_obj = ctx.task_map.get(tid)
+                if task_obj is None:
+                    continue
+
+                original_agent_key = resolve_agent_name(task_obj.agent)
+                original_agent_system = get_agent_system(original_agent_key)
+
+                if not original_agent_system:
+                    original_agent_system = ARCHITECT_FIX_SYSTEM
+
+                domain_name = ALL_DOMAINS.get(original_agent_key, {}).get("name", original_agent_key)
+                print(f"    Routing critique for {tid} to {domain_name}")
+
+                agent_fix_input = (
+                    f"## Original Feature Request\n{ctx.user_prompt}\n\n"
+                    f"## Your Task Specification\n{task_obj.spec}\n\n"
+                    f"## Review Critique (Cycle {ctx.review_cycle})\n"
+                    f"The following issues were raised about your output:\n{issues_text}\n\n"
+                    f"{ctx.conflicts_str}"
+                    f"## Your Previous Output\n"
+                )
+                if tid in ctx.all_results_dict:
+                    agent_fix_input += (
+                        f"{ctx.all_results_dict[tid][:2000]}\n\n"
+                    )
+                agent_fix_input += (
+                    f"## Instructions\n"
+                    f"Fix ALL issues the Reviewer raised that apply to your domain ({domain_name}). "
+                    f"Produce corrected code for your task only. "
+                    f"Address every relevant issue. "
+                    f"If you believe an issue is a false positive, explain why.\n\n"
+                    f"IMPORTANT: You MUST retain your domain's system rules and constraints. "
+                    f"Do NOT violate C++17/Lua/Physics rules even if the Reviewer suggests otherwise."
+                )
+
+                fix_model = ALL_DOMAINS.get(original_agent_key, {}).get(
+                    "model", EXECUTION_MODEL
+                )
+                agent_fix_output = call_ollama(
+                    original_agent_system, agent_fix_input,
+                    f"{domain_name} (Fix cycle {ctx.review_cycle})",
+                    fix_model,
+                )
+
+                domain_fix_outputs[tid] = agent_fix_output
+                ctx.output_parts.append(
+                    f"### {domain_name} Fix ({tid})\n{agent_fix_output}\n"
+                )
+
+                # Update the result in-place
+                ctx.all_results_dict[tid] = agent_fix_output
+
+            # Build a combined fix output for backward compat
+            fix_output = "\n\n".join(
+                f"### {tid}\n{output}"
+                for tid, output in domain_fix_outputs.items()
             )
 
     # ── Insanity Detector (similarity-based) ──────────────
-            normalized = _normalize_fix_fingerprint(fix_input)
+            normalized = _normalize_fix_fingerprint(issues_text + ctx.conflicts_str)
             if check_insanity_similarity(normalized, ctx.seen_code_hashes_set, threshold=0.95):
                 print(
                     f"\n  [Insanity Detector] ⛔ Infinite fix loop detected! "
@@ -436,11 +587,15 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
         final_output=ctx.final_output,
     )
 
+    # ── Timeline Archiver: [FLUSH] Signal Detection (Task 11) ────────────
+    _handle_flush_signal(ctx)
+
     print(f"\n{'='*70}")
     print(f"  Pipeline Complete — {'APPROVED' if ctx.all_checks_pass else ('SUSPENDED' if ctx.review_verdict == 'BLOCKED' else 'FAILED')}")
     print(f"{'='*70}")
 
     return ctx
+
 
 
 def _handle_blocked(ctx: PipelineContext) -> None:
@@ -523,10 +678,43 @@ def _handle_approved(ctx: PipelineContext) -> None:
                 CHECKPOINT_DIR / f"{ctx.checkpoint_id}.archived.json"
             )
 
+    # ── User-Gated Ledger Save (Task 10) ──────────────────────────
+    print("\n" + "=" * 50)
+    print("  MEMORY ARCHIVE GATE")
+    print("=" * 50)
+    save_to_memory = input(
+        "  Save architecture to memory? (y/N): "
+    ).strip().lower()
+    if save_to_memory in ("y", "yes"):
+        semantic_tag = input(
+            "  Enter semantic tag for this entry "
+            "(e.g., 'Plinko jackpot feature'): "
+        ).strip()
+        if not semantic_tag:
+            semantic_tag = f"auto_{ctx.run_id[:8]}"
+        ledger_entry = (
+            f"### [{semantic_tag}]\n"
+            f"**Run ID:** {ctx.run_id}\n"
+            f"**Date:** {datetime.now().isoformat()}\n"
+            f"**User Prompt:** {ctx.user_prompt}\n"
+            f"**Director Decomposition:**\n{ctx.director_output}\n"
+            f"**Final Output:**\n{ctx.final_output[:2000]}\n"
+        )
+        for t in ctx.task_map.values():
+            if t.completed:
+                agent_name = ALL_DOMAINS.get(
+                    resolve_agent_name(t.agent), {}
+                ).get("name", t.agent)
+                _append_to_ledger(ledger_entry, t.agent, t.spec)
+        print(f"  [LedgerWrite] ✓ Saved to ledger with tag: [{semantic_tag}]")
+    else:
+        print("  [LedgerWrite] ⏭ Skipped (user declined)")
+
     ctx.final_output = "\n".join(ctx.output_parts)
 
 
 def _handle_failure(ctx: PipelineContext) -> None:
+
     print(f"\n{'='*70}")
     print(f"  Phase 8: Failure Report")
     print(f"{'='*70}")
@@ -618,8 +806,8 @@ def _run_tagsuggester_post(ctx: PipelineContext) -> PipelineContext:
                             )
                         else:
                             checklist_content += f"\n{tag_block_full}\n"
-                        checklist_path.write_text(
-                            checklist_content, encoding="utf-8"
+                        atomic_write_text(
+                            checklist_path, checklist_content
                         )
                 except Exception as e:
                     print(f"  [TagSuggester] Could not update checklist: {e}")
@@ -653,7 +841,7 @@ def _save_output(ctx: PipelineContext) -> None:
     ctx.final_output = "\n".join(ctx.output_parts)
     output_path = ctx.project_root / f"pipeline_output_{ctx.run_id}.md"
     try:
-        output_path.write_text(ctx.final_output, encoding="utf-8")
+        atomic_write_text(output_path, ctx.final_output)
         print(f"\n  Output saved to: {output_path}")
     except Exception as e:
         print(f"\n  Could not save output: {e}")
@@ -664,3 +852,82 @@ def _save_output(ctx: PipelineContext) -> None:
             print(f"  [Snapshot] Applied proposals")
         except Exception as e:
             print(f"  [Snapshot] Apply error: {e}")
+
+
+# ── Timeline Archiver: [FLUSH] Signal (Task 11) ─────────────────────────
+
+def _handle_flush_signal(ctx: PipelineContext) -> None:
+    """Detect [FLUSH] signal in user prompt. When triggered, summarize the
+    last 50 entries of session_timeline.md, inject them into
+    architecture_ledger.md, and wipe the timeline."""
+    flush_detected = False
+    if ctx.user_prompt and "[FLUSH]" in ctx.user_prompt.upper():
+        flush_detected = True
+    if not flush_detected:
+        # Also check if any final_output has the FLUSH signal
+        if hasattr(ctx, 'final_output') and ctx.final_output and "[FLUSH]" in ctx.final_output.upper():
+            flush_detected = True
+
+    if not flush_detected:
+        return
+
+    print(f"\n{'='*50}")
+    print(f"  📊 FLUSH SIGNAL DETECTED — Archiving Timeline")
+    print(f"{'='*50}")
+
+    timeline_path = ctx.session_timeline_path if hasattr(ctx, 'session_timeline_path') and ctx.session_timeline_path else SESSION_TIMELINE_PATH
+    if not timeline_path:
+        timeline_path = ctx.project_root / "docs" / "memory" / "session_timeline.md"
+
+    architecture_ledger_path = ctx.project_root / "docs" / "memory" / "architecture_ledger.md"
+
+    if not timeline_path.is_file():
+        print(f"  [FLUSH] ⚠ No session_timeline.md found at {timeline_path}")
+        return
+
+    try:
+        content = timeline_path.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"  [FLUSH] ⚠ Could not read timeline: {e}")
+        return
+
+    # Split into entries (each starts with ## Session Event)
+    entries = re.split(r'(?=^## Session Event)', content, flags=re.MULTILINE)
+    # Filter out empty/header-only entries
+    entries = [e.strip() for e in entries if e.strip() and e.strip() != "# Session Timeline"]
+
+    # Take last 50
+    last_50 = entries[-50:] if len(entries) > 50 else entries
+
+    # Build summary
+    summary_lines = [
+        f"### Timeline Archive — {datetime.now().isoformat()}",
+        f"**Trigger:** [FLUSH] signal",
+        f"**Entries archived:** {len(last_50)} of {len(entries)} total",
+        "",
+    ]
+    for i, entry in enumerate(last_50):
+        # Truncate each entry to first 400 chars
+        preview = entry[:400].replace("```", "'''")
+        summary_lines.append(f"**Entry {i+1}:**\n{preview}\n---\n")
+
+    summary_block = "\n".join(summary_lines)
+
+    # Append to architecture_ledger.md
+    architecture_ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(architecture_ledger_path, "a", encoding="utf-8") as f:
+            f.write("\n" + summary_block + "\n")
+        print(f"  [FLUSH] ✓ Archived {len(last_50)} entries to {architecture_ledger_path}")
+    except Exception as e:
+        print(f"  [FLUSH] ⚠ Could not write to architecture ledger: {e}")
+        return
+
+    # Wipe the timeline (replace with fresh header)
+    try:
+        atomic_write_text(timeline_path, "# Session Timeline\n\n")
+        print(f"  [FLUSH] ✓ Timeline wiped — fresh start")
+    except Exception as e:
+        print(f"  [FLUSH] ⚠ Could not wipe timeline: {e}")
+
+

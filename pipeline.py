@@ -126,8 +126,8 @@ def __getattr__(name):
 
 # ── PipelineContext Singleton ──────────────────────────────────────────────
 _CTX = PipelineContext(
-    project_root=Path(__file__).resolve().parent.parent / "midway",
-    memory_dir=Path(__file__).resolve().parent.parent / "midway" / "docs" / "memory",
+    project_root=Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway"))),
+    memory_dir=Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway"))) / "docs" / "memory",
     session_id="",
     tasks=[],
     global_signals=[],
@@ -149,7 +149,7 @@ MODEL = EXECUTION_MODEL
 DIRECTOR_MODEL = "llama3.1:8b-instruct-q4_K_M"
 
 # Point to the game engine project root (midway/), not midway-pipeline/ itself
-PROJECT_ROOT = Path(__file__).resolve().parent.parent / "midway"
+PROJECT_ROOT = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway")))
 MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
 MAX_SUBTASKS_PER_AGENT = 5
@@ -176,6 +176,7 @@ from _prompts import (
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 from _pipeline_helpers import (
+    atomic_write_text,
     is_likely_chat, classify_intent,
     recursive_librarian, get_project_state,
     get_available_domains_text, get_unavailable_domains_text,
@@ -235,8 +236,8 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     ctx.session_timeline_path = _get_session_timeline_path()
     os.makedirs(ctx.session_timeline_path.parent, exist_ok=True)
     if not ctx.session_timeline_path.is_file():
-        ctx.session_timeline_path.write_text(
-            "# Session Timeline\n\n", encoding="utf-8"
+        atomic_write_text(
+            ctx.session_timeline_path, "# Session Timeline\n\n"
         )
 
     # Checkpoint Resume
@@ -402,9 +403,9 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     # ── Phases 5–8: Code Merge, Review, Consensus, Final Approval ──
     ctx = run_code_merge(ctx)
 
-    # Write output file
+    # Write output file atomically
     output_path = PROJECT_ROOT / f"pipeline_output_{datetime.now():%Y%m%d_%H%M%S}.md"
-    output_path.write_text(ctx.final_output, encoding="utf-8")
+    atomic_write_text(output_path, ctx.final_output)
     print(f"\n{'='*60}")
     print(f"  Output saved to {output_path.name}")
     print(f"{'='*60}")

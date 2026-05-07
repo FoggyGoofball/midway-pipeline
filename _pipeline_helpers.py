@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 # ── Configuration re-exports (set by pipeline.py at import time) ───────────
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent / "midway"
+PROJECT_ROOT: Path = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway")))
 MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
 MAX_SUBTASKS_PER_AGENT = 5
@@ -233,8 +233,16 @@ def get_available_domains_text(all_domains: dict = None) -> str:
 # ── Task Execution ──────────────────────────────────────────────────────────
 
 def execute_task(task, user_prompt: str, director_output: str,
-                 all_results: dict, file_context: str, gdd_context: str) -> str:
-    """Execute a single task by calling the appropriate agent."""
+                 all_results: dict, file_context: str, gdd_context: str,
+                 sibling_context: str = "",
+                 ollama_params: Optional[dict] = None) -> str:
+    """Execute a single task by calling the appropriate agent.
+
+    Args:
+        sibling_context: Aggregated outputs of previously completed sibling
+            tasks (same parent or top-level), so agents see peer work.
+        ollama_params: Optional dict of Ollama options (e.g., {"temperature": 0.5}).
+    """
     # Local imports to avoid circular dependencies
     from domain_registry import resolve_agent_name, ALL_DOMAINS, get_agent_system
     from file_references import get_referenced_files_cache
@@ -274,6 +282,10 @@ def execute_task(task, user_prompt: str, director_output: str,
     if task.parent and task.parent in all_results:
         context_parts.append(f"## Parent Task Context\n{all_results[task.parent]}")
 
+    # Include sibling context — outputs of previously completed peer tasks
+    if sibling_context:
+        context_parts.append(sibling_context)
+
     # Include previous iteration output for self-correction
     # MAX_ITERATIONS is imported at module level above
     if task.iteration > 0 and task.output:
@@ -297,7 +309,8 @@ def execute_task(task, user_prompt: str, director_output: str,
 
     # Call LLM
     from ollama_client import call_ollama
-    output = call_ollama(system, user_message, label, preferred_model)
+    output = call_ollama(system, user_message, label, preferred_model, params=ollama_params)
+
 
     # Ledger Guard: auto-fix missing headers
     output = ensure_ledger_header(output, task.spec, task.agent)
@@ -346,8 +359,16 @@ def build_director_prompt(all_domains: dict = None) -> str:
         "### Task 1: [DOMAIN] - [Short Title]\n"
         "### Task 2: [DOMAIN] - [Short Title]\n"
         "...\n\n"
-        "CRITICAL: Do NOT write any code. Only list tasks."
+        "CRITICAL: Do NOT write any code. Only list tasks.
+
+MATH SENSOR: If the user's request involves dense 3D math, quaternions, or complex physics algorithms, you MUST append the exact string [MATH_HEAVY] to the very end of your output.
+
+MATH SENSOR: If the user's request involves dense 3D math, quaternions, or complex physics algorithms, you MUST append the exact string [MATH_HEAVY] to the very end of your output.\n\n"
+        "MATH SENSOR: If the user's request involves dense 3D math, quaternions, "
+        "or complex physics algorithms, you MUST append the exact string [MATH_HEAVY] "
+        "to the very end of your output."
     )
+
 
 
 # ── Project Structure Scanner ─────────────────────────────────────────────
@@ -413,22 +434,39 @@ AGENT_FILE_TOOLS_PROMPT = (
     "during your reasoning. To use them, embed one of these signals:\n"
     "- [FILE_READ:<relative_path>] — Read the contents of a file. "
     "Returns the full text of the file at the given path.\n"
+    "  Comma-separated paths are supported, e.g.:\n"
+    "  [FILE_READ:src/Engine.cpp, src/Engine.h] — reads multiple files.\n"
+    "  Optional line bounds can be specified, e.g.:\n"
+    "  [FILE_READ:src/Engine.cpp, lines 300-450] — reads only lines 300-450.\n"
+    "  Both can be combined: [FILE_READ:src/Engine.cpp, lines 300-450, src/Engine.h]\n"
     "- [FILE_LIST:<relative_dir>] — List the files in a directory. "
     "Returns a directory listing with file names.\n"
+    "  Comma-separated directories are supported, e.g.:\n"
+    "  [FILE_LIST:src/, attractions/] — lists multiple directories.\n"
     "The orchestrator will execute the tool and inject the result back into "
     "your context before your next iteration. Use these to explore the "
     "codebase progressively without exceeding your context window.\n"
 )
 
 
-def handle_file_read(signal_content: str, project_root: Path = None) -> str:
-    """Synchronous file read tool for agent progressive disclosure.
-    
-    Includes strict path traversal boundary check — any path that resolves
-    outside PROJECT_ROOT is rejected with an error.
+
+def _read_single_file(pr: Path, path: str) -> str:
+    """Read a single file with path traversal check and line-bounds support.
+
+    Supports an optional 'lines N-M' suffix to slice the file content,
+    bypassing the 6000-char truncation limit when specific lines are requested.
     """
-    pr = (project_root or PROJECT_ROOT).resolve()
-    path = signal_content.strip()
+    path = path.strip()
+    # Detect optional line bounds: e.g. "src/Engine.cpp, lines 300-450"
+    line_bounds_match = re.search(r',\s*lines\s+(\d+)\s*[-–]\s*(\d+)\s*$', path, re.IGNORECASE)
+    start_line = None
+    end_line = None
+    if line_bounds_match:
+        start_line = int(line_bounds_match.group(1))
+        end_line = int(line_bounds_match.group(2))
+        # Strip the line bounds suffix from the path
+        path = path[:line_bounds_match.start()].strip()
+
     full_path = (pr / path).resolve()
     # Path traversal boundary check
     try:
@@ -445,6 +483,21 @@ def handle_file_read(signal_content: str, project_root: Path = None) -> str:
                 ".json": "json", ".md": "markdown",
                 ".glsl": "glsl", ".vert": "glsl", ".frag": "glsl"}.get(ext, "")
         print(f"  [FileTool] FILE_READ: {path} ({len(content)} chars)")
+
+        # If line bounds are specified, slice the content
+        if start_line is not None and end_line is not None:
+            lines = content.splitlines()
+            # Convert to 0-indexed, clamp to file bounds
+            start_idx = max(0, start_line - 1)
+            end_idx = min(len(lines), end_line)
+            sliced = lines[start_idx:end_idx]
+            content = "\n".join(sliced)
+            info = f" (lines {start_line}-{end_line}, {len(content)} chars)"
+            print(f"  [FileTool]   Sliced{info}")
+            # No truncation for targeted line reads
+            return f"\n## File Tool Result: {path}{info}\n```{lang}\n{content}\n```\n"
+
+        # Fallback truncation for full-file reads
         if len(content) > 6000:
             content = content[:6000] + "\n\n[... truncated at 6000 chars ...]"
         return f"\n## File Tool Result: {path}\n```{lang}\n{content}\n```\n"
@@ -452,14 +505,58 @@ def handle_file_read(signal_content: str, project_root: Path = None) -> str:
         return f"\n## File Tool Result: ERROR\n**Path:** {path}\n**Error:** {e}\n"
 
 
-def handle_file_list(signal_content: str, project_root: Path = None) -> str:
-    """Synchronous directory listing tool for agent progressive disclosure.
+def handle_file_read(signal_content: str, project_root: Path = None) -> str:
+    """Synchronous file read tool for agent progressive disclosure.
+
+    Supports comma-separated paths and optional line bounds.
+    Example: [FILE_READ:src/Engine.cpp, lines 300-450, src/Engine.h]
     
     Includes strict path traversal boundary check — any path that resolves
     outside PROJECT_ROOT is rejected with an error.
     """
     pr = (project_root or PROJECT_ROOT).resolve()
-    path = signal_content.strip()
+    parts = [p.strip() for p in signal_content.split(",") if p.strip()]
+
+    # If only one path (no commas), use the original single-file path
+    # But we need to check if it has line bounds first
+    if len(parts) == 1:
+        return _read_single_file(pr, parts[0])
+
+    # Detect if there's a "lines N-M" specifier — it attaches to the preceding path
+    # Strategy: join all parts and check for line pattern, or parse intelligently
+    # Simple approach: group consecutive parts that form a path+lines spec
+    results = []
+    i = 0
+    while i < len(parts):
+        part = parts[i]
+        # Check if this part looks like a line bounds specifier that belongs to previous result
+        line_match = re.match(r'^lines\s+(\d+)\s*[-–]\s*(\d+)$', part, re.IGNORECASE)
+        if line_match and results:
+            # Append line bounds to the last path processed
+            last_result_line = results[-1]
+            # Re-read with line bounds attached
+            results[-1] = None  # placeholder
+
+            # Rebuild the path+lines string for the last item
+            # Find what the *actual* path was
+            path_with_lines = parts[i-1] + ", lines " + line_match.group(1) + "-" + line_match.group(2)
+            results[-1] = _read_single_file(pr, path_with_lines)
+            i += 1
+            continue
+        result = _read_single_file(pr, part)
+        if result:
+            results.append(result)
+        i += 1
+
+    if not results:
+        return "\n## File Tool Result: ERROR\n**No valid files or directories specified.**\n"
+    return "\n---\n".join(results)
+
+
+
+def _list_single_dir(pr: Path, path: str) -> str:
+    """List a single directory with path traversal check."""
+    path = path.strip()
     full_path = (pr / path).resolve()
     # Path traversal boundary check
     try:
@@ -484,6 +581,30 @@ def handle_file_list(signal_content: str, project_root: Path = None) -> str:
         return result
     except Exception as e:
         return f"\n## File Tool Result: ERROR\n**Path:** {path}\n**Error:** {e}\n"
+
+
+def handle_file_list(signal_content: str, project_root: Path = None) -> str:
+    """Synchronous directory listing tool for agent progressive disclosure.
+
+    Supports comma-separated directories.
+    Example: [FILE_LIST:src/, attractions/]
+    
+    Includes strict path traversal boundary check — any path that resolves
+    outside PROJECT_ROOT is rejected with an error.
+    """
+    pr = (project_root or PROJECT_ROOT).resolve()
+    parts = [p.strip() for p in signal_content.split(",") if p.strip()]
+    if len(parts) == 1:
+        return _list_single_dir(pr, parts[0])
+    results = []
+    for part in parts:
+        result = _list_single_dir(pr, part)
+        if result:
+            results.append(result)
+    if not results:
+        return "\n## File Tool Result: ERROR\n**No valid directories specified.**\n"
+    return "\n---\n".join(results)
+
 
 
 # ── Autonomous File Reading ────────────────────────────────────────────────
@@ -548,7 +669,9 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
             candidate_paths.add(rule_path)
     candidate_paths.add("docs/engine_lua_bridge_contract.md")
     candidate_paths.add("docs/rules_review.md")
+    candidate_paths.add("docs/rules_logging.md")
     if not candidate_paths:
+
         candidate_paths = {
             "src/Engine.h", "src/AttractionManager.h",
             "docs/rules_cpp.md", "docs/rules_lua.md",
@@ -607,7 +730,24 @@ def format_file_context(files: list, domain_key: str = None,
     return "\n".join(parts)
 
 
+# ── Atomic File Write Helper ──────────────────────────────────────────────
+
+def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
+    """Write content to file atomically to prevent corruption from Ctrl+C.
+    
+    Writes to a .tmp file first, flushes, then atomically renames to target.
+    This prevents half-written files if the process is interrupted.
+    """
+    tmp_path = path.with_suffix(path.suffix + '.tmp')
+    tmp_path.write_text(content, encoding=encoding)
+    # Ensure data is flushed to disk by touching the file
+    tmp_path.touch()
+    # Atomic rename (replace) on all platforms
+    tmp_path.replace(path)
+
+
 # ── Failure Report ─────────────────────────────────────────────────────────
+
 
 def generate_failure_report(user_prompt: str, consensus_checks: dict,
                             vetos: list, objects: list,
@@ -683,12 +823,127 @@ def generate_failure_report(user_prompt: str, consensus_checks: dict,
     parts.append("- docs/rules_lua.md — Lua scripting rules\n")
     parts.append("- docs/rules_phys.md — Physics integration rules\n")
     parts.append("- docs/rules_shader.md — Shader development rules\n")
+    parts.append("- docs/rules_logging.md — C++/Lua logging rules\n")
     parts.append("- docs/engine_lua_bridge_contract.md — C++/Lua API contract\n")
+
+    parts.append("\n### External Agent SOS Prompt\n")
+    parts.append("Copy-paste the block below into a fresh agent session to recover from this deadlock:\n\n")
+    parts.append("```\n")
+    parts.append("## SOS — Pipeline Deadlock Recovery\n")
+    parts.append(f"**Original User Prompt:** {user_prompt}\n")
+    parts.append(f"**Deadlock Context:** Consensus iterations exhausted ({MAX_CONSENSUS_ITERATIONS}); ")
+    parts.append("VETOs/OBJECTs blocked final approval.\n")
+
+    # ── SOS FORMATTING MANDATE ──────────────────────────────────
+    parts.append("\n## 🚨 FORMATTING REQUIREMENTS (MANDATORY)\n")
+    parts.append("As the external AI recovering this deadlock, you MUST adhere to the following:\n\n")
+    parts.append("### 1. Output Format — Memory Ledger Headers\n")
+    parts.append("You MUST format your response using our standard `### [Feature_Name]` headers.\n")
+    parts.append("Each new feature, system, or fix you propose MUST start with:\n")
+    parts.append("  `### [YourFeatureName]`\n")
+    parts.append("This ensures the output is parsable by our memory ledger pipeline.\n")
+    parts.append("Do NOT use free-form prose without section headers.\n\n")
+    parts.append("### 2. Engine Constraint Compliance\n")
+    parts.append("This is a custom C++17 engine. You MUST adhere to:\n")
+    parts.append("- **Rendering:** SDL2 + OpenGL 3.3+ only. No Unreal, Unity, Godot.\n")
+    parts.append("- **Physics:** Jolt Physics SDK for rigid bodies; Box2D for 2D colliders.\n")
+    parts.append("- **Scripting:** Lua 5.4 via sol2. Do NOT invent custom scripting languages.\n")
+    parts.append("- **Networking:** NONE. There is no multiplayer/networking code.\n")
+    parts.append("- **Shader:** GLSL 3.3 only. No HLSL, no Metal.\n")
+    parts.append("- **Audio:** SoLoud planned but NOT yet integrated.\n")
+    parts.append("Any code that references engines, APIs, or libraries outside these constraints will be automatically VETO'd.\n\n")
+    parts.append("### 3. Runtime Log Verbosity\n")
+    parts.append("You MUST include verbose runtime log lines for every significant operation.\n")
+    parts.append("Format:\n")
+    parts.append("  `[SystemName] Description of what happened`\n")
+    parts.append("For example:\n")
+    parts.append("  `[PhysicsManager] Teleported body 'plinko_ball_3' to Z=0 (Vicious Cycle seam)`\n")
+    parts.append("  `[AttractionManager] Plinko booth OnLoad: registered 12 collision sensors`\n")
+    parts.append("Logs MUST be specific enough to identify the exact subsystem and action.\n")
+    parts.append("Do NOT use generic logs like 'operation completed successfully'.\n\n")
+    parts.append("### 4. Task Recovery Approach\n")
+    parts.append("Resolve each VETO/OBJECT as follows:\n")
+    parts.append("  - Identify which domain agent's output caused the issue.\n")
+    parts.append("  - Apply the original domain agent's rules (C++17, Lua 5.4, etc.) when fixing.\n")
+    parts.append("  - Cross-reference with the feature intent from the user prompt.\n")
+    parts.append("  - Output your fix under a `### [FeatureName]` header with runtime logs.\n")
+
+    if vetos:
+        parts.append("**Blocking VETOs:**\n")
+        for v in vetos:
+            from_name = domains.get(resolve_agent_name_func(v["from"]) if resolve_agent_name_func else v["from"], {}).get("name", v["from"])
+            target_name = domains.get(resolve_agent_name_func(v["target"]) if resolve_agent_name_func else v["target"], {}).get("name", v["target"])
+            parts.append(f"- {from_name} VETO'd {target_name}: {v['reason']}\n")
+            if v["task_id"] in all_results:
+                parts.append(f"  Offending draft:\n{all_results[v['task_id']][:300]}\n")
+    if objects:
+        parts.append("**Unresolved OBJECTions:**\n")
+        for o in objects:
+            from_name = domains.get(resolve_agent_name_func(o["from"]) if resolve_agent_name_func else o["from"], {}).get("name", o["from"])
+            target_name = domains.get(resolve_agent_name_func(o["target"]) if resolve_agent_name_func else o["target"], {}).get("name", o["target"])
+            parts.append(f"- {from_name} OBJECTed to {target_name}: {o['concern']}\n")
+    parts.append("**Suggested next action:** Manually resolve each VETO/OBJECT, re-run with narrower scope.\n")
+    parts.append("```\n")
 
     return "\n".join(parts)
 
 
+# ── File Hash Locking (Task 2: Pre-Merge Hash Locking) ──────────────────────
+
+_FILE_HASHES: Dict[str, str] = {}
+
+
+def compute_file_hash(filepath: str, project_root: Path = None) -> str:
+    """Compute MD5 hash of a file, or return '' if file not found."""
+    pr = project_root or PROJECT_ROOT
+    full_path = (pr / filepath).resolve()
+    try:
+        full_path.relative_to(pr)
+    except ValueError:
+        return ""
+    if not full_path.is_file():
+        return ""
+    try:
+        content = full_path.read_bytes()
+        return hashlib.md5(content).hexdigest()
+    except Exception:
+        return ""
+
+
+def save_initial_file_hashes_from_context(ctx_placeholder: Any,
+                                          file_context: str,
+                                          project_root: Path = None) -> Dict[str, str]:
+    """Parse file paths from file_context, compute MD5 hashes, return dict."""
+    pr = project_root or PROJECT_ROOT
+    hashes: Dict[str, str] = {}
+    # Extract file paths from markdown headings like "### File: src/Engine.cpp"
+    for match in re.finditer(r'### File:\s*(\S+)', file_context):
+        rel_path = match.group(1)
+        h = compute_file_hash(rel_path, pr)
+        if h:
+            hashes[rel_path] = h
+    _FILE_HASHES.update(hashes)
+    return hashes
+
+
+def verify_file_hashes(project_root: Path = None) -> List[str]:
+    """Re-hash all tracked files. Returns list of changed file paths."""
+    pr = project_root or PROJECT_ROOT
+    changed: List[str] = []
+    for rel_path, old_hash in list(_FILE_HASHES.items()):
+        new_hash = compute_file_hash(rel_path, pr)
+        if new_hash and new_hash != old_hash:
+            changed.append(rel_path)
+    return changed
+
+
+def get_tracked_file_hashes() -> Dict[str, str]:
+    """Return the current snapshot of tracked file hashes."""
+    return dict(_FILE_HASHES)
+
+
 def get_normalized_syntax(code: str) -> str:
+
     """Strip comments and normalize whitespace for functional code comparison."""
     # Remove C++ and Lua comments
     code = re.sub(r'//.*?\n|/\*.*?\*/|--.*?\n', '', code, flags=re.DOTALL)
