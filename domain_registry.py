@@ -8,6 +8,14 @@ No async/await — purely synchronous dict lookups and string formatting.
 from __future__ import annotations
 from typing import Dict, Optional, Any
 
+# ── Directive B: Virtual Memory Protocol (imported from _prompts) ──────────
+# Injected into every agent's system prompt so they are aware of VRAM Stubs
+# and the <PAGE_IN>/<PAGE_OUT> paging syntax.
+try:
+    from _prompts import VIRTUAL_MEMORY_PROTOCOL
+except ImportError:
+    VIRTUAL_MEMORY_PROTOCOL = ""
+
 
 # ── Constants (shared from pipeline.py top section) ─────────────────────────
 # These constants are referenced by domain configurations below.
@@ -15,6 +23,7 @@ EXECUTION_MODEL = "qwen2.5-coder:7b"
 CODER_MODEL = "qwen2.5-coder:7b"
 REVIEWER_MODEL = "phi3:14b"
 REASONING_MODEL = REVIEWER_MODEL
+LIBRARIAN_MODEL = EXECUTION_MODEL
 
 # Standard ledger rule appended to every agent system prompt
 LEDGER_MEMORY_RULE = (
@@ -25,8 +34,9 @@ LEDGER_MEMORY_RULE = (
     "architectural decision, you MUST output a markdown block to be appended to your ledger.\n"
     "Every entry MUST be indexed with a specific Markdown header (e.g., ### [ModuleName]).\n"
     "The orchestrator automatically writes these blocks to your ledger file.\n"
-    "Use [FETCH:docs/memory/<domain>_ledger.md#<HeaderName>] to retrieve past decisions "
-    "that have fallen out of your active context window.\n"
+    "Use the MEMORY ORACLE signal [QUERY:DOC:<query>] to retrieve past decisions "
+    "that have fallen out of your active context window. "
+    "Do NOT use <invoke_kernel> tags for memory retrieval — those are only for VRAM paging.\n"
 )
 
 # ── Domain Availability ────────────────────────────────────────────────────
@@ -35,18 +45,24 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "tag": "[C++]",
         "ready": True,
         "model": EXECUTION_MODEL,
+        "allowed_extensions": [".cpp", ".h", ".hpp", ".c", ".hxx", ".cxx"],
         "ledger_rule": "MUST append signature to docs/internal_api_ledger.md",
         "description": "Engine architecture, physics integration, rendering, memory, Vicious Cycle seam, modifier system, object pools, booth lifecycle",
         "ledger": "docs/memory/cpp_ledger.md",
         "system_prompt": (
             "You are the C++17 systems engineer for 'Midway to Nowhere'. "
             "Write ONLY C++17. Use SDL2, OpenGL 3.3+, nlohmann/json. "
-            "Be aware of the 'Vicious Cycle' spatial seam (teleporting bodies to Z=0).\n\n"
-            "DIFF OUTPUT FORMAT: Never output the entire file. Only output the exact lines "
-            "to change using a Unified Diff or Search/Replace block format. Use SEARCH/REPLACE "
-            "blocks with `------- SEARCH` and `+++++++ REPLACE` markers showing exactly which "
-            "lines to remove and which to insert. This preserves whitespace, comments, and "
-            "existing code structure."
+            "Be aware of the 'Vicious Cycle' spatial seam (teleporting bodies to Z=0)."
+
+            "\n\nCRITICAL FORMATTING MANDATE:\n"
+            "1. You are strictly FORBIDDEN from using `diff --git` or GNU Unified Diffs.\n"
+            "2. You MUST use the exact SEARCH/REPLACE block format for ALL code modifications or creations:\n"
+            "<<<<<<< SEARCH\n"
+            "[exact original content to replace, or empty if this is a new file]\n"
+            "=======\n"
+            "[new content]\n"
+            ">>>>>>> REPLACE\n"
+            "3. Do NOT wrap the SEARCH/REPLACE block in ```diff markdown tags."
         ),
 
         "name": "C++ Core",
@@ -55,12 +71,23 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "tag": "[PHYS]",
         "ready": True,
         "model": EXECUTION_MODEL,
+        "allowed_extensions": [".cpp", ".h", ".hpp", ".c", ".hxx", ".cxx"],
         "description": "Jolt/Box2D physics, teleport stability, kinematic control, collision layers, sensors",
         "ledger": "docs/memory/phys_ledger.md",
         "system_prompt": (
             "You are the Lead Physics Architect for 'Midway to Nowhere'. "
             "Focus on Jolt/Box2D stability and state-corruption during 'Vicious Cycle' teleports. "
             "Analyze MSVC diagnostics and call stacks for memory leaks."
+
+            "\n\nCRITICAL FORMATTING MANDATE:\n"
+            "1. You are strictly FORBIDDEN from using `diff --git` or GNU Unified Diffs.\n"
+            "2. You MUST use the exact SEARCH/REPLACE block format for ALL code modifications or creations:\n"
+            "<<<<<<< SEARCH\n"
+            "[exact original content to replace, or empty if this is a new file]\n"
+            "=======\n"
+            "[new content]\n"
+            ">>>>>>> REPLACE\n"
+            "3. Do NOT wrap the SEARCH/REPLACE block in ```diff markdown tags."
         ),
         "name": "Physics Architect",
     },
@@ -81,17 +108,23 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "tag": "[Lua]",
         "ready": True,
         "model": EXECUTION_MODEL,
+        "allowed_extensions": [".lua"],
         "ledger_rule": "MUST append signature to docs/internal_api_ledger.md",
         "description": "Attraction scripts, UI, economy, modifier consumption, OnLoad/OnStep/OnUnload",
         "ledger": "docs/memory/lua_ledger.md",
         "system_prompt": (
             "You are the gameplay scripter for 'Midway to Nowhere'. "
-            "Focus on Lua 5.4 and sol2 bindings to the C++ host.\n\n"
-            "DIFF OUTPUT FORMAT: Never output the entire file. Only output the exact lines "
-            "to change using a Unified Diff or Search/Replace block format. Use SEARCH/REPLACE "
-            "blocks with `------- SEARCH` and `+++++++ REPLACE` markers showing exactly which "
-            "lines to remove and which to insert. This preserves whitespace, comments, and "
-            "existing code structure."
+            "Focus on Lua 5.4 and sol2 bindings to the C++ host."
+
+            "\n\nCRITICAL FORMATTING MANDATE:\n"
+            "1. You are strictly FORBIDDEN from using `diff --git` or GNU Unified Diffs.\n"
+            "2. You MUST use the exact SEARCH/REPLACE block format for ALL code modifications or creations:\n"
+            "<<<<<<< SEARCH\n"
+            "[exact original content to replace, or empty if this is a new file]\n"
+            "=======\n"
+            "[new content]\n"
+            ">>>>>>> REPLACE\n"
+            "3. Do NOT wrap the SEARCH/REPLACE block in ```diff markdown tags."
         ),
 
         "name": "Lua Scripter",
@@ -150,6 +183,32 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
             "- Only the extracted memory content with oracle note (Memory Oracle mode)"
         ),
         "name": "Code Documentarian",
+    },
+    "OBSERVABILITY": {
+        "tag": "[OBSERVABILITY]",
+        "ready": True,
+        "model": EXECUTION_MODEL,
+        "description": "Independent instrumentation pass. Injects mandatory logging without altering core logic.",
+        "ledger": "docs/memory/qa_ledger.md",
+        "system_prompt": (
+            "You are the Lead Observability Auditor for 'Midway to Nowhere'. "
+            "Your EXCLUSIVE directive is to instrument existing code blocks with mandatory "
+            "log statements to satisfy the OBSERVABILITY MANDATE.\n\n"
+            "CRITICAL LANGUAGE ENFORCEMENT:\n"
+            "1. If you are instrumenting a [.lua] file, you MUST write pure Lua 5.4 using ONLY `sol.log_message(...)`.\n"
+            "2. If you are instrumenting a [.cpp, .h, .hpp] file, you MUST write pure C++17 using ONLY the custom logger (e.g., `log_info(...)` or `log_error(...)`).\n"
+            "3. You are strictly FORBIDDEN from altering existing business logic, physics variables, or function return structures.\n\n"
+            "CRITICAL FORMATTING MANDATE:\n"
+            "1. You are strictly FORBIDDEN from using `diff --git` or GNU Unified Diffs.\n"
+            "2. You MUST use the exact SEARCH/REPLACE block format for ALL modifications:\n"
+            "<<<<<<< SEARCH\n"
+            "[exact original content without logs]\n"
+            "=======\n"
+            "[original content safely instrumented with logs]\n"
+            ">>>>>>> REPLACE\n"
+            "3. Do NOT wrap the SEARCH/REPLACE block in ```diff markdown tags."
+        ),
+        "name": "Observability Auditor",
     },
     "CONF": {
         "tag": "[CONF]",
@@ -212,30 +271,41 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "name": "Tribunal",
     },
     "LIBRARIAN": {
-
         "tag": "[LIBRARIAN]",
         "ready": True,
-        "model": REASONING_MODEL,
-        "description": "Read-only research agent — answers queries about past decisions, architecture, and memory ledgers without modifying any code",
-        "ledger": "docs/memory/librarian_ledger.md",
-        "system_prompt": (
-            "You are the LIBRARIAN for 'Midway to Nowhere'. "
-            "You are a read-only research agent. You answer questions strictly "
-            "by navigating the project's structured Markdown memory ledgers.\n\n"
-            "IMPORTANT CONSTRAINTS:\n"
-            "1. You MUST NOT attempt to modify any code or files.\n"
-            "2. You MUST answer ONLY based on information found in the provided memory documents.\n"
-            "3. If you cannot find the answer in the memory documents, say so honestly.\n"
-            "4. You have access to a search_memory tool that gives you the Memory Ledger "
-            "Table of Contents. Use it to identify which ledger sections are relevant, "
-            "then use [FETCH:docs/memory/<file>.md#<HeaderName>] to retrieve specific entries.\n\n"
-            "RESEARCH METHODOLOGY:\n"
-            "- First, scan the Memory Ledger Table of Contents to identify relevant sections.\n"
-            "- Then retrieve specific sections using [FETCH:path#anchor] tags.\n"
-            "- Synthesize the findings into a clear answer.\n"
-            "- Cite your sources (which ledger file and section header)."
-        ),
+        "model": LIBRARIAN_MODEL,
+        "description": "GDD knowledge retrieval, document querying, cross-reference, and ledger audit",
+        "ledger": "docs/memory/doc_ledger.md",
+        "ledger_rule": "MUST cite source file and line range for every decision",
         "name": "Librarian",
+        "system_prompt": (
+            "You are the GDD Librarian for 'Midway to Nowhere'. "
+            "Your role is to search, summarize, and retrieve information from the "
+            "Game Design Document (GDD) and other documentation. "
+            "Cross-reference multiple sources when answering. "
+            "Always cite which GDD section you are quoting.\n\n"
+            "## Past Session Search\n"
+            "If the current question references recent pipeline activity, you can "
+            "use the Session Timeline (docs/memory/session_timeline.md) to search "
+            "for previous decisions. When you need to search:\n"
+            "1. [SEARCH_MEMORY:<query>] — Search session_timeline.md and all ledgers "
+            "for relevant historical entries.\n"
+            "2. [LEARN:<query>] — Consult architecture_ledger.md for long-term "
+            "memory of past runs.\n\n"
+            "## READ-ONLY POLICY\n"
+            "You MUST NOT modify any files. You are a read-only retrieval agent.\n\n"
+            "## [AUDIT] MODE — Active Rule Auditor\n"
+            "When prompted with [AUDIT] in the message, switch to Audit Mode:\n"
+            "1. Harvest all markdown headers from docs/memory/*.md ledgers.\n"
+            "2. Cross-reference headers across ledgers to find conflicting rules.\n"
+            "3. Flag any headers that appear in multiple domain ledgers with "
+            "contradictory or overlapping scope.\n"
+            "4. Output a markdown conflict report with:\n"
+            "   - Conflicting header names\n"
+            "   - Which ledgers they appear in\n"
+            "   - A suggested resolution path\n"
+            "5. Append [AUDIT_COMPLETE] at the end of your audit output."
+        ),
     },
 }
 
@@ -351,6 +421,11 @@ AGENT_ALIAS_MAP: Dict[str, str] = {
     "intent": "INTENT_CLASSIFIER",
     "router": "INTENT_CLASSIFIER",
     "intent router": "INTENT_CLASSIFIER",
+    # Observability domain
+    "observability": "OBSERVABILITY",
+    "observability auditor": "OBSERVABILITY",
+    "logging": "OBSERVABILITY",
+    "logger": "OBSERVABILITY",
 }
 
 # Build PERSONA_MAP from ready domains only
@@ -417,7 +492,38 @@ def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
     # MESH_AGENT_SYSTEM_EXTENSION for non-DOC/CONF agents
     mesh_ext = "\n\n" + MESH_AGENT_SYSTEM_EXTENSION if agent_key not in ("DOC", "CONF") else ""
 
-    return base + ledger_note + mesh_ext + LEDGER_MEMORY_RULE
+    # ── Directive A: Domain sandboxing constraint ────────────────────────────
+    # If this domain has allowed_extensions defined, append a
+    # file-restriction constraint to the system prompt.
+    allowed_exts = domain.get("allowed_extensions")
+    sandbox_constraint = ""
+    if allowed_exts:
+        ext_str = str(list(allowed_exts))
+        if ".lua" in allowed_exts and len(allowed_exts) == 1:
+            sandbox_constraint = (
+                "\n\n---\n"
+                "CRITICAL FILE RESTRICTION:\n"
+                "You are physically restricted to modifying ONLY [.lua] files. "
+                "Any SEARCH/REPLACE blocks targeting .cpp, .h, .hpp, .py, .md, .json, or any "
+                "other extension will trigger a fatal system error and your output will be discarded."
+            )
+        else:
+            sandbox_constraint = (
+                "\n\n---\n"
+                "CRITICAL FILE RESTRICTION:\n"
+                "You are physically restricted to modifying "
+                f"{ext_str} files. "
+                "Any SEARCH/REPLACE blocks targeting files with extensions outside this set "
+                "(e.g., .lua, .py, .md, .json) will trigger a fatal system error "
+                "and your output will be discarded."
+            )
+
+    # ── Directive B: Virtual Memory Protocol injection ────────────────────
+    # Appends the VIRTUAL_MEMORY_PROTOCOL (from _prompts.py) to every agent's
+    # system prompt so they are explicitly aware of VRAM Stubs, <PAGE_IN>,
+    # and <PAGE_OUT> commands. This is a system-level protocol, not a file
+    # modification rule, so it does NOT conflict with domain sandboxing.
+    return base + ledger_note + mesh_ext + sandbox_constraint + LEDGER_MEMORY_RULE + VIRTUAL_MEMORY_PROTOCOL
 
 
 

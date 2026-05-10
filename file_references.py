@@ -3,6 +3,12 @@ File reference cache — parse explicit file references from prompts,
 fetch referenced file content, and maintain an LRU cache.
 
 No async/await — purely synchronous file I/O.
+
+Directive A: VRAM Stub Support
+When a referenced file exceeds VRAM_STUB_CHAR_THRESHOLD characters, it is
+NOT loaded raw into the context window. Instead, a compressed <VRAM_STUB>
+pointer is injected. The agent can later PAGE_IN the file if it actually
+needs the full content.
 """
 
 from __future__ import annotations
@@ -12,8 +18,36 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
+# ── Directive A: VRAM Stub Threshold ──────────────────────────────────────
+# Files exceeding this char count will be replaced with <VRAM_STUB> pointers.
+VRAM_STUB_CHAR_THRESHOLD: int = 2000
+
+
 # Global cache for fetched file reference blocks
 _REFERENCED_FILES_CACHE: str = ""
+
+
+def generate_vram_stub(filepath: str, content: str = "", summary: str = "") -> str:
+    """Generate a <VRAM_STUB> pointer for a large reference file.
+
+    Instead of injecting the full content into the LLM's context window,
+    this produces a compressed pointer that agents can later PAGE_IN if
+    they actually need the content.
+
+    Args:
+        filepath: Path or identifier for the referenced document.
+        content: Optional full text (used to auto-generate summary if not provided).
+        summary: Optional manual summary override.
+
+    Returns:
+        A stub string like: <VRAM_STUB id="filepath.md" summary="..." />
+    """
+    if not summary and content:
+        first_line = content.split("\n", 1)[0].strip()
+        summary = first_line[:100] if first_line else "(empty file)"
+    if not summary:
+        summary = f"Reference file: {filepath}"
+    return f'<VRAM_STUB id="{filepath}" summary="{summary}" />'
 
 
 def parse_file_references(prompt: str) -> List[Dict[str, str]]:
@@ -100,6 +134,7 @@ def fetch_referenced_files(refs: List[Dict[str, str]]) -> str:
         start = max(1, start)
         end = min(len(lines), end)
         selected = lines[start - 1:end]
+        selected_text = "\n".join(selected)
         ext = Path(filepath).suffix.lower()
         lang_map = {
             ".cpp": "cpp", ".h": "cpp", ".hpp": "cpp",
@@ -108,8 +143,20 @@ def fetch_referenced_files(refs: List[Dict[str, str]]) -> str:
             ".glsl": "glsl", ".vert": "glsl", ".frag": "glsl",
         }
         lang = lang_map.get(ext, "")
-        parts.append(f"### File: `{filepath}` (lines {start}-{end})\n")
-        parts.append("```" + lang)
-        parts.append("\n".join(selected))
-        parts.append("```\n")
+
+        # ── Directive A: VRAM Stub injection ──────────────────────────
+        # If the selected content exceeds the threshold, inject a
+        # <VRAM_STUB> pointer instead of the full text.
+        # The agent can later <invoke_kernel><action>PAGE_IN</action>
+        # <target>filepath</target></invoke_kernel> if it needs the content.
+        if len(selected_text) > VRAM_STUB_CHAR_THRESHOLD:
+            stub = generate_vram_stub(filepath, content=selected_text)
+            print(f"  [VRAM Stub] File '{filepath}' ({len(selected_text)} chars) → stub injected")
+            parts.append(f"### File: `{filepath}` (lines {start}-{end})\n")
+            parts.append(f"{stub}\n")
+        else:
+            parts.append(f"### File: `{filepath}` (lines {start}-{end})\n")
+            parts.append("```" + lang)
+            parts.append(selected_text)
+            parts.append("```\n")
     return "\n".join(parts)

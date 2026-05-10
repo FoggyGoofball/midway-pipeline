@@ -105,7 +105,8 @@ class Task:
     """
     def __init__(self, agent: str, spec: str, parent: str = None,
                  task_id: str = None, is_query: bool = False,
-                 iteration: int = 0, context: str = ""):
+                 iteration: int = 0, context: str = "",
+                 depends_on: Optional[List[str]] = None):
         self.agent = agent
         self.spec = spec
         self.parent = parent
@@ -118,6 +119,9 @@ class Task:
         self.double_check = None
         self.completed = False
         self.pinned_blocks: set = set()  # Block IDs pinned to prevent page-out
+        self.depends_on: List[str] = depends_on or []
+        # ── Directive B: Pro-Mode Inheritance — tracks paged-in content cache ──
+        self.paged_files_cache: Dict[str, str] = {}
 
     def __repr__(self):
         return f"Task({self.agent}, parent={self.parent}, query={self.is_query}, iter={self.iteration})"
@@ -197,7 +201,19 @@ class PipelineContext(BaseModel):
 
     gdd_context: str = ""
     project_state: str = ""
+    interface_manifest: str = ""
     structure: str = ""
+    
+    # ── Cartridge Ecosystem Topologies ────────────────────────────────────────
+    domain_registry: dict = {}
+    alias_map: dict = {}
+    domain_metadata_registry: dict = {}
+
+    def mount_cartridge(self, cartridge_class: Any) -> None:
+        """Dynamically mounts an agent ecosystem cartridge into the orchestrator."""
+        self.domain_registry = cartridge_class.get_domain_registry()
+        self.alias_map = cartridge_class.get_alias_map()
+        self.domain_metadata_registry = cartridge_class.get_environment_metadata()
     active_code_index: str = ""
     conflicts_str: str = ""
     run_id: str = ""
@@ -242,6 +258,7 @@ class PipelineContext(BaseModel):
         self.active_code_index = ""
         self.conflicts_str = ""
         self.run_id = ""
+        self.interface_manifest = ""
         self.output_parts = []
         self.processed_ids = set()
         self.query_results = {}

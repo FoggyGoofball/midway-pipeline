@@ -68,28 +68,15 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
             pass
     _pipeline.register_progress_listener(_phase_listener)
 
-    # ── Patch call_ollama to stream into the queue ──────────────────
-    # We create a closure over call_ollama_streamed that pushes each
-    # token to the event queue and collects them into the full string.
-    _original_call_ollama = _pipeline.call_ollama
-
-    def _streaming_call_ollama(system: str, user: str, label: str,
-                                model: str = None) -> str:
-        """Streaming version that pushes tokens to event_queue."""
-        full = []
-        for token in _pipeline.call_ollama_streamed(system, user, label, model):
-            full.append(token)
-            try:
-                event_queue.put(("token", token))
-            except Exception:
-                pass
-        result = "".join(full)
-        # Ensure clean newline after streaming output
-        sys.stdout.write("\n")
-        sys.stdout.flush()
-        return result
-
-    _pipeline.call_ollama = _streaming_call_ollama
+    # ── Hook into ollama_client._stream_callback ────────────────────
+    # Instead of monkey-patching pipeline.call_ollama (which is a dead
+    # patch because pipeline.py uses `from ollama_client import call_ollama`
+    # which creates a local copy), we set the module-level callback in
+    # ollama_client.py. This fires for EVERY token emitted by
+    # call_ollama_streamed, regardless of who called it.
+    import ollama_client as _ollama_client
+    _original_callback = getattr(_ollama_client, '_stream_callback', None)
+    _ollama_client._stream_callback = _build_token_callback(event_queue)
 
     try:
         result = _pipeline.run_pipeline(prompt, checkpoint_id, session_id)
@@ -99,10 +86,22 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
         import traceback
         event_queue.put(("error", traceback.format_exc()))
     finally:
-        # Restore original call_ollama
-        _pipeline.call_ollama = _original_call_ollama
+        # Restore original callback
+        if hasattr(_ollama_client, '_stream_callback'):
+            _ollama_client._stream_callback = _original_callback
         # Signal termination
         event_queue.put(("close", None))
+
+
+def _build_token_callback(event_queue: queue.Queue):
+    """Build a token callback closure that pushes tokens to the event queue.
+
+    Separated into its own function to avoid recreating the closure
+    on every pipeline run.
+    """
+    def _token_callback(token: str):
+        event_queue.put(("token", token))
+    return _token_callback
 
 
 # ── Public Generator API ────────────────────────────────────────────────────

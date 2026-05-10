@@ -27,13 +27,15 @@ SIGNAL_PATTERNS: Dict[str, str] = {
     "APPROVE": r"\[\s*\*?\*?\s*APPROVE\s*\*?\*?\s*\]",
     "RESULT": r"\[\s*\*?\*?\s*RESULT\s*\*?\*?\s*:\s*(.*?)\s*\]",
     "REVISE": r"\[\s*\*?\*?\s*REVISE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
-    "FETCH": r"\[\s*\*?\*?\s*FETCH\s*\*?\*?\s*:\s*([^\]]+)\s*#\s*([^\]]+)\s*\]",
-    "READ_OFFLOADED": r"\[\s*\*?\*?\s*READ_OFFLOADED\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
     "FLUSH": r"\[\s*\*?\*?\s*FLUSH\s*\*?\*?\s*\]",
     "APPEAL": r"\[\s*\*?\*?\s*APPEAL\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
     "MERGE": r"\[\s*\*?\*?\s*MERGE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
     "REJECT": r"\[\s*\*?\*?\s*REJECT\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
-    "MATH_EVAL": r"\[\s*\*?\*?\s*MATH_EVAL\s*\*?\*?\s*:\s*(.*?)\]",
+    "REQUEST_API": r"\[REQUEST_API:\s*(.*?)\s*\|\s*(https?://.*?)\s*\]",
+    # Legacy handlers PURGED — superseded by PagingKernel <invoke_kernel> XML
+    # "FETCH": r"\[\s*\*?\*?\s*FETCH\s*\*?\*?\s*:\s*([^\]]+)\s*#\s*([^\]]+)\s*\]",
+    # "READ_OFFLOADED": r"\[\s*\*?\*?\s*READ_OFFLOADED\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
+    # "MATH_EVAL": r"\[\s*\*?\*?\s*MATH_EVAL\s*\*?\*?\s*:\s*(.*?)\]",
 }
 
 
@@ -112,22 +114,23 @@ def extract_double_check(text: str) -> Optional[Dict[str, str]]:
 def get_verdict(review_text: str) -> str:
     """Extract the verdict from a review output.
 
-    Returns 'PASS', 'FAIL', or 'UNKNOWN'.
-    FAIL is checked first (higher priority) to avoid false PASS on negative commentary.
-    All regexes are lenient to tolerate formatting drift (**bold**, extra spaces, etc.).
-
-    Args:
-        review_text: Review agent's output text.
-
-    Returns:
-        'PASS', 'FAIL', or 'UNKNOWN'.
+    Enforces strict word boundaries and checks for bracketed tags to avoid false positives.
     """
-    # Check FAIL first — tolerate markdown asterisks, spaces, underscores
-    if re.search(r"\s*\*?\*?\s*FAIL\s*\*?\*?\s*", review_text, re.IGNORECASE):
+    # Prefer explicit bracketed verdicts first
+    fail_match = re.search(r"\[\s*VERDICT\s*:\s*FAIL\s*\]", review_text, re.IGNORECASE)
+    pass_match = re.search(r"\[\s*VERDICT\s*:\s*PASS\s*\]", review_text, re.IGNORECASE)
+    
+    if fail_match:
         return "FAIL"
-    # Then check PASS — lenient to formatting drift
-    if re.search(r"\s*\*?\*?\s*PASS\s*\*?\*?\s*", review_text, re.IGNORECASE):
+    if pass_match:
         return "PASS"
+        
+    # Fallback to strict word boundaries if brackets are omitted
+    if re.search(r"\bFAIL(?:ED|URE)?\b", review_text, re.IGNORECASE):
+        return "FAIL"
+    if re.search(r"\bPASS(?:ED)?\b", review_text, re.IGNORECASE):
+        return "PASS"
+        
     return "UNKNOWN"
         
 

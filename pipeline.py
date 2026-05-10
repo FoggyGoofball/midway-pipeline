@@ -48,7 +48,7 @@ import offload_store as offload_store_module
 import checkpoint as checkpoint_module
 import file_references as file_references_module
 import ledger as ledger_module
-import gdd_extractor
+import context_extractor
 import tagsuggester
 import fetch_handler
 
@@ -102,8 +102,8 @@ _collect_ledger_entries = ledger_module._collect_ledger_entries
 _generate_module_name = ledger_module._generate_module_name
 check_insanity_similarity = ledger_module.check_insanity_similarity
 
-# GDD Extractor
-from gdd_extractor import extract_gdd_sections, GDD_SECTION_MAP, KEYWORD_TO_SECTION, search_memory
+# Context Extractor
+from context_extractor import extract_project_context
 
 # Tag Suggester
 from tagsuggester import TagSuggester
@@ -138,6 +138,7 @@ OLLAMA_HOST = "http://192.168.0.16:11434"
 
 CODER_MODEL = "qwen2.5-coder:7b"
 REVIEWER_MODEL = "phi3:14b"
+ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
 LIBRARIAN_MODEL = "llama3.1:8b-instruct-q4_K_M"
 SYNTAX_GATE_MODEL = "qwen2.5-coder:1.5b"
@@ -171,7 +172,7 @@ from _prompts import (
     INTENT_CLASSIFIER_SYSTEM, CHAT_SYSTEM,
     CHAT_PATTERNS, SEARCH_MEMORY_SYSTEM,
     REASONING_GATE_DOMAINS, REASONING_GATE_SYSTEM,
-    ANALYST_SYSTEM,
+    ANALYST_SYSTEM, AUDITOR_SYSTEM,
 )
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -186,6 +187,7 @@ from _pipeline_helpers import (
     generate_failure_report,
     _get_doc_cached,
     execute_task,
+    search_memory,
 )
 
 # ── Mesh API ───────────────────────────────────────────────────────────────
@@ -220,6 +222,14 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
 
     ctx = _CTX
     ctx.reset_state()
+    
+    # Mount the preserved Midway Agent Ecosystem Cartridge
+    try:
+        from cartridges.midway_ecosystem import MidwayAgentCartridge
+        ctx.mount_cartridge(MidwayAgentCartridge)
+    except ImportError:
+        print("  [Kernel] WARNING: Could not load MidwayAgentCartridge. Ecosystem may be unmapped.")
+    
     ctx.user_prompt = user_prompt
     ctx.project_root = PROJECT_ROOT
     ctx.session_mgr = session_mgr
@@ -303,7 +313,11 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         print(f"  [Resurrection] Skipping Phases 0.5-3. Resuming from Phases 4-8.")
 
     # Intent Classification
-    if session_mgr and user_prompt.startswith("[CHAT_FORCED]"):
+    if getattr(ctx, 'resumed_blocked', False):
+        print("  [Routing] Resurrection active. Bypassing intent classification for manual fix.")
+        ctx.is_chat = False
+        intent = "EXECUTE"
+    elif session_mgr and user_prompt.startswith("[CHAT_FORCED]"):
         ctx.is_chat = True
         user_prompt = user_prompt.replace("[CHAT_FORCED] ", "", 1)
     elif is_likely_chat(user_prompt):
@@ -313,8 +327,9 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         ctx.is_chat = (intent == "CHAT")
 
     if ctx.is_chat:
+        _ts = datetime.now().strftime('%H:%M:%S')
         print(f"\n{'='*70}")
-        print(f"  Chat Mode Detected — Direct Response (bypassing pipeline)")
+        print(f"  [{_ts}] Chat Mode Detected — Direct Response (bypassing pipeline)")
         print(f"{'='*70}")
 
         # ── Inject project context so CHAT mode has awareness ────
@@ -348,8 +363,9 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
 
     # ── INFORMATIONAL Route: Analyst (Librarian-First, Read-Only) ──────────
     if intent == "INFORMATIONAL":
+        _ts = datetime.now().strftime('%H:%M:%S')
         print(f"\n{'='*70}")
-        print(f"  Informational Query Detected — Analyst Route")
+        print(f"  [{_ts}] Informational Query Detected — Analyst Route")
         print(f"{'='*70}")
 
         # Phase A: Gather ALL source documents first (Librarian-first)
@@ -388,7 +404,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         analyst_input = "\n\n---\n\n".join(analyst_context_parts)
         print(f"  [Analyst] Gathered {len(analyst_context_parts)} context sources. Querying Analyst...")
 
-        response = call_ollama(ANALYST_SYSTEM, analyst_input, "Analyst", CHAT_MODEL)
+        response = call_ollama(ANALYST_SYSTEM, analyst_input, "Analyst", ANALYST_MODEL)
         ctx.final_output = response
         return response
 
@@ -419,7 +435,7 @@ def run_pipeline(user_prompt: str, checkpoint_id: str = None,
                  session_id: str = None) -> str:
     """Main entry point. Returns the full pipeline output as a string."""
     session_mgr = None
-    if HAS_SNAPSHOT:
+    try:
         from pipeline_session import get_or_create_session
         session_mgr = get_or_create_session(
             user_prompt=user_prompt,
@@ -430,6 +446,8 @@ def run_pipeline(user_prompt: str, checkpoint_id: str = None,
             print(f"  [Session] Resumed session: {session_id}")
         else:
             print(f"  [Session] Started new session: {session_mgr.session_id}")
+    except ImportError:
+        pass
 
     _emit_progress("init", "started", f"Processing: {user_prompt[:60]}...")
     result = run_mesh_pipeline(user_prompt, checkpoint_id, session_mgr)

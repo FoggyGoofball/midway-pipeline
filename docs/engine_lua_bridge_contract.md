@@ -284,3 +284,8 @@ Format: `<timestamp_us>  <fn_name>  <args>  -> <result>`
 `MoveKinematic` is excluded from logging to avoid flooding.
 
 
+
+### CRITICAL ARCHITECTURAL BOUNDARY: ENGINE VS. ATTRACTIONS
+1. **The C++ Domain:** STRICTLY reserved for generic engine systems (Graphics, Audio, Core Jolt Physics world, Sol2 bindings). The C++ engine MUST NOT contain game-specific logic or hardcoded classes for individual games (e.g., no `SkeeballCollider` or `GreedGutter` in C++).
+2. **The Lua Domain:** ALL individual midway attractions and game-specific mechanics MUST be written in pure Lua. If an attraction requires physics, the Lua script MUST utilize the generic Sol2 bridges exposed by the C++ engine (e.g., `MidwayPhysics.SpawnStaticBox`).
+3. **Task Decomposition:** The Director MUST NOT create [C++] tasks for specific games.

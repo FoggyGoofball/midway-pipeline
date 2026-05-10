@@ -7,10 +7,23 @@ No async/await — purely synchronous estimation and string manipulation.
 
 from __future__ import annotations
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 MAX_TOKENS: int = 12000
+
+# ── Directive C: Kernel Interrupt Thresholds ────────────────────────────────
+# These constants define the VRAM critical thresholds per model.
+# When the estimated token payload exceeds the threshold, a Kernel warning
+# is prepended to the prompt telling the agent to <PAGE_OUT>.
+VRAM_CRITICAL_RATIO: float = 0.80
+MODEL_TOKEN_LIMITS: dict = {
+    "qwen2.5-coder:7b": (6400, 8000),    # 80% of 8K
+    "phi3:14b": (12800, 16384),          # 78% of 16K
+    "llama3.1:8b": (6400, 8192),         # 78% of 8K
+    "qwen2.5-coder:1.5b": (6400, 8192),  # 78% of 8K
+    "llama3.2:1b": (6400, 8192),         # 78% of 8K
+}
 
 
 class TokenBudget:
@@ -58,6 +71,73 @@ class TokenBudget:
         """
         estimated = self.estimate_tokens(text)
         return (self.used + estimated) < self.hard_limit
+
+    @staticmethod
+    def get_model_threshold(model_name: str) -> Tuple[int, int]:
+        """Get the VRAM critical threshold and context window for a model.
+
+        Args:
+            model_name: Name of the LLM model (e.g., 'qwen2.5-coder:7b').
+
+        Returns:
+            Tuple of (critical_token_threshold, context_window).
+        """
+        for key, (threshold, window) in MODEL_TOKEN_LIMITS.items():
+            if key in model_name.lower():
+                return threshold, window
+        return 6000, 8192  # conservative default
+
+    @staticmethod
+    def check_vram_critical(system_prompt: str, user_prompt: str,
+                            model_name: str) -> Optional[str]:
+        """Directive C: Check if token payload exceeds 80% of context window.
+
+        If the combined system + user prompt exceeds the model's VRAM critical
+        threshold, prepend a Kernel warning instructing the agent to PAGE_OUT.
+
+        Args:
+            system_prompt: The system prompt text.
+            user_prompt: The user prompt text.
+            model_name: Model name to determine context window.
+
+        Returns:
+            A VRAM critical warning string if over threshold, None if safe.
+        """
+        combined = system_prompt + user_prompt
+        estimated = TokenBudget.estimate_tokens_to(combined)
+        threshold, context_window = TokenBudget.get_model_threshold(model_name)
+
+        if estimated > threshold:
+            pct = (estimated / context_window) * 100 if context_window > 0 else 0
+            print(f"  [Kernel Interrupt] ⚠ VRAM critical: ~{estimated} tokens ({pct:.0f}% of {context_window})")
+            return (
+                "\n\n[SYSTEM KERNEL: VRAM critical (~{:.0f}% of {} context). "
+                "You MUST emit <invoke_kernel><action>PAGE_OUT</action>"
+                "<target>old context or topic</target></invoke_kernel> "
+                "to free virtual memory before generating code. "
+                "If you see <VRAM_STUB> pointers in your context, you may "
+                "<invoke_kernel><action>PAGE_IN</action>"
+                "<target>filename.md</target></invoke_kernel> "
+                "the specific files you need, but only after freeing space first.]"
+            ).format(pct, context_window)
+
+        return None
+
+    @staticmethod
+    def estimate_tokens_to(text: str) -> int:
+        """Estimate token count for text. Uses density-aware heuristic."""
+        return TokenBudget.estimate_tokens_static(text)
+
+    @staticmethod
+    def estimate_tokens_static(text: str) -> int:
+        """Density-aware token estimation (static version)."""
+        sample = text[:2000]
+        if sample:
+            alpha_count = sum(1 for c in sample if c.isalnum())
+            density = alpha_count / len(sample)
+            if density > 0.60:
+                return int(len(text) * 2 // 3)
+        return len(text) // 3
 
     @staticmethod
     def _block_aware_collapse(text: str, available_chars: int) -> str:
