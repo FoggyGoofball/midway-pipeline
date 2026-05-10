@@ -196,17 +196,20 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                 print(f"    - {d}")
             
             prompt_lower_check = ctx.user_prompt.lower()
-            already_mitigated = any(
-                kw in prompt_lower_check 
-                for kw in ["ignore", "wireframe", "stub", "placeholder", "skip"]
-            )
+            # Rigorous block and semantic mitigation check
+            exclusion_patterns = [
+                "ignore", "wireframe", "stub", "placeholder", "skip",
+                "not in place", "exclude", "without", "omit", "nor are", "disabled",
+                "[block]"
+            ]
+            already_mitigated = any(kw in prompt_lower_check for kw in exclusion_patterns)
             
             if already_mitigated:
-                print("  [Domain Consultant] Automated intent detected ('ignore'/'wireframe' specified). Bypassing interactive prompt.")
-                if "wireframe" in prompt_lower_check and "[ARCHITECT'S NOTE" not in ctx.user_prompt:
+                print("  [Domain Consultant] Automated exclusion/stub intent detected via [block] or keywords. Bypassing interactive prompt.")
+                if "[ARCHITECT'S NOTE" not in ctx.user_prompt:
                     ctx.user_prompt += (
-                        "\n\n[ARCHITECT'S NOTE: The requested feature references an unavailable domain. "
-                        "Implement a functional wireframe, debug placeholder, or stub implementation as requested.]"
+                        "\n\n[ARCHITECT'S NOTE: The requested feature explicitly excludes or stubs unavailable domains. "
+                        "Implement a functional wireframe, debug placeholder, or safe stub implementation as requested.]"
                     )
             else:
                 wireframe_choice = input(
@@ -314,8 +317,13 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
             
             definitions_str = "\n".join(f"  - '{k}': {v}" for k, v in glossary_map.items())
             
+            # Explicitly parse positive request vs [block] negative constraints
+            req_parts = re.split(r'\[block\]', ctx.user_prompt, maxsplit=1, flags=re.IGNORECASE)
+            pos_request = req_parts[0].strip()
+            neg_block_str = f"\n\n## EXPLICITLY BLOCKED / EXCLUDED CONCEPTS\nThe following elements MUST NOT be implemented or planned for:\n{req_parts[1].strip()}" if len(req_parts) > 1 else ""
+            
             base_scope_prompt = (
-                f"Analyze this feature request: '{ctx.user_prompt}'.\n\n"
+                f"Analyze this feature request: '{pos_request}'.{neg_block_str}\n\n"
                 f"## Local Repository Terminology Registry\n"
                 f"Interpret all acronyms strictly according to the following active mappings:\n"
                 f"{definitions_str}\n\n"
@@ -324,7 +332,8 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                 f"CRITICAL DIRECTIVES:\n"
                 f"1. Resolve acronyms exclusively via the Terminology Registry. Do NOT hallucinate external engine terminology (e.g., Godot).\n"
                 f"2. You MUST evaluate workload step by step strictly based on active topology without conversational filler.\n"
-                f"3. Conclude with exactly ONE absolute verdict tag on its own line: [VERDICT: NARROW] or [VERDICT: TOO_BROAD]. Intermediate tags are invalid."
+                f"3. Strictly honor all explicitly blocked or excluded concepts.\n"
+                f"4. Conclude with exactly ONE absolute verdict tag on its own line: [VERDICT: NARROW] or [VERDICT: TOO_BROAD]. Intermediate tags are invalid."
             )
             
             scope_system_persona = (
@@ -379,9 +388,13 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                     f"If the user asks for features spanning unavailable subsystems, "
                     f"substitute with functional stubs, debug logging, or standard placeholders."
                 )
+                req_parts_bp = re.split(r'\[block\]', ctx.user_prompt, maxsplit=1, flags=re.IGNORECASE)
+                pos_request_bp = req_parts_bp[0].strip()
+                neg_block_bp = f"\n\n## EXPLICITLY BLOCKED / EXCLUDED CONCEPTS (CRITICAL)\nYou MUST NOT generate tasks to set up or implement the following:\n{req_parts_bp[1].strip()}" if len(req_parts_bp) > 1 else ""
+
                 blueprint_prompt = (
-                    f"Create a step-by-step markdown blueprint to accomplish: "
-                    f"{ctx.user_prompt}.\n\n"
+                    f"Create a step-by-step markdown blueprint to accomplish the positive intent: "
+                    f"{pos_request_bp}.\n{neg_block_bp}\n\n"
                     f"{hard_constraints}\n\n"
                     f"## GDD Context\n"
                     f"{ctx.gdd_context[:3000] if ctx.gdd_context else '(none)'}\n\n"
@@ -391,34 +404,55 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                     f"{unavailable_text}\n\n"
                     f"## Project Structure\n"
                     f"{ctx.structure[:2000] if ctx.structure else '(none)'}\n\n"
-                    f"Base your step-by-step tasks strictly on the provided GDD "
-                    f"and current project state. "
-                    f"Do NOT include tasks for unavailable domains. "
-                    f"Base tasks strictly on the provided GDD and current project state.\n\n"
+                    f"CRITICAL DIRECTIVES:\n"
+                    f"1. You MUST strictly honor any explicit exclusions, omissions, or negative constraints specified in the blocked concepts.\n"
+                    f"2. Do NOT generate tasks to set up attractions, modules, or features that the user explicitly stated are excluded or blocked, even if they appear in the GDD Context.\n"
+                    f"3. Base your step-by-step tasks strictly on the targeted positive feature requested.\n\n"
                     f"Format as a checklist:\n"
                     f"'- [ ] Task 1: ...'"
                 )
-                blueprint = call_ollama(
-                    "You are a Lead Producer.", blueprint_prompt,
-                    "Blueprint Generation", REASONING_MODEL
-                )
-                blueprint_path.parent.mkdir(exist_ok=True)
-                atomic_write_text(blueprint_path, blueprint)
-                print(f"  [Lead Producer] Saved to docs/project_blueprint.md.")
+                
+                # Dynamic retry loop for blueprint generation triage
+                while True:
+                    blueprint = call_ollama(
+                        "You are a Lead Producer.", blueprint_prompt,
+                        "Blueprint Generation", REASONING_MODEL
+                    )
+                    blueprint_path.parent.mkdir(exist_ok=True)
+                    atomic_write_text(blueprint_path, blueprint)
+                    print(f"  [Lead Producer] Saved to docs/project_blueprint.md.")
 
-                # ── Blueprint Gate: user must approve before execution ──
-                print(f"\n{'='*50}")
-                print(f"  BLUEPRINT GATE — Review the architectural blueprint")
-                print(f"  Location: {blueprint_path}")
-                print(f"{'='*50}")
-                trigger_chime()
-                approval = input("  Do you approve this architectural blueprint? [Y/n]: ").strip().lower()
-                if approval in ("n", "no"):
-                    print(f"\n  [Blueprint Gate] Paused. Edit the blueprint at:")
-                    print(f"    {blueprint_path}")
+                    # ── Blueprint Gate: user must approve before execution ──
+                    print(f"\n{'='*50}")
+                    print(f"  BLUEPRINT GATE — Review the architectural blueprint")
+                    print(f"  Location: {blueprint_path}")
+                    print(f"{'='*50}")
                     trigger_chime()
-                    input("  Press Enter to continue after editing... ")
-                    print(f"  [Blueprint Gate] Continuing with updated blueprint.\n")
+                    approval = input("  Do you approve this architectural blueprint? [Y/n]: ").strip().lower()
+                    
+                    if approval in ("n", "no"):
+                        trigger_chime()
+                        print(f"\n  [Blueprint Gate triage] Blueprint rejected.")
+                        issues = input("  What are the specific problems or incorrect inclusions? ").strip()
+                        suggestions = input("  Do you have specific suggestions to address this? (Type your suggestions, 'retry' to regenerate from scratch, or 'abandon' to abort): ").strip()
+                        
+                        sug_lower = suggestions.lower()
+                        if sug_lower == "abandon":
+                            print("  [Blueprint Gate] Abandoning blueprint generation. Aborting pipeline.")
+                            ctx.final_output = "Pipeline abandoned by user at Blueprint Gate."
+                            return ctx
+                        elif sug_lower == "retry":
+                            print("  [Blueprint Gate] Retrying blueprint generation from scratch based on original constraints...")
+                            continue
+                        else:
+                            # Feed the issues and suggestions back into the prompt to generate an aligned blueprint
+                            print("  [Blueprint Gate] Regenerating blueprint incorporating your feedback...")
+                            triage_feedback = f"\n\n## USER TRIAGE FEEDBACK ON PREVIOUS DRAFT:\nIssues Identified: {issues}\nUser Suggestions/Mandates: {suggestions}\nCRITICAL: Adjust the checklist strictly to reflect this feedback."
+                            blueprint_prompt += triage_feedback
+                            continue
+                    else:
+                        print(f"  [Blueprint Gate] Blueprint approved. Proceeding to execution.\n")
+                        break
 
                 # ── Continuous Execution: extract first task & fall through ──
                 content = blueprint_path.read_text(encoding="utf-8")
@@ -429,10 +463,12 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                 if first_match:
                     raw_line = first_match.group(0)
                     task_text = first_match.group(1).strip()
-                    ctx.user_prompt = task_text
+                    # Wrap the active subtask while preserving the full positive intent and explicit [block] exclusions
+                    original_request = ctx.user_prompt
+                    ctx.user_prompt = f"Active Subtask: {task_text}\n\nOverarching Context & Constraints from original request:\n{original_request}"
                     new_content = content.replace(raw_line, raw_line.replace("[ ]", "[x]", 1), 1)
                     atomic_write_text(blueprint_path, new_content)
-                    print(f"  [Lead Producer] Auto-feeding first task: {task_text}")
+                    print(f"  [Lead Producer] Auto-feeding first task while preserving block constraints: {task_text}")
                     print(f"  [Lead Producer] Continuing to Phase 3...")
                 else:
                     print("  [Lead Producer] Blueprint generated but no tasks found — continuing with original prompt.")
@@ -536,20 +572,26 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
             "create", "implement", "initialize", "setup", "define", "expose", 
             "load", "integrate", "add", "build", "make", "update", "refactor",
             "write", "test", "for", "the", "a", "an", "to", "into", "from", 
-            "via", "using", "with", "and", "or"
+            "via", "using", "with", "and", "or", "basic", "game", "system",
+            "module", "feature", "request", "want", "you", "information", "active",
+            "subtask", "overarching", "context", "constraints", "original"
         }
-        clean_str = re.sub(r'[^a-zA-Z0-9\s]', ' ', title_str)
+        # Safely extract only the positive intent before deriving identifier names
+        pos_title = re.split(r'\[block\]|Overarching Context', title_str, maxsplit=1, flags=re.IGNORECASE)[0]
+        clean_str = re.sub(r'[^a-zA-Z0-9\s]', ' ', pos_title)
         tokens = clean_str.split()
-        substantive = [t for t in tokens if t.lower() not in procedural_filler]
+        substantive = [t for t in tokens if t.lower() not in procedural_filler and len(t) > 1]
         
         if not substantive:
             return getattr(ctx, 'default_module_name', "UniversalOrchestrationModule")
             
-        pascal_name = "".join(t.capitalize() for t in substantive)
+        # Rigorously cap to a maximum of 3 concise substantive nouns to ensure clean, valid identifiers
+        capped_substantive = substantive[:3]
+        pascal_name = "".join(t.capitalize() for t in capped_substantive)
         if pascal_name[0].isdigit():
             pascal_name = "Module" + pascal_name
             
-        return pascal_name
+        return pascal_name[:40]  # Hard safety ceiling
 
     _target_title = ""
     if hasattr(ctx, 'user_prompt') and ctx.user_prompt:
@@ -831,9 +873,10 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             # ── Day 6: Math Analyst Deterministic Sandbox ────────────
             math_analyst_output = ""
             _spec_lower = task.spec.lower()
-            _is_binding_task = any(kw in _spec_lower for kw in ["bind", "expose", "wrapper", "bridge", "interface"])
+            _is_binding_task = any(kw in _spec_lower for kw in ["bind", "expose", "wrapper", "bridge", "interface", "setup", "initialize", "create", "fixture", "game", "ramp", "attraction"])
+            _is_pure_math = any(kw in _spec_lower for kw in ["solve matrix", "floating-point problem", "pure physics math", "compute impulse vector"])
             
-            if not _is_binding_task and any(kw in _spec_lower for kw in ["matrix", "impulse", "floating-point", "jolt", "box2d", "physics math", "vector"]):
+            if not _is_binding_task and _is_pure_math:
                 print(f"\n  [Math Analyst] Intercepting mathematical task {task.task_id} for deterministic execution...")
                 math_script_dir = ctx.project_root / "global_cache" / "math_analyst"
                 math_script_dir.mkdir(parents=True, exist_ok=True)

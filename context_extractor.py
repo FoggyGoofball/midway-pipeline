@@ -65,9 +65,23 @@ def extract_project_context(prompt_text: str) -> str:
     if not header_matches:
         return content[:4000] # Fallback if no headers exist
 
-    # Tokenize user prompt for keyword intersection
-    stop_words = {"the", "a", "an", "is", "in", "to", "and", "for", "of", "with", "on", "it", "as", "build", "create", "make"}
-    prompt_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', prompt_text.lower())) - stop_words
+    # Explicitly parse the standard format separating positive intent from [block] negative constraints
+    parts = re.split(r'\[block\]', prompt_text, maxsplit=1, flags=re.IGNORECASE)
+    positive_intent = parts[0].strip()
+    blocked_intent = parts[1].strip() if len(parts) > 1 else ""
+
+    # Tokenize user prompt for keyword intersection using an expanded set of stopwords
+    stop_words = {
+        "the", "a", "an", "is", "in", "to", "and", "for", "of", "with", "on", "it", "as", 
+        "build", "create", "make", "refer", "project", "list", "game", "basic", "sure", 
+        "adhere", "information", "using", "want", "you", "system", "module", "from", "via"
+    }
+    
+    prompt_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', positive_intent.lower())) - stop_words
+    
+    blocked_words = set()
+    if blocked_intent:
+        blocked_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', blocked_intent.lower())) - stop_words
 
     selected_sections = []
 
@@ -75,7 +89,12 @@ def extract_project_context(prompt_text: str) -> str:
         header_text = match.group(2)
         header_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', header_text.lower())) - stop_words
 
-        # Score: Semantic intersection of tokens
+        # Deterministic Guardrail: If the header strongly intersects with explicitly blocked concepts, actively omit it
+        if blocked_words and blocked_words.intersection(header_words):
+            print(f"  [Context Extractor] Actively omitting blocked section: '{header_text}'")
+            continue
+
+        # Score: Semantic intersection of positive tokens only
         if prompt_words.intersection(header_words):
             start_pos = match.start()
             end_pos = header_matches[i+1].start() if i + 1 < len(header_matches) else len(content)

@@ -1340,5 +1340,60 @@
     "status": "completed",
     "message_count": 0,
     "session_id": "pipeline_20260510_104601_ab2bcadf"
+  },
+  "pipeline_20260510_140203_bab94b58": {
+    "start_time": "2026-05-10T14:02:03.720166",
+    "user_prompt": "refer to the midway to nowhere GDD and the projct's todo list and completion list.  using this information, i want you to build me a basic skeeball game.  the emotional baggage system is not in place ",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_140203_bab94b58"
+  },
+  "pipeline_20260510_140931_6dda9cde": {
+    "start_time": "2026-05-10T14:09:31.069781",
+    "user_prompt": "refer to the midway to nowhere GDD and the projct's todo list and completion list.  using this information, i want you to build me a basic skeeball game.  the emotional baggage system is not in place ",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_140931_6dda9cde"
+  },
+  "pipeline_20260510_141454_229ef103": {
+    "start_time": "2026-05-10T14:14:54.641167",
+    "user_prompt": "refer to the midway to nowhere GDD and the projct's todo list and completion list.  using this information, i want you to build me a basic skeeball game.  the emotional baggage system is not in place ",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_141454_229ef103"
+  },
+  "pipeline_20260510_151642_de2ebcd6": {
+    "start_time": "2026-05-10T15:16:42.164674",
+    "user_prompt": "refer to the midway to nowhere GDD and the projct's todo list and completion list.\u00a0 using this information, i want you to build me a basic skeeball game. make sure to adhere to the engine bridge contr",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_151642_de2ebcd6"
+  },
+  "pipeline_20260510_153247_68d59dbb": {
+    "start_time": "2026-05-10T15:32:47.813043",
+    "user_prompt": "Refer to the midway to nowhere GDD and the project's todo list. Using this information, build a basic skeeball game. The C++ engine must remain 100% agnostic to this attraction; you must only use or e",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_153247_68d59dbb"
   }
 }
