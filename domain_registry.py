@@ -437,10 +437,10 @@ for key, domain in ALL_DOMAINS.items():
 
 
 def resolve_agent_name(name: str) -> str:
-    """Resolve a signal target name to a domain key.
+    """Resolve a signal target name to a domain key dynamically.
 
-    Checks the AGENT_ALIAS_MAP first, then tries direct match, name match,
-    partial match, and finally substring matching against alias map keys.
+    Prioritizes the hot-swappable runtime cartridge's alias map and domain definitions,
+    falling back securely to the static legacy maps for baseline characterization tests.
 
     Args:
         name: Raw agent name string from LLM output.
@@ -449,22 +449,37 @@ def resolve_agent_name(name: str) -> str:
         Canonical domain key, or the original name if unresolvable.
     """
     name_lower = name.lower().strip()
-    # Alias Map Lookup (first priority)
+    
+    # ── Dynamic Cartridge Resolution (Highest Priority) ──
+    try:
+        from pipeline import _CTX
+        if _CTX and getattr(_CTX, 'mounted_cartridge', None):
+            cartridge = _CTX.mounted_cartridge
+            # 1. Inspect dynamic alias mapping
+            for alias, canonical_key in cartridge.alias_map.items():
+                if alias.lower() == name_lower:
+                    return canonical_key
+            # 2. Inspect dynamic domain names directly
+            for key, config in cartridge.domains.items():
+                if key.lower() == name_lower or config.name.lower() == name_lower:
+                    return key
+                if name_lower in config.name.lower() or name_lower in key.lower():
+                    return key
+    except ImportError:
+        pass
+
+    # ── Legacy Static Fallback ──
     if name_lower in AGENT_ALIAS_MAP:
         return AGENT_ALIAS_MAP[name_lower]
-    # Direct match
     for key in ALL_DOMAINS:
         if key.lower() == name_lower:
             return key
-    # Name match
     for key, domain in ALL_DOMAINS.items():
         if domain["name"].lower() == name_lower:
             return key
-    # Partial match
     for key, domain in ALL_DOMAINS.items():
         if name_lower in domain["name"].lower() or name_lower in key.lower():
             return key
-    # Final fallback: AGENT_ALIAS_MAP reverse scan
     for alias, canonical_key in AGENT_ALIAS_MAP.items():
         if alias in name_lower or name_lower in alias:
             return canonical_key
@@ -472,30 +487,46 @@ def resolve_agent_name(name: str) -> str:
 
 
 def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
-    """Get the system prompt for an agent, with mesh extension.
+    """Get the system prompt for an agent dynamically via cartridge proxy.
+
+    Pulls foundational directives, sandboxing sets, and persistent ledgers natively
+    from the hot-swappable runtime cartridge, preventing static project bleed.
 
     Args:
         agent_key: Canonical domain key (e.g., "C++", "Lua").
-        pro_mode: Reserved — no longer injects TDD instructions (handled upstream).
+        pro_mode: Reserved — no longer injects TDD instructions.
 
     Returns:
-        Full system prompt string with ledger and mesh extensions.
+        Full system prompt string complete with universal OS protocols.
     """
-    domain = ALL_DOMAINS.get(agent_key)
-    if not domain:
-        return ""
-    base = domain["system_prompt"]
-    ledger_path = domain.get("ledger", "")
-    ledger_note = ""
-    if ledger_path:
-        ledger_note = f"\n\nYour assigned memory ledger: {ledger_path}\n"
-    # MESH_AGENT_SYSTEM_EXTENSION for non-DOC/CONF agents
+    base_prompt = ""
+    ledger_path = ""
+    allowed_exts = set()
+    
+    # ── Dynamic Cartridge Interception ──
+    try:
+        from pipeline import _CTX
+        if _CTX and getattr(_CTX, 'mounted_cartridge', None):
+            cartridge_domain = _CTX.mounted_cartridge.domains.get(agent_key)
+            if cartridge_domain:
+                base_prompt = cartridge_domain.system_prompt
+                ledger_path = cartridge_domain.ledger
+                allowed_exts = cartridge_domain.allowed_extensions
+    except ImportError:
+        pass
+
+    # ── Legacy Static Fallback ──
+    if not base_prompt:
+        domain = ALL_DOMAINS.get(agent_key)
+        if not domain:
+            return ""
+        base_prompt = domain["system_prompt"]
+        ledger_path = domain.get("ledger", "")
+        allowed_exts = domain.get("allowed_extensions", set())
+
+    ledger_note = f"\n\nYour assigned memory ledger: {ledger_path}\n" if ledger_path else ""
     mesh_ext = "\n\n" + MESH_AGENT_SYSTEM_EXTENSION if agent_key not in ("DOC", "CONF") else ""
 
-    # ── Directive A: Domain sandboxing constraint ────────────────────────────
-    # If this domain has allowed_extensions defined, append a
-    # file-restriction constraint to the system prompt.
-    allowed_exts = domain.get("allowed_extensions")
     sandbox_constraint = ""
     if allowed_exts:
         ext_str = str(list(allowed_exts))
@@ -514,16 +545,10 @@ def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
                 "You are physically restricted to modifying "
                 f"{ext_str} files. "
                 "Any SEARCH/REPLACE blocks targeting files with extensions outside this set "
-                "(e.g., .lua, .py, .md, .json) will trigger a fatal system error "
-                "and your output will be discarded."
+                "will trigger a fatal system error and your output will be discarded."
             )
 
-    # ── Directive B: Virtual Memory Protocol injection ────────────────────
-    # Appends the VIRTUAL_MEMORY_PROTOCOL (from _prompts.py) to every agent's
-    # system prompt so they are explicitly aware of VRAM Stubs, <PAGE_IN>,
-    # and <PAGE_OUT> commands. This is a system-level protocol, not a file
-    # modification rule, so it does NOT conflict with domain sandboxing.
-    return base + ledger_note + mesh_ext + sandbox_constraint + LEDGER_MEMORY_RULE + VIRTUAL_MEMORY_PROTOCOL
+    return base_prompt + ledger_note + mesh_ext + sandbox_constraint + LEDGER_MEMORY_RULE + VIRTUAL_MEMORY_PROTOCOL
 
 
 

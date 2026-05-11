@@ -58,13 +58,54 @@ def finalize_mesh(ctx: PipelineContext) -> PipelineContext:
 
 
 def run_code_merge(ctx: PipelineContext) -> PipelineContext:
-    """Phases 5-8: Conflict resolution, integration review & fix loop,
-    observability pass, consensus gate, final approval / failure report / suspension,
+    """Phases 5-8: Conflict resolution, pre-flight negative intent validation,
+    integration review & fix loop, observability pass, consensus gate, final approval,
     and TagSuggester post-processing.
 
     Returns updated ctx with final_output set to the pipeline result string.
     """
     ctx = _run_conflict_resolution(ctx)
+    
+    # ── Pre-Flight Negative Intent Guardrail ──
+    # Actively scan accumulated code blocks to ensure explicitly blocked concepts
+    # did not bleed through prior to entering the review loop.
+    req_parts = re.split(r'\[block\]', ctx.user_prompt, maxsplit=1, flags=re.IGNORECASE)
+    if len(req_parts) > 1:
+        blocked_intent = req_parts[1].strip().lower()
+        
+        # Comprehensive exclusion set of procedural programming keywords, standard instructional verbs,
+        # and target attraction variables that must NEVER be treated as blacklisted entities.
+        safe_stopwords = {
+            "this", "that", "with", "from", "create", "make", "build", "define", "implement",
+            "setup", "system", "class", "classes", "struct", "structs", "file", "files",
+            "specific", "basic", "game", "module", "modules", "function", "functions",
+            "method", "methods", "variable", "variables", "object", "objects", "data",
+            "code", "script", "scripts", "engine", "attraction", "attractions", "skeeball",
+            "avoid", "avoiding", "using", "use", "expose", "exposing", "only", "inside",
+            "outside", "handled", "handling", "rules", "rule", "settings", "setting",
+            "layout", "layouts", "hole", "holes", "scoring", "score", "scores", "points",
+            "place", "nor", "are", "not", "does", "doesn", "dont", "exclude", "excluded"
+        }
+        
+        # Dynamically incorporate procedural stopwords from mounted cartridge if available
+        try:
+            if getattr(ctx, 'mounted_cartridge', None) and getattr(ctx.mounted_cartridge, 'procedural_stopwords', None):
+                safe_stopwords.update([w.lower() for w in ctx.mounted_cartridge.procedural_stopwords])
+        except Exception:
+            pass
+
+        blocked_words = {
+            w for w in re.findall(r'\b[a-z]{4,}\b', blocked_intent) 
+            if w not in safe_stopwords
+        }
+        
+        for tid, code_text in list(ctx.all_results_dict.items()):
+            code_lower = code_text.lower()
+            found_violations = [w for w in blocked_words if w in code_lower]
+            if found_violations:
+                print(f"  [Pre-Flight Guard] ⛔ Scope bleed detected in {tid}. Found explicitly blocked terms: {found_violations}. Stripping contaminated block.")
+                ctx.all_results_dict[tid] = f"// [PRE-FLIGHT GUARD] Blocked terms {found_violations} excised from generation."
+                
     ctx = _run_review_fix_loop(ctx)
     ctx = _run_observability_pass(ctx)
     ctx = _run_consensus_and_finalization(ctx)

@@ -46,6 +46,15 @@ def extract_project_context(prompt_text: str) -> str:
     
     gdd_path: Optional[Path] = None
 
+    # Dynamically check if mounted cartridge defines a project docs directory or custom GDD location
+    try:
+        from pipeline import _CTX
+        if _CTX and getattr(_CTX, 'project_root', None):
+            project_root = _CTX.project_root
+            docs_dir = project_root / "docs"
+    except ImportError:
+        pass
+
     if docs_dir.is_dir():
         # Scan dynamically for any Markdown file containing 'gdd' case-insensitively
         for p in docs_dir.glob("*.md"):
@@ -76,6 +85,14 @@ def extract_project_context(prompt_text: str) -> str:
         "build", "create", "make", "refer", "project", "list", "game", "basic", "sure", 
         "adhere", "information", "using", "want", "you", "system", "module", "from", "via"
     }
+    
+    # Dynamically incorporate procedural stopwords from mounted cartridge if available via global context
+    try:
+        from pipeline import _CTX
+        if _CTX and getattr(_CTX, 'mounted_cartridge', None) and _CTX.mounted_cartridge.procedural_stopwords:
+            stop_words.update([w.lower() for w in _CTX.mounted_cartridge.procedural_stopwords])
+    except ImportError:
+        pass
     
     prompt_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', positive_intent.lower())) - stop_words
     

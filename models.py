@@ -99,6 +99,38 @@ class TaskDescriptor(BaseModel):
     signals: List[MeshSignal] = []
 
 
+class EnvironmentMetadata(BaseModel):
+    language: str
+    test_framework: str
+    code_tag: str
+    extension: str
+    assert_examples: str
+    architectural_invariant: Optional[str] = None
+
+
+class DomainConfig(BaseModel):
+    name: str
+    model: str
+    tag: str
+    ready: bool = True
+    allowed_extensions: Set[str] = Field(default_factory=set)
+    ledger_rule: Optional[str] = None
+    description: str
+    ledger: str
+    system_prompt: str
+
+
+class EcosystemCartridgeContract(BaseModel):
+    """Authoritative schema for hot-swappable project cartridges."""
+    ecosystem_name: str
+    domains: Dict[str, DomainConfig]
+    alias_map: Dict[str, str]
+    environment_metadata: Dict[str, EnvironmentMetadata]
+    acronym_glossary: Dict[str, str] = Field(default_factory=dict)
+    procedural_stopwords: Set[str] = Field(default_factory=set)
+    unavailable_domains: List[str] = Field(default_factory=list)
+
+
 class Task:
     """A work item in the mesh queue. Non-Pydantic — plain data class
     for backward compatibility with characterization tests (test_import.py).
@@ -208,12 +240,20 @@ class PipelineContext(BaseModel):
     domain_registry: dict = {}
     alias_map: dict = {}
     domain_metadata_registry: dict = {}
+    mounted_cartridge: Optional[EcosystemCartridgeContract] = None
 
     def mount_cartridge(self, cartridge_class: Any) -> None:
         """Dynamically mounts an agent ecosystem cartridge into the orchestrator."""
         self.domain_registry = cartridge_class.get_domain_registry()
         self.alias_map = cartridge_class.get_alias_map()
         self.domain_metadata_registry = cartridge_class.get_environment_metadata()
+
+    def mount_ecosystem(self, cartridge: EcosystemCartridgeContract) -> None:
+        """Binds a validated ecosystem cartridge directly into the kernel runtime."""
+        self.mounted_cartridge = cartridge
+        self.domain_registry = {k: dict(v) for k, v in cartridge.domains.items()}
+        self.alias_map = dict(cartridge.alias_map)
+        self.domain_metadata_registry = {k: dict(v) for k, v in cartridge.environment_metadata.items()}
     active_code_index: str = ""
     conflicts_str: str = ""
     run_id: str = ""
@@ -303,7 +343,3 @@ class PipelineContext(BaseModel):
         self.mesh_results = {}
         self.mesh_work_queue = []
         self.mesh_registry_lock = False
-
-
-
-
