@@ -816,6 +816,33 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     if _ftid in _pre_fix_snapshot:
                         ctx.all_results_dict[_ftid] = _pre_fix_snapshot[_ftid]
 
+            # ── Post-Fix Static Guard Refresh ─────────────────────
+            # Re-run the lightweight static pattern guards against the newly
+            # written code so ctx.pre_flight_errors reflects the CURRENT state
+            # of all_results_dict.  Without this, stale errors from the original
+            # code keep the PASS-override gate firing indefinitely, causing the
+            # loop to exhaust all cycles and suspend at the tribunal gate even
+            # when every real violation has already been corrected by a fix agent.
+            try:
+                from _finalize_preflight import (
+                    _inject_empty_output_errors,
+                    _inject_static_pattern_errors,
+                    _flush_results_to_workspace,
+                )
+                _flush_results_to_workspace(ctx)
+                ctx.pre_flight_errors = ""
+                _inject_empty_output_errors(ctx)
+                _inject_static_pattern_errors(ctx)
+                if ctx.pre_flight_errors.strip():
+                    print(f"  [Post-Fix Preflight] ⚠ Static guard still open after fix cycle "
+                          f"{ctx.review_cycle} — routing next review cycle with updated errors.")
+                else:
+                    print(f"  [Post-Fix Preflight] ✅ All static guards clear after fix cycle "
+                          f"{ctx.review_cycle}.")
+            except Exception as _pf_refresh_err:
+                print(f"  [Post-Fix Preflight] ⚠ Guard refresh failed ({_pf_refresh_err}) — "
+                      f"retaining previous pre_flight_errors state.")
+
             # ── Insanity Detector (similarity-based) ──────────────
             normalized = _normalize_fix_fingerprint(issues_text + ctx.conflicts_str)
             if check_insanity_similarity(normalized, ctx.seen_code_hashes_set, threshold=0.95):
