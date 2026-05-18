@@ -87,7 +87,8 @@ REVIEW_PROMPT = (
     "3. Vicious Cycle consistency: C++ applies teleport, Lua does not decide\n"
     "4. Modifier system: All 9 values synced across all layers\n"
     "5. Error handling: No raw pointers, server-authoritative economy\n"
-    "6. Temporal Drift: Ensure the code does not implement deprecated patterns flagged by the Oracle as a **Reversion Risk** or **[HIGH-RISK REGRESSION]**.\n\n"
+    "6. Temporal Drift: Ensure the code does not implement deprecated patterns flagged by the Oracle as a **Reversion Risk** or **[HIGH-RISK REGRESSION]**.\n"
+    "7. OBSERVABILITY ALIGNMENT (CRITICAL): You MUST actively IGNORE missing log statements, telemetry, or printf calls. Do NOT issue a FAIL verdict if logging is absent, as an independent downstream auditor handles all instrumentation.\n\n"
     "OUTPUT FORMAT:\n"
     "## Integration Review\n"
     "### Issues\n"
@@ -328,4 +329,22 @@ SEARCH_MEMORY_SYSTEM = (
     "Your job is to compile and return a Table of Contents of all "
     "Markdown memory ledgers in docs/memory/. List each ledger file "
     "and its major sections with anchors."
+)
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  LEDGER_MEMORY_RULE — Delegation, API Binding & Paging Mandates
+# ═══════════════════════════════════════════════════════════════════════════
+
+LEDGER_MEMORY_RULE = (
+    "\n\nCRITICAL DELEGATION RULE (OBSERVABILITY):\n"
+    "You are strictly forbidden from writing your own log statements, telemetry, printf, or sol.log_message calls. "
+    "An independent downstream Observability Auditor handles all instrumentation. Focus strictly on core logic."
+    "\n\nCRITICAL API BINDING MANDATE (C++ / LUA):\n"
+    "When exposing C++ primitives to Lua, you are strictly FORBIDDEN from using raw Lua C API stack operations "
+    "(e.g., lua_pushcfunction, lua_touserdata, luaL_newmetatable). You MUST use modern sol2 bindings exclusively "
+    "(e.g., sol::state_view, new_usertype). Furthermore, physics primitives must NEVER include SDL rendering/drawing logic."
+    "\n\nCRITICAL PAGING MANDATE:\n"
+    "Persistent memory ledgers (e.g., docs/memory/cpp_ledger.md) exceed maximum virtual memory hard caps. "
+    "When issuing a <PAGE_IN> command targeting a ledger, you MUST include a specific <search>anchor_name</search> tag "
+    "to extract targeted blocks safely without triggering fatal truncation halts."
 )

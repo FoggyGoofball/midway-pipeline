@@ -1395,5 +1395,148 @@
     "status": "active",
     "message_count": 0,
     "session_id": "pipeline_20260510_153247_68d59dbb"
+  },
+  "pipeline_20260510_182101_dbd1886f": {
+    "start_time": "2026-05-10T18:21:01.396640",
+    "user_prompt": "Refer to the midway to nowhere GDD and the project's todo list. Using this information, build a basic skeeball game. The C++ engine must remain 100% agnostic to this attraction; you must only use or e",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_182101_dbd1886f"
+  },
+  "pipeline_20260510_195718_105e9aad": {
+    "start_time": "2026-05-10T19:57:18.818163",
+    "user_prompt": "Refer to the midway to nowhere GDD and the project's todo list. Using this information, build a basic skeeball game. The C++ engine must remain 100% agnostic to this attraction; you must only use or e",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_195718_105e9aad"
+  },
+  "pipeline_20260510_210923_beafbbac": {
+    "start_time": "2026-05-10T21:09:23.246340",
+    "user_prompt": "Refer to the midway to nowhere GDD and the project's todo list. Using this information, build a basic skeeball game. The C++ engine must remain 100% agnostic to this attraction; you must only use or e",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_210923_beafbbac"
+  },
+  "pipeline_20260510_213751_4db13dbb": {
+    "start_time": "2026-05-10T21:37:51.987221",
+    "user_prompt": "Refer to the midway to nowhere GDD and the project's todo list. Using this information, build a basic skeeball game. The C++ engine must remain 100% agnostic to this attraction; you must only use or e",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_213751_4db13dbb"
+  },
+  "pipeline_20260510_225133_6719a137": {
+    "start_time": "2026-05-10T22:51:33.715510",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_225133_6719a137"
+  },
+  "pipeline_20260510_225222_17f793ac": {
+    "start_time": "2026-05-10T22:52:22.926362",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_225222_17f793ac"
+  },
+  "pipeline_20260510_225319_29166829": {
+    "start_time": "2026-05-10T22:53:19.318650",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_225319_29166829"
+  },
+  "pipeline_20260510_225641_be87a8d3": {
+    "start_time": "2026-05-10T22:56:41.479468",
+    "user_prompt": "Add test feature.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_225641_be87a8d3"
+  },
+  "pipeline_20260510_230344_ab28b757": {
+    "start_time": "2026-05-10T23:03:44.429700",
+    "user_prompt": "Add a test feature.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_230344_ab28b757"
+  },
+  "pipeline_20260510_231709_7332ac6b": {
+    "start_time": "2026-05-10T23:17:09.679635",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_231709_7332ac6b"
+  },
+  "pipeline_20260510_231709_791dd0bf": {
+    "start_time": "2026-05-10T23:17:09.751399",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_231709_791dd0bf"
+  },
+  "pipeline_20260510_231711_dd8177f5": {
+    "start_time": "2026-05-10T23:17:11.085452",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_231711_dd8177f5"
+  },
+  "pipeline_20260510_232223_26295abc": {
+    "start_time": "2026-05-10T23:22:23.895464",
+    "user_prompt": "Refer to the midway to nowhere GDD and the project's todo list. Using this information, build a basic skeeball game. The C++ engine must remain 100% agnostic to this attraction; you must only use or e",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260510_232223_26295abc"
   }
 }

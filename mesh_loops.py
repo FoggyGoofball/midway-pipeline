@@ -728,7 +728,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             # use <PAGE_IN> if it needs the actual code. This eliminates
             # 3,000+ tokens of raw sibling code bloat per wave.
             sibling_parts = []
-            for completed_id in ctx.all_results_dict:
+            for completed_id, completed_code in ctx.all_results_dict.items():
                 if completed_id == task.task_id:
                     continue
                 completed_task = ctx.task_map.get(completed_id)
@@ -739,8 +739,15 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     agent_name = ALL_DOMAINS.get(
                         resolve_agent_name(completed_task.agent), {}
                     ).get("name", completed_task.agent)
+
+                    # Dynamically extract actual, real relative paths modified by the sibling task
+                    actual_paths = []
+                    for path_match in re.finditer(r"(?:###|//|--)\s*(?:File:\s*)?([a-zA-Z0-9_/-]+\.(?:lua|cpp|h|hpp))", completed_code):
+                        actual_paths.append(path_match.group(1).strip())
+
+                    paths_str = ", ".join(sorted(set(actual_paths))) if actual_paths else "no explicit files"
                     sibling_parts.append(
-                        f"- {agent_name} ({completed_id}): \"{completed_task.spec}\""
+                        f"- {agent_name} ({completed_id}): \"{completed_task.spec}\" (Modified: {paths_str})"
                     )
             sibling_context = ""
             if sibling_parts:
@@ -749,10 +756,10 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     "in this execution wave:\n"
                     + "\n".join(sibling_parts)
                     + "\n\n"
-                    "If you require the code from any of these tasks, use "
-                    "<invoke_kernel><action>PAGE_IN</action><target>relevant_file_path</target>"
-                    "</invoke_kernel> to load it on demand. "
-                    "Do NOT attempt to reconstruct sibling code from this manifest.]"
+                    "CRITICAL: If you require the code from any of these tasks, you MUST use "
+                    "the exact, real file paths listed above in your paging tags (e.g., "
+                    "<invoke_kernel><action>PAGE_IN</action><target>src/attractions/example.lua</target></invoke_kernel>). "
+                    "Do NOT use literal placeholder strings, and do NOT attempt to reconstruct sibling code from this manifest.]"
                 )
 
             # ── Directive B: Pro-Mode Inheritance — cached content ──
