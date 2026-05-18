@@ -22,14 +22,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from models import PipelineContext
-from _pipeline_helpers import atomic_write_text, generate_failure_report, trigger_chime
+from _pipeline_helpers import atomic_write_text, generate_failure_report
+
 from _domain_sandbox import reject_cross_domain_output
 from _finalize_conflicts import _run_conflict_resolution
 from _finalize_review import _run_review_fix_loop
+from _finalize_preflight import _run_preflight_checks
+from _helpers_io import enable_staging, disable_staging, commit_staging, is_staging_active
 from pipeline import (
     PROJECT_ROOT, ALL_DOMAINS,
-    DIRECTOR_MODEL, REASONING_MODEL, EXECUTION_MODEL,
-    REVIEW_MAX_ITERATIONS,
     DIRECTOR_SYSTEM, FINAL_APPROVAL_SYSTEM,
     SCOPE_FILE_LIMIT, SCOPE_LINE_LIMIT,
     CHECKPOINT_DIR, SESSION_TIMELINE_PATH,
@@ -65,46 +66,13 @@ def run_code_merge(ctx: PipelineContext) -> PipelineContext:
     Returns updated ctx with final_output set to the pipeline result string.
     """
     ctx = _run_conflict_resolution(ctx)
-    
-    # ── Pre-Flight Negative Intent Guardrail ──
-    # Actively scan accumulated code blocks to ensure explicitly blocked concepts
-    # did not bleed through prior to entering the review loop.
-    req_parts = re.split(r'\[block\]', ctx.user_prompt, maxsplit=1, flags=re.IGNORECASE)
-    if len(req_parts) > 1:
-        blocked_intent = req_parts[1].strip().lower()
-        
-        # Comprehensive exclusion set of procedural programming keywords, standard instructional verbs,
-        # and target attraction variables that must NEVER be treated as blacklisted entities.
-        safe_stopwords = {
-            "this", "that", "with", "from", "create", "make", "build", "define", "implement",
-            "setup", "system", "class", "classes", "struct", "structs", "file", "files",
-            "specific", "basic", "game", "module", "modules", "function", "functions",
-            "method", "methods", "variable", "variables", "object", "objects", "data",
-            "code", "script", "scripts", "engine", "attraction", "attractions", "skeeball",
-            "avoid", "avoiding", "using", "use", "expose", "exposing", "only", "inside",
-            "outside", "handled", "handling", "rules", "rule", "settings", "setting",
-            "layout", "layouts", "hole", "holes", "scoring", "score", "scores", "points",
-            "place", "nor", "are", "not", "does", "doesn", "dont", "exclude", "excluded"
-        }
-        
-        # Dynamically incorporate procedural stopwords from mounted cartridge if available
-        try:
-            if getattr(ctx, 'mounted_cartridge', None) and getattr(ctx.mounted_cartridge, 'procedural_stopwords', None):
-                safe_stopwords.update([w.lower() for w in ctx.mounted_cartridge.procedural_stopwords])
-        except Exception:
-            pass
+    ctx = _run_preflight_checks(ctx)
 
-        blocked_words = {
-            w for w in re.findall(r'\b[a-z]{4,}\b', blocked_intent) 
-            if w not in safe_stopwords
-        }
-        
-        for tid, code_text in list(ctx.all_results_dict.items()):
-            code_lower = code_text.lower()
-            found_violations = [w for w in blocked_words if w in code_lower]
-            if found_violations:
-                print(f"  [Pre-Flight Guard] ⛔ Scope bleed detected in {tid}. Found explicitly blocked terms: {found_violations}. Stripping contaminated block.")
-                ctx.all_results_dict[tid] = f"// [PRE-FLIGHT GUARD] Blocked terms {found_violations} excised from generation."
+    # ── Phase IV: Enable staging workspace before review/fix loop ──────
+    # All atomic_write_text calls during review and fix cycles will be
+    # redirected to .staging_workspace/, protecting the native tree.
+    enable_staging(ctx.project_root)
+    print(f"  [Staging FS] 🛡 Virtual staging activated — native source tree protected")
                 
     ctx = _run_review_fix_loop(ctx)
     ctx = _run_observability_pass(ctx)
@@ -156,11 +124,12 @@ def _run_observability_pass(ctx: PipelineContext) -> PipelineContext:
             f"```\n{current_code}\n```"
         )
 
+        from pipeline import EXECUTION_MODEL as _execution_model
         raw_obs_output = call_ollama(
             obs_system, 
             obs_input, 
             f"Observability Pass ({tid})", 
-            EXECUTION_MODEL
+            _execution_model
         )
 
         # DIRECTIVE A: Canonical File-Level Sandboxing Enforcement
@@ -171,19 +140,95 @@ def _run_observability_pass(ctx: PipelineContext) -> PipelineContext:
             persona_name=f"Observability Auditor targeting {original_domain_key}"
         )
 
+        # Anti-Contamination Intercept
+        if any(marker in safe_output for marker in ["<<<<<<< SEARCH", "======= ", ">>>>>>> REPLACE"]):
+            print(f"  [Observability] ⛔ Raw diff marker contamination detected for {tid}. Discarding corrupt output.")
+            is_clean = False
+
         if not is_clean:
             print(f"  [Observability] ⛔ Language drift or cross-extension write detected for {tid}. Discarding logs and falling back to safe un-instrumented code.")
             ctx.output_parts.append(f"### Observability Pass ({tid}) — REJECTED (Language Drift)\nFallback to un-instrumented working code retained.\n")
             continue
 
+        # FM4: Re-run phantom API guard on the instrumented output before
+        # committing.  The observability model can silently introduce new
+        # phantom calls (e.g. MidwayPhysics.log, Engine.SomeNewThing) that
+        # would otherwise bypass all static guards.
+        _approved_lua_obs = getattr(ctx, '_bridge_exclusion_set', set())
+        _domain_key_obs = resolve_agent_name(task_obj.agent) if task_obj else ""
+        if _domain_key_obs == "LUA":
+            import re as _re_obs
+            # sol.log_message and MidwayPhysics.log_message are NOT registered in the
+            # Lua bridge (MidwayPhysics.cpp exposes no logging function).  The only safe
+            # logging primitive in Lua is the built-in print().
+            _always_ok_obs = {
+                "engine.awardtickets", "engine.awardtokens",
+                "engine.gettickets", "engine.gettokens", "engine.getstreak",
+                "midwayphysics.onstep", "midwayphysics.destroybody",
+                "midwayphysics.issensortriggered", "midwayphysics.getvelocity",
+                "midwayphysics.applyimpulse", "midwayphysics.movekinematic",
+                "table.insert", "table.remove", "table.concat", "table.sort",
+                "math.floor", "math.ceil", "math.abs", "math.max", "math.min",
+                "math.sqrt", "math.random", "string.format", "string.len",
+                "string.sub", "string.find", "string.gsub",
+                "tostring", "tonumber", "ipairs", "pairs", "print",
+            }
+            # Explicit deny list: these look plausible but have no bridge registration.
+            _phantom_deny_obs = {"sol.log_message", "midwayphysics.log_message", "sol.log", "midwayphysics.log"}
+            _approved_obs = _approved_lua_obs | _always_ok_obs
+            _phantom_obs = [
+                _m.group(1)
+                for _m in _re_obs.finditer(r'\b([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*\(', safe_output)
+                if _m.group(1).lower() in _phantom_deny_obs
+                or (
+                    _m.group(1).lower() not in _approved_obs
+                    and _m.group(1).lower().split(".")[0] not in (
+                        "math", "string", "table", "io", "os", "coroutine", "package", "debug", "utf8"
+                    )
+                )
+            ]
+            if _phantom_obs:
+                print(f"  [Observability] ⛔ Phantom API(s) introduced by instrumentation for {tid}: "
+                      + ", ".join(_phantom_obs[:5])
+                      + " — discarding instrumented output, retaining prior code.")
+                ctx.output_parts.append(
+                    f"### Observability Pass ({tid}) — REJECTED (Phantom APIs introduced)\n"
+                    f"Discarded: {', '.join(_phantom_obs[:5])}. Un-instrumented code retained.\n"
+                )
+                continue
+
         # Commit instrumented code
         ctx.all_results_dict[tid] = safe_output
-        ctx.output_parts.append(f"### Observability Pass ({tid})\n{safe_output}\n")
         
-        # Re-sync active code index
+        # Synchronous array update: keep all_results list in sync with all_results_dict
+        _found = False
+        for i, entry in enumerate(ctx.all_results):
+            if entry.get("task_id") == tid:
+                ctx.all_results[i] = {"task_id": tid, "output": safe_output}
+                _found = True
+                break
+        if not _found:
+            ctx.all_results.append({"task_id": tid, "output": safe_output})
+        
+        ctx.output_parts.append(f"### Observability Pass ({tid})\n{safe_output}\n")
+
+        
+        # Synchronous Index Re-hydration: update the active_code_index entry
+        # with the newly instrumented safe_output text.
         if f"### [{tid}]" in ctx.active_code_index:
-            # Rebuild index text block if necessary to reflect logged state
-            pass 
+            start_marker = f"### [{tid}]"
+            end_marker = "\n### ["
+            start_idx = ctx.active_code_index.find(start_marker)
+            if start_idx != -1:
+                end_idx = ctx.active_code_index.find(end_marker, start_idx + len(start_marker))
+                if end_idx == -1:
+                    end_idx = len(ctx.active_code_index)
+                replacement_block = start_marker + "\n```\n" + safe_output + "\n```"
+                ctx.active_code_index = (
+                    ctx.active_code_index[:start_idx]
+                    + replacement_block
+                    + ctx.active_code_index[end_idx:]
+                )
 
     print("  [Observability] ✓ Instrumentation complete.")
     return ctx
@@ -294,6 +339,11 @@ def _handle_blocked(ctx: PipelineContext) -> None:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## ⛔ Pipeline Suspended (Circuit Breaker)\n")
 
+    # ── Phase IV: Disable staging on blocked — keep staged files for inspection ──
+    if is_staging_active():
+        print(f"  [Staging FS] ⏹ Staging workspace preserved at .staging_workspace/ for inspection")
+        disable_staging()
+
     suspend_state = {
         "work_queue": [
             {
@@ -333,19 +383,60 @@ def _handle_approved(ctx: PipelineContext) -> None:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## Phase 8: Final Approval\n")
 
+    # ── Phase IV: Commit staging workspace on approval ────────────────
+    # Atomic single-pass sync: mirror .staging_workspace/ → primary roots.
+    if is_staging_active():
+        committed = commit_staging(ctx.project_root)
+        print(f"  [Staging FS] 📦 Committed {committed} staged files to native tree")
+        disable_staging()
+
+    # Inline the actual generated code (up to 2000 chars/task) so the final
+    # approval model can see real code rather than the PAGE_IN TOC, which
+    # it cannot execute and which previously caused guaranteed REVISION REQUIRED.
+    _FA_CODE_BUDGET = 2000
+    _FA_MAX_TASKS = 10
+    _fa_code_blocks: list[str] = []
+    for _tid, _out in list(ctx.all_results_dict.items())[:_FA_MAX_TASKS]:
+        _tobj = ctx.task_map.get(_tid)
+        _dom = (_tobj.agent if _tobj and getattr(_tobj, 'agent', None) else "?")
+        _snip = _out[:_FA_CODE_BUDGET] + ("…[truncated]" if len(_out) > _FA_CODE_BUDGET else "")
+        _fa_code_blocks.append(f"### [{_tid}] [{_dom}]\n{_snip}")
+    _fa_inline_code = "\n\n".join(_fa_code_blocks)
+
+    # If pre-flight violations were still unresolved when the review cycle
+    # ended, surface them in the final approval prompt so the model cannot
+    # rubber-stamp a broken run. The approval model should REVISION REQUIRED
+    # when real static violations remain open.
+    _pf_summary = ""
+    _pf_errors = getattr(ctx, 'pre_flight_errors', '').strip()
+    if _pf_errors:
+        from token_budget import TokenBudget as _TB
+        _pf_summary = (
+            "## ⚠ UNRESOLVED PRE-FLIGHT VIOLATIONS\n"
+            "The following violations were detected by the automated static checker "
+            "and may not have been fully resolved.\n"
+            "You MUST state **REVISION REQUIRED** if any of the patterns below are "
+            "still present in the Generated Code above.\n\n"
+            + _TB._block_aware_collapse(_pf_errors, 1200)
+            + "\n\n"
+        )
+
     final_input = (
         f"## Original Feature Request\n{ctx.user_prompt}\n\n"
         f"## Your Task Breakdown\n{ctx.director_output}\n\n"
-        f"## Active Code Index\n{ctx.active_code_index}\n\n"
-        f"## Integration Review\n{ctx.review_output}\n\n"
+        f"## Generated Code (full task outputs shown below)\n{_fa_inline_code}\n\n"
+        f"{_pf_summary}"
+        f"## Integration Review Result\n{ctx.review_output}\n\n"
         f"Review the complete output. "
         f"State **APPROVED** if everything is satisfactory, "
         f"or **REVISION REQUIRED** with specific changes needed."
     )
 
+    from pipeline import DIRECTOR_MODEL as _director_model
     ctx.final_output = call_ollama(
         FINAL_APPROVAL_SYSTEM, final_input,
-        "Director (Final Approval)", DIRECTOR_MODEL
+        "Director (Final Approval)", _director_model,
+        skip_pre_summarizer=True
     )
     ctx.output_parts.append(ctx.final_output + "\n")
 
@@ -442,11 +533,13 @@ def _handle_failure(ctx: PipelineContext) -> None:
         f"Start with **TOO_BROAD** or **NARROW** on its own line, "
         f"then explain your reasoning."
     )
+    from pipeline import REASONING_MODEL as _reasoning_model
     post_mortem_output = call_ollama(
         DIRECTOR_SYSTEM,
         post_mortem_prompt,
         "Lead Producer (Scope Post-Mortem)",
-        REASONING_MODEL,
+        _reasoning_model,
+        skip_pre_summarizer=True,
     )
     ctx.output_parts.append(post_mortem_output + "\n")
 
