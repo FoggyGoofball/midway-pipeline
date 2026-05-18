@@ -156,7 +156,7 @@ def _run_observability_pass(ctx: PipelineContext) -> PipelineContext:
         # would otherwise bypass all static guards.
         _approved_lua_obs = getattr(ctx, '_bridge_exclusion_set', set())
         _domain_key_obs = resolve_agent_name(task_obj.agent) if task_obj else ""
-        if _domain_key_obs == "LUA":
+        if _domain_key_obs.upper() == "LUA":
             import re as _re_obs
             # sol.log_message and MidwayPhysics.log_message are NOT registered in the
             # Lua bridge (MidwayPhysics.cpp exposes no logging function).  The only safe

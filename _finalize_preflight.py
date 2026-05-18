@@ -195,13 +195,14 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             'sol2 set_function() does not accept "Table.Method" dot-path strings. '
             'Use lua["Table"]["Method"] = ... to register table-scoped functions.',
         ),
-        # C7: Lua calling sol.set_function / sol.new_usertype — sol is C++-only.
+        # C7: Lua calling any sol.* method — sol is a C++ binding layer with no Lua-side object.
+        # Covers sol.set_function, sol.new_usertype, sol.state, sol.script, sol.log_message, etc.
         (
             "Lua",
-            re.compile(r'\bsol\s*\.\s*(set_function|new_usertype|state|script)\s*\(', re.IGNORECASE),
+            re.compile(r'\bsol\s*\.\s*[A-Za-z_]\w*\s*\(', re.IGNORECASE),
             "sol.* called from Lua — sol is a C++ binding layer with no Lua-side object",
             "'sol' is a C++ namespace/object and does not exist at Lua runtime. "
-            "Remove any sol.set_function / sol.new_usertype calls from Lua code entirely.",
+            "Remove all sol.* calls from Lua code. Use print() for logging.",
         ),
         # C8: Bare DestroyBody(...) without MidwayPhysics. namespace in Lua.
         (
@@ -262,6 +263,23 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             "MidwayPhysics.Method() dot-notation in C++ — should be MidwayPhysics::Method()",
             "C++ uses the :: scope operator. "
             "Replace MidwayPhysics.ApplyImpulse(...) with MidwayPhysics::ApplyImpulse(...) etc.",
+        ),
+        # C15: MidwayPhysics.log / MidwayPhysics.log_message — not in the bridge.
+        (
+            "Lua",
+            re.compile(r'\bMidwayPhysics\.(log_message|log)\s*\(', re.IGNORECASE),
+            "phantom API MidwayPhysics.log_message / MidwayPhysics.log — not registered in the bridge",
+            "MidwayPhysics exposes no logging function. Use print() for Lua-side logging.",
+        ),
+        # C16: require() referencing a wrapper or non-existent attraction file.
+        # Attractions are loaded by AttractionManager, not via Lua require().
+        (
+            "Lua",
+            re.compile(r'\brequire\s*\(\s*["\'](?:wrapped_|skeebalooks|skeeball_wrap)', re.IGNORECASE),
+            "require() targeting a non-existent wrapper file",
+            "Attraction scripts are loaded by AttractionManager directly. "
+            "Do not use require() to load other attraction files. "
+            "Define OnLoadAttraction() and OnUnload() directly in the target file.",
         ),
     ]
 
