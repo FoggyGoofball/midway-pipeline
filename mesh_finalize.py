@@ -161,12 +161,52 @@ def _run_observability_pass(ctx: PipelineContext) -> PipelineContext:
             # sol.log_message and MidwayPhysics.log_message are NOT registered in the
             # Lua bridge (MidwayPhysics.cpp exposes no logging function).  The only safe
             # logging primitive in Lua is the built-in print().
+            # Full approved API set verified against engine_lua_bridge_contract.md.
+            # The bridge contract dict uses slash-delimited compound keys
+            # (e.g. "SpawnStaticBox/Sphere/Capsule/Cylinder/Mesh") so the
+            # dynamic _bridge_exclusion_set only captures the first variant of
+            # each group.  This set is the authoritative supplement that covers
+            # every variant so the observability guard never false-positive rejects
+            # instrumented code that uses a valid but non-first spawn variant.
             _always_ok_obs = {
+                # Economy
                 "engine.awardtickets", "engine.awardtokens",
                 "engine.gettickets", "engine.gettokens", "engine.getstreak",
+                # Physics lifecycle
                 "midwayphysics.onstep", "midwayphysics.destroybody",
-                "midwayphysics.issensortriggered", "midwayphysics.getvelocity",
-                "midwayphysics.applyimpulse", "midwayphysics.movekinematic",
+                # Static spawn variants
+                "midwayphysics.spawnstaticbox", "midwayphysics.spawnstaticsphere",
+                "midwayphysics.spawnstaticcapsule", "midwayphysics.spawnstaticcylinder",
+                "midwayphysics.spawnstaticmesh",
+                "midwayphysics.spawnstaticboxr", "midwayphysics.spawnstaticspherer",
+                "midwayphysics.spawnstaticcapsuler", "midwayphysics.spawnstaticcylinderr",
+                # Kinematic spawn variants
+                "midwayphysics.spawnkinematicbox", "midwayphysics.spawnkinematicsphere",
+                "midwayphysics.spawnkinematiccapsule", "midwayphysics.spawnkinematiccylinder",
+                "midwayphysics.spawnkinematicboxr",
+                # Dynamic spawn variants
+                "midwayphysics.spawndynamicbox", "midwayphysics.spawndynamicsphere",
+                "midwayphysics.spawndynamiccapsule", "midwayphysics.spawndynamiccylinder",
+                "midwayphysics.spawndynamicmesh",
+                "midwayphysics.spawndynamicboxr", "midwayphysics.spawndynamicspherer",
+                "midwayphysics.spawndynamiccapsuler", "midwayphysics.spawndynamiccylinderr",
+                # Sensor spawn variants
+                "midwayphysics.spawnsensorbox", "midwayphysics.spawnSensorsphere",
+                # Queries / velocity / impulse / movement
+                "midwayphysics.movekinematic", "midwayphysics.getposition",
+                "midwayphysics.getvelocity", "midwayphysics.getrotation",
+                "midwayphysics.isactive", "midwayphysics.issensortriggered",
+                "midwayphysics.setlinearvelocity", "midwayphysics.addlinearvelocity",
+                "midwayphysics.applyimpulse", "midwayphysics.applyangularimpulse",
+                # Per-body property overrides
+                "midwayphysics.setfriction", "midwayphysics.setrestitution",
+                "midwayphysics.setgravityfactor", "midwayphysics.setmass",
+                "midwayphysics.setlineardamping", "midwayphysics.setangulardamping",
+                # Object pools
+                "midwayphysics.createpool", "midwayphysics.poolacquire",
+                "midwayphysics.poolreturn", "midwayphysics.poolcullbelow",
+                "midwayphysics.poolfree", "midwayphysics.pooltotal",
+                # Lua stdlib
                 "table.insert", "table.remove", "table.concat", "table.sort",
                 "math.floor", "math.ceil", "math.abs", "math.max", "math.min",
                 "math.sqrt", "math.random", "string.format", "string.len",
@@ -383,12 +423,18 @@ def _handle_approved(ctx: PipelineContext) -> None:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## Phase 8: Final Approval\n")
 
-    # ── Phase IV: Commit staging workspace on approval ────────────────
-    # Atomic single-pass sync: mirror .staging_workspace/ → primary roots.
+    # ── Collect staged files BEFORE committing so we can list them ────
+    _staged_files: list[str] = []
     if is_staging_active():
-        committed = commit_staging(ctx.project_root)
-        print(f"  [Staging FS] 📦 Committed {committed} staged files to native tree")
-        disable_staging()
+        from _helpers_io import _STAGING_DIR, PROJECT_ROOT as _IO_ROOT
+        _staging_root = _STAGING_DIR or ((ctx.project_root or _IO_ROOT).resolve() / ".staging_workspace")
+        if _staging_root.is_dir():
+            for _sf in sorted(_staging_root.rglob("*")):
+                if _sf.is_file():
+                    try:
+                        _staged_files.append(str(_sf.relative_to(_staging_root)))
+                    except Exception:
+                        _staged_files.append(str(_sf))
 
     # Inline the actual generated code (up to 2000 chars/task) so the final
     # approval model can see real code rather than the PAGE_IN TOC, which
@@ -459,10 +505,92 @@ def _handle_approved(ctx: PipelineContext) -> None:
                 CHECKPOINT_DIR / f"{ctx.checkpoint_id}.archived.json"
             )
 
+    # ── Blueprint Coverage Summary ─────────────────────────────────
+    _bp_done: list[str] = []
+    _bp_pending: list[str] = []
+    _bp_path = (ctx.project_root / "docs" / "project_blueprint.md") if ctx.project_root else None
+    if _bp_path and _bp_path.is_file():
+        try:
+            _bp_text = _bp_path.read_text(encoding="utf-8")
+            for _line in _bp_text.splitlines():
+                _m_done = re.match(r'^[-*]?\s*\[x\]\s*(?:Task\s*\d+[:.]\s*)?(.+)', _line, re.IGNORECASE)
+                _m_todo = re.match(r'^[-*]?\s*\[ \]\s*(?:Task\s*\d+[:.]\s*)?(.+)', _line)
+                if _m_done:
+                    _bp_done.append(_m_done.group(1).strip())
+                elif _m_todo:
+                    _bp_pending.append(_m_todo.group(1).strip())
+        except Exception:
+            pass
+
+    # ── User-Gated Integration Prompt ─────────────────────────────
+    print("\n" + "=" * 50)
+    print("  INTEGRATION GATE")
+    print("=" * 50)
+    print()
+    print("  ┌─ WHAT IS THE INTEGRATION GATE? ───────────────────────────────────┐")
+    print("  │ The pipeline finished successfully and the new code is sitting in │")
+    print("  │ a safe holding area (.staging_workspace/) — it has NOT touched    │")
+    print("  │ your real project files yet.                                      │")
+    print("  │                                                                   │")
+    print("  │ Answering YES copies every staged file into your actual project.  │")
+    print("  │ Answering NO leaves the files safely in the staging folder so you │")
+    print("  │ can inspect or copy them manually whenever you are ready.         │")
+    print("  └───────────────────────────────────────────────────────────────────┘")
+    if _staged_files:
+        print("  The following files were generated and are staged for integration:")
+        for _f in _staged_files:
+            print(f"    • {_f}")
+    else:
+        print("  (No staged files detected — generated code was written directly.)")
+
+    # Blueprint coverage report
+    _bp_total = len(_bp_done) + len(_bp_pending)
+    if _bp_total > 0:
+        print()
+        print(f"  ┌─ BLUEPRINT COVERAGE ({'⚠ INCOMPLETE' if _bp_pending else '✅ COMPLETE'}) ─────────────────────────────────────┐")
+        print(f"  │  Tasks completed this session : {len(_bp_done)}/{_bp_total}")
+        print(f"  │  Tasks remaining in blueprint : {len(_bp_pending)}")
+        if _bp_pending:
+            print(f"  │")
+            print(f"  │  Remaining tasks (run each as a separate pipeline prompt):")
+            for _i, _pt in enumerate(_bp_pending[:10], 1):
+                _short = _pt[:72] + "…" if len(_pt) > 72 else _pt
+                print(f"  │    {_i:2}. {_short}")
+            if len(_bp_pending) > 10:
+                print(f"  │    … and {len(_bp_pending) - 10} more (see docs/project_blueprint.md)")
+        print(f"  └────────────────────────────────────────────────────────────────────┘")
+    print()
+    _integrate = input(
+        "  Integrate the new code into the project? (y/N): "
+    ).strip().lower()
+    if _integrate in ("y", "yes"):
+        if is_staging_active():
+            committed = commit_staging(ctx.project_root)
+            print(f"  [Staging FS] 📦 Committed {committed} staged files to native tree")
+            disable_staging()
+        else:
+            print("  [Integration] ⚠ Staging not active — files were already written directly.")
+        print("  [Integration] ✓ Code integrated into project.")
+    else:
+        if is_staging_active():
+            print("  [Staging FS] ⏸ Staged files preserved at .staging_workspace/ — integration skipped.")
+            disable_staging()
+        print("  [Integration] ⏭ Skipped (user declined)")
+
     # ── User-Gated Ledger Save (Task 10) ──────────────────────────
     print("\n" + "=" * 50)
     print("  MEMORY ARCHIVE GATE")
     print("=" * 50)
+    print()
+    print("  ┌─ WHAT IS THE MEMORY ARCHIVE GATE? ────────────────────────────────┐")
+    print("  │ The pipeline keeps a long-term memory of successful runs so       │")
+    print("  │ future sessions can reference how similar features were built.    │")
+    print("  │                                                                   │")
+    print("  │ Answering YES saves a summary of this run (your request, the      │")
+    print("  │ plan, and the final output) to the architecture memory ledger.    │")
+    print("  │ Answering NO skips the save — nothing is lost from your project,  │")
+    print("  │ the pipeline just will not remember this run next time.           │")
+    print("  └───────────────────────────────────────────────────────────────────┘")
     save_to_memory = input(
         "  Save architecture to memory? (y/N): "
     ).strip().lower()
@@ -627,6 +755,17 @@ def enforce_human_approval_gate(staged_changes_summary: str) -> bool:
     print("\n" + "=" * 70)
     print("  🛑 ULTIMATE HUMAN-IN-THE-LOOP VERIFICATION GATE")
     print("=" * 70)
+    print()
+    print("  ┌─ WHAT IS THIS GATE? ──────────────────────────────────────────────┐")
+    print("  │ This is the last line of defence before any file on disk is       │")
+    print("  │ permanently changed.                                              │")
+    print("  │                                                                   │")
+    print("  │ The list below shows every file that is about to be written or    │")
+    print("  │ overwritten in your real project. Read it carefully.              │")
+    print("  │                                                                   │")
+    print("  │  y  — I have read the list and authorise these changes.           │")
+    print("  │  n  — Do NOT touch my files; keep everything in staging only.     │")
+    print("  └───────────────────────────────────────────────────────────────────┘")
     print("The orchestration mesh has proposed the following modifications:")
     print(staged_changes_summary)
     print("-" * 70)
