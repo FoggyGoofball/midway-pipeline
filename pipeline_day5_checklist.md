@@ -1,5 +1,5 @@
 # Day 5: Omni-Batch, Auditor & QoL
-*Status: Active*
+*Status: ✅ Complete*
 
 ## Part 1: QoL Audio Chimes (The "Chore" Bell)
 - [x] **Task 1 (Chime Utility):** In `_pipeline_helpers.py`, imported `platform`. Created `trigger_chime()` function. If `platform.system() == "Windows"`, uses `winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)`. Fallback to `print('\a')`. (lines 58-71)

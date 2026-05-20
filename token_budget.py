@@ -17,13 +17,33 @@ MAX_TOKENS: int = 12000
 # When the estimated token payload exceeds the threshold, a Kernel warning
 # is prepended to the prompt telling the agent to <PAGE_OUT>.
 VRAM_CRITICAL_RATIO: float = 0.80
+# ── Phase 7: VRAM-Guarded Model Token Limits ─────────────────────────────
+# Synchronized with ollama_client.py OLLAMA_NUM_CTX/*_LARGE/*_MASSIVE values
+# after downscaling from 32768/16384 to 16384/8192 for 12GB VRAM safety.
+#
+# Threshold = 80% of context window (VRAM_CRITICAL_RATIO = 0.80), giving
+# headroom for output tokens and KV cache overhead.
+# 
+# Model VRAM budgets at these ctx sizes (q4_K_M + q8_0 KV cache):
+#   7B at 8192:  ~5-6GB  (safe)
+#   9B at 8192:  ~6-7GB  (safe — was exceeding at 16384)
+#   14B at 8192: ~9-10GB (safe — was exceeding at 16384)
+#   phi3.5 at 16384: ~11-12GB (tight — was exceeding at 32768)
 MODEL_TOKEN_LIMITS: dict = {
-    "qwen2.5-coder:7b": (6400, 8000),    # 80% of 8K
-    "phi3:14b": (12800, 16384),          # 78% of 16K
-    "llama3.1:8b": (6400, 8192),         # 78% of 8K
-    "qwen2.5-coder:1.5b": (6400, 8192),  # 78% of 8K
-    "llama3.2:1b": (6400, 8192),         # 78% of 8K
+    # Thresholds = 80% of context window, matched to _model_ctx() in working_commit_ollama.py
+    "qwen3.5:9b":          (6553, 8192),   # 80% of 8K
+    "qwen2.5-coder:7b":    (6553, 8192),   # 80% of 8K
+    "qwen2.5-coder:1.5b":  (6553, 8192),
+    # Pre-summarizer: 3.8B mini — larger window is fine; it's ~2.5 GB
+    "phi3.5":              (13107, 16384),  # 80% of 16K
+    "phi-3.5":             (13107, 16384),  # format alias
+    # phi3:14b reduced from 16K to 8K: was 10.2 GB (97%), now 9.0 GB (86%)
+    "phi3:14b":            (6553, 8192),   # 80% of 8K
+    "llama3.1:8b":         (6553, 8192),   # 80% of 8K
+    "llama3.2:1b":         (6553, 8192),
+    "qwen3.5:14b":         (6553, 8192),
 }
+
 
 
 class TokenBudget:
@@ -140,7 +160,8 @@ class TokenBudget:
         return len(text) // 3
 
     @staticmethod
-    def _block_aware_collapse(text: str, available_chars: int) -> str:
+    def _block_aware_collapse(text: str, available_chars: int,
+                               core_memory_table: dict = None) -> str:
         """AST-aware / block-aware truncation.
 
         Instead of blindly keeping head+tail (which destroys function logic
@@ -150,15 +171,35 @@ class TokenBudget:
         2. Preserves all block headers/signatures
         3. Collapses internal bodies with a [... collapsed ...] notice
         4. Drops the oldest blocks first (bottom of stack) when budget is tight
+        5. EXCLUDES core_memory_table serialization from character-count evictions
 
         Args:
             text: Text to potentially truncate.
             available_chars: Maximum character budget.
+            core_memory_table: Optional dict of core memory entries that must
+                survive eviction (not counted in available_chars budget).
 
         Returns:
             Truncated text within character budget.
         """
+        # Phase 0: Extract and preserve core_memory_table from eviction budget
+        core_memory_block = ""
+        core_serialized = ""
+        if core_memory_table:
+            core_lines = []
+            for key, value in core_memory_table.items():
+                core_lines.append(f"[CORE_MEMORY] {key}: {value}")
+            core_serialized = "\n".join(core_lines)
+            core_memory_block = (
+                "\n## Core Memory Table (Phase I — MemGPT Protected)\n"
+                f"{core_serialized}\n"
+            )
+            # Increase effective budget by the size of the core memory block
+            available_chars += len(core_memory_block)
+
         if len(text) <= available_chars:
+            if core_memory_block:
+                return text + core_memory_block
             return text
 
         lines = text.splitlines(keepends=True)

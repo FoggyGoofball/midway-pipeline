@@ -30,6 +30,7 @@ from _helpers_exec import (
     get_unavailable_domains_text,
     execute_task,
     build_director_prompt,
+    compile_project,
 )
 
 # ── Re-export from _helpers_text (Text Parsing & Formatting) ──────────────
@@ -51,6 +52,7 @@ from _helpers_io import (
     curate_project_structure,
     find_relevant_files,
     search_memory,
+    build_blueprint_context_pack,
     AGENT_FILE_TOOLS_PROMPT,
     _read_single_file,
     handle_file_read,
@@ -63,6 +65,50 @@ from _helpers_io import (
     verify_file_hashes,
     get_tracked_file_hashes,
 )
+
+# ── Re-export from domain_registry (shared dictionaries) ─────────────────
+from domain_registry import (
+    ALL_DOMAINS,
+    AGENT_ALIAS_MAP,
+    resolve_agent_name,
+    get_agent_system,
+    LEDGER_MEMORY_RULE,
+    MESH_AGENT_SYSTEM_EXTENSION,
+)
+
+# ── Re-export from _prompts (system prompts) ────────────────────────────
+from _prompts import (
+    DIRECTOR_SYSTEM,
+    REVIEW_SYSTEM,
+    REVIEW_PROMPT,
+    FINAL_APPROVAL_SYSTEM,
+    SELF_CORRECT_SYSTEM,
+    ARCHITECT_FIX_SYSTEM,
+    LIBRARIAN_SYSTEM,
+    DIAGNOSTIC_ORACLE_SYSTEM,
+    INTENT_ROUTER_SYSTEM,
+    CHAT_SYSTEM,
+    REASONING_GATE_DOMAINS,
+    REASONING_GATE_SYSTEM,
+)
+
+# ── Re-export from ollama_client (model constants) ──────────────────────
+from ollama_client import (
+    OLLAMA_HOST,
+    MODEL,
+    CODER_MODEL,
+    REVIEWER_MODEL,
+    DIRECTOR_MODEL,
+    EXECUTION_MODEL,
+    REASONING_MODEL,
+    SYNTAX_GATE_MODEL,
+    CHAT_MODEL,
+    call_ollama,
+    call_ollama_streamed,
+)
+
+# ── Re-export from models ──────────────────────────────────────────────
+from models import Task, PipelineContext, SignalType, MeshSignal, ConsensusResult
 
 # ── Public API — explicit __all__ to keep external imports unbroken ───────
 __all__ = [
@@ -92,6 +138,7 @@ __all__ = [
     # Execution
     "execute_task",
     "build_director_prompt",
+    "compile_project",
 
     # File context & formatting
     "format_file_context",
@@ -111,6 +158,7 @@ __all__ = [
     "curate_project_structure",
     "find_relevant_files",
     "search_memory",
+    "build_blueprint_context_pack",
 
     # File tools
     "AGENT_FILE_TOOLS_PROMPT",
@@ -128,4 +176,46 @@ __all__ = [
     "save_initial_file_hashes_from_context",
     "verify_file_hashes",
     "get_tracked_file_hashes",
+
+    # Domain registry re-exports
+    "ALL_DOMAINS",
+    "AGENT_ALIAS_MAP",
+    "resolve_agent_name",
+    "get_agent_system",
+    "LEDGER_MEMORY_RULE",
+    "MESH_AGENT_SYSTEM_EXTENSION",
+
+    # System prompt re-exports
+    "DIRECTOR_SYSTEM",
+    "REVIEW_SYSTEM",
+    "REVIEW_PROMPT",
+    "FINAL_APPROVAL_SYSTEM",
+    "SELF_CORRECT_SYSTEM",
+    "ARCHITECT_FIX_SYSTEM",
+    "LIBRARIAN_SYSTEM",
+    "DIAGNOSTIC_ORACLE_SYSTEM",
+    "INTENT_ROUTER_SYSTEM",
+    "CHAT_SYSTEM",
+    "REASONING_GATE_DOMAINS",
+    "REASONING_GATE_SYSTEM",
+
+    # Model constant re-exports
+    "OLLAMA_HOST",
+    "MODEL",
+    "CODER_MODEL",
+    "REVIEWER_MODEL",
+    "DIRECTOR_MODEL",
+    "EXECUTION_MODEL",
+    "REASONING_MODEL",
+    "SYNTAX_GATE_MODEL",
+    "CHAT_MODEL",
+    "call_ollama",
+    "call_ollama_streamed",
+
+    # Model re-exports
+    "Task",
+    "PipelineContext",
+    "SignalType",
+    "MeshSignal",
+    "ConsensusResult",
 ]

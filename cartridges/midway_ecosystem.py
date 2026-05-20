@@ -248,7 +248,12 @@ class MidwayAgentCartridge:
             "host-exposed sol2 functions (e.g. Engine.LoadJSON). Flag as FAIL immediately.\n"
             "IMPORTANT: Only flag issues that are VISIBLY PRESENT in the code shown. "
             "Do NOT speculate about missing files, unshown C++ bridge code, or rules that "
-            "cannot be evaluated from the provided snippets."
+            "cannot be evaluated from the provided snippets. "
+            "CRITICAL: When citing a phantom API violation, you MUST NOT suggest another API "
+            "as a replacement unless you can verify it appears in the APPROVED APIs list above. "
+            "Suggesting a phantom API as a correction (e.g. 'replace X with SetGameOver') is "
+            "itself a violation — describe the problem only and let the fix agent consult the "
+            "bridge contract for the correct replacement."
 
         )
 
@@ -301,4 +306,12 @@ class MidwayAgentCartridge:
         """
         from context_extractor import extract_project_context as _extract
         return _extract(prompt)
+
+    @staticmethod
+    def get_project_context_scoped(prompt: str,
+                                   scope_mode: str = "GENERAL",
+                                   attraction_name: str = "") -> str:
+        """Scope-aware variant — prefer this for NEW_ATTRACTION / MODIFY_ATTRACTION."""
+        from context_extractor import extract_project_context as _extract
+        return _extract(prompt, scope_mode=scope_mode, attraction_name=attraction_name)
 

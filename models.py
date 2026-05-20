@@ -25,8 +25,39 @@ class SignalType(str, Enum):
     MERGE = "MERGE"
     REJECT = "REJECT"
     MATH_EVAL = "MATH_EVAL"
+    FETCH = "FETCH"
+    READ_OFFLOADED = "READ_OFFLOADED"
+    EXTRACT_SKELETON = "EXTRACT_SKELETON"
+    FLUSH = "FLUSH"
+    REQUEST_API = "REQUEST_API"
 
 
+class OrchestrationConfig(BaseModel):
+    """Decoupled boundary parameters dynamically injected via Cartridge layer."""
+    ollama_host: str = "http://192.168.0.16:11434"
+    # Qwen Coder 3.5 profile (9B) — uncomment when backend hardware supports it
+    # coder_model: str = "qwen3.5:9b",
+    coder_model: str = "qwen2.5-coder:7b"
+    reviewer_model: str = "phi3:14b"
+    analyst_model: str = "phi3:14b"
+    fallback_reviewer_model: str = "llama3.1:8b-instruct-q4_K_M"
+    pre_summarizer_model: str = "phi3.5:latest"  # 3.8B mini — compresses large context before phi3:14b review
+    librarian_model: str = "llama3.1:8b-instruct-q4_K_M"
+    syntax_gate_model: str = "qwen2.5-coder:1.5b"
+    intent_classifier_model: str = "llama3.2:1b"
+    director_model: str = "llama3.1:8b-instruct-q4_K_M"
+    max_iterations: int = 3
+    max_consensus_iterations: int = 3
+    max_subtasks_per_agent: int = 5
+    review_max_iterations: int = 3
+    scope_file_limit: int = 5
+    scope_line_limit: int = 400
+    ollama_timeout: int = 600
+    # Synchronize default schema boundaries with hardware execution targets
+    # qwen3.5:9b was 16384; qwen2.5-coder:7b has more headroom
+    # ollama_num_ctx: int = 16384
+    ollama_num_ctx: int = 32768
+    max_tokens: int = 12000
 
 
 class MeshSignal(BaseModel):
@@ -130,6 +161,30 @@ class EcosystemCartridgeContract(BaseModel):
     procedural_stopwords: Set[str] = Field(default_factory=set)
     unavailable_domains: List[str] = Field(default_factory=list)
 
+    # ── Kernel agnosticism: project-specific rule injection ──────────────────
+    # These fields let the cartridge supply content that was previously
+    # hardcoded inside the kernel prompt layer (_prompts.py).
+
+    # Set of domain keys whose outputs should pass through the Reasoning Gate.
+    # Kernel default is an empty set — the cartridge decides which domains qualify.
+    reasoning_gate_domains: Set[str] = Field(default_factory=set)
+
+    # Review checklist injected into REVIEW_PROMPT at assembly time.
+    # The kernel provides a universal fallback; the cartridge overrides with
+    # project-specific rule-file references and architectural invariants.
+    review_prompt_extra: str = ""
+
+    # Project-specific API binding and coding mandates appended to LEDGER_MEMORY_RULE.
+    # e.g. "Use sol2 bindings exclusively. Never call raw Lua C API."
+    coding_mandates: str = ""
+
+    # Domain-specific terminology note injected into ANALYST_SYSTEM.
+    # e.g. "In this project, 'game' means 'Attraction'."
+    terminology_note: str = ""
+
+    # Relative path to the architecture / director ledger.
+    architecture_ledger: str = "docs/memory/architecture_ledger.md"
+
 
 class Task:
     """A work item in the mesh queue. Non-Pydantic — plain data class
@@ -138,7 +193,8 @@ class Task:
     def __init__(self, agent: str, spec: str, parent: str = None,
                  task_id: str = None, is_query: bool = False,
                  iteration: int = 0, context: str = "",
-                 depends_on: Optional[List[str]] = None):
+                 depends_on: Optional[List[str]] = None,
+                 target_file: Optional[str] = None):
         self.agent = agent
         self.spec = spec
         self.parent = parent
@@ -152,6 +208,10 @@ class Task:
         self.completed = False
         self.pinned_blocks: set = set()  # Block IDs pinned to prevent page-out
         self.depends_on: List[str] = depends_on or []
+        # target_file: optional relative path hint used by _flush_results_to_workspace
+        # to write agent output to disk before compilation. When None the flush is skipped
+        # for that task (content is still carried in all_results_dict).
+        self.target_file: Optional[str] = target_file
         # ── Directive B: Pro-Mode Inheritance — tracks paged-in content cache ──
         self.paged_files_cache: Dict[str, str] = {}
 
@@ -172,7 +232,8 @@ class PipelineContext(BaseModel):
     global_signals: List[MeshSignal]
     current_task_index: int = 0
     consensus_results: Dict[str, ConsensusResult] = {}
-    ollama_endpoint: str = "http://localhost:11434"
+    ollama_endpoint: str = "http://192.168.0.16:11434"
+
 
     # ── Offload Store ────────────────────────────────────────────────────────
     offload_store: Optional[Any] = None
@@ -214,7 +275,6 @@ class PipelineContext(BaseModel):
     all_results_dict: Dict[str, str] = {}
     all_vetos: List[Dict[str, Any]] = []
     all_objects: List[Dict[str, Any]] = []
-    all_approvals: Dict[str, bool] = {}
     all_recourses: List[Dict[str, Any]] = []
     all_consults: List[Dict[str, Any]] = []
     conflict_resolutions: List[str] = []
@@ -226,7 +286,11 @@ class PipelineContext(BaseModel):
     user_prompt: str = ""
 
     # ── Pro Mode ──────────────────────────────────────────────────────────────
+    # pro_mode is kept for legacy read compatibility; authoritative state is
+    # math_heavy_tasks (per-task set) and pro_mode_always (global override).
     pro_mode: bool = False
+    math_heavy_tasks: Set[str] = Field(default_factory=set)
+    pro_mode_always: bool = False  # set when user answers "always" at the prompt
 
     # ── Run-time accumulators (mesh_loops.py) ─────────────────────────────────
     director_output: str = ""
@@ -247,6 +311,39 @@ class PipelineContext(BaseModel):
         self.domain_registry = cartridge_class.get_domain_registry()
         self.alias_map = cartridge_class.get_alias_map()
         self.domain_metadata_registry = cartridge_class.get_environment_metadata()
+        # Derive a human-readable ecosystem name from the class if available,
+        # falling back to the class's __name__ stripped of common suffixes.
+        if hasattr(cartridge_class, "ECOSYSTEM_NAME"):
+            self._cartridge_ecosystem_name = cartridge_class.ECOSYSTEM_NAME
+        else:
+            raw = getattr(cartridge_class, "__name__", "") or ""
+            self._cartridge_ecosystem_name = (
+                raw.replace("AgentCartridge", "")
+                   .replace("Cartridge", "")
+                   .strip() or "<project>"
+            )
+        # Pull the new agnosticism fields if the cartridge exposes them.
+        # These are consumed by _prompts.pipeline_bootstrap_prompts().
+        if hasattr(cartridge_class, "get_reasoning_gate_domains"):
+            self._cartridge_reasoning_gate_domains = cartridge_class.get_reasoning_gate_domains()
+        if hasattr(cartridge_class, "get_coding_mandates"):
+            self._cartridge_coding_mandates = cartridge_class.get_coding_mandates()
+        if hasattr(cartridge_class, "get_review_prompt_extra"):
+            self._cartridge_review_prompt_extra = cartridge_class.get_review_prompt_extra()
+        if hasattr(cartridge_class, "get_review_system_extra"):
+            self._cartridge_review_system_extra = cartridge_class.get_review_system_extra()
+        if hasattr(cartridge_class, "get_terminology_note"):
+            self._cartridge_terminology_note = cartridge_class.get_terminology_note()
+        if hasattr(cartridge_class, "get_project_context"):
+            self._cartridge_get_project_context = cartridge_class.get_project_context
+        if hasattr(cartridge_class, "get_project_context_scoped"):
+            self._cartridge_get_project_context_scoped = cartridge_class.get_project_context_scoped
+        if hasattr(cartridge_class, "get_environment_metadata"):
+            self._cartridge_environment_metadata = cartridge_class.get_environment_metadata()
+        if hasattr(cartridge_class, "get_bridge_contract"):
+            self._cartridge_build_bridge_contract = cartridge_class.get_bridge_contract
+        if hasattr(cartridge_class, "get_director_extra"):
+            self._cartridge_get_director_extra = cartridge_class.get_director_extra
 
     def mount_ecosystem(self, cartridge: EcosystemCartridgeContract) -> None:
         """Binds a validated ecosystem cartridge directly into the kernel runtime."""
@@ -275,6 +372,15 @@ class PipelineContext(BaseModel):
     seen_code_hashes_set: Set[str] = set()
     is_chat: bool = False
     session_mgr: Optional[Any] = None
+
+    # ── Phase I: Core Memory Table (MemGPT Alignment) ──────────────────────
+    # Immutable table anchoring core project constants that must survive
+    # context pruning. Excluded from character-count evictions by token_budget.py.
+    core_memory_table: Dict[str, str] = {}
+
+    # ── Phase III: AST Patch Models (LangGraph Alignment) ───────────────────
+    # Structured patch sets for state-reducing merge operations.
+    pending_patches: List[dict] = []
 
     # ── Circuit Breaker Retry Counts (Day 4) ──────────────────────────────
     retry_counts: Dict[str, int] = {}
@@ -317,7 +423,6 @@ class PipelineContext(BaseModel):
         self.all_results_dict = {}
         self.all_vetos = []
         self.all_objects = []
-        self.all_approvals = {}
         self.all_recourses = []
         self.all_consults = []
         self.conflict_resolutions = []
@@ -343,3 +448,6 @@ class PipelineContext(BaseModel):
         self.mesh_results = {}
         self.mesh_work_queue = []
         self.mesh_registry_lock = False
+        self.pending_patches = []
+        self.retry_counts = {}
+        self.math_heavy_tasks = set()

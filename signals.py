@@ -32,11 +32,28 @@ SIGNAL_PATTERNS: Dict[str, str] = {
     "MERGE": r"\[\s*\*?\*?\s*MERGE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
     "REJECT": r"\[\s*\*?\*?\s*REJECT\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
     "REQUEST_API": r"\[REQUEST_API:\s*(.*?)\s*\|\s*(https?://.*?)\s*\]",
-    # Legacy handlers PURGED — superseded by PagingKernel <invoke_kernel> XML
-    # "FETCH": r"\[\s*\*?\*?\s*FETCH\s*\*?\*?\s*:\s*([^\]]+)\s*#\s*([^\]]+)\s*\]",
-    # "READ_OFFLOADED": r"\[\s*\*?\*?\s*READ_OFFLOADED\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
-    # "MATH_EVAL": r"\[\s*\*?\*?\s*MATH_EVAL\s*\*?\*?\s*:\s*(.*?)\]",
+    "FETCH": r"\[\s*\*?\*?\s*FETCH\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
+    "READ_OFFLOADED": r"\[\s*\*?\*?\s*READ_OFFLOADED\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
+    "EXTRACT_SKELETON": r"\[\s*\*?\*?\s*EXTRACT_SKELETON\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
+    "MATH_EVAL": r"\[\s*\*?\*?\s*MATH_EVAL\s*\*?\*?\s*:\s*(.*?)\]",
+
+    # ── Phase III: LangGraph AST Patch Signals ─────────────────────────────
+    # Captures discrete AST modification chunks in agent output streams.
+    # Format: [AST_PATCH:src/Engine.cpp] ... code ... [/AST_PATCH]
+    "AST_PATCH": r"\[\s*\*?\*?\s*AST_PATCH\s*\*?\*?\s*:\s*([^\]]+)\s*\]\s*\n?```\w*\n(.*?)\n?```\s*\n?\[/\s*AST_PATCH\s*\]",
+
 }
+
+# ── Phase III: AST Patch Extraction Pattern (LangGraph Alignment) ──────
+# Optimized for capturing discrete AST modification chunks within agent output.
+# Matches file path + code replacement blocks with optional diff-style line markers.
+AST_PATCH_BLOCK_PATTERN: str = (
+    r"\[\s*\*?\*?\s*AST_PATCH\s*\*?\*?\s*:\s*([^\]]+)\s*\]"  # [AST_PATCH:path/to/file]
+    r"\s*\n?(?:```\w*\n)?"                                     # optional opening code fence
+    r"(.*?)"                                                    # the patch content (lazy)
+    r"(?:\n?```\s*\n?)?"                                       # optional closing code fence
+    r"\n?\[/\s*AST_PATCH\s*\]"                                  # [/AST_PATCH]
+)
 
 
 
@@ -72,7 +89,7 @@ def extract_signals(text: str) -> List[Dict[str, Any]]:
     """
     signals: List[Dict[str, Any]] = []
     for signal_type, pattern in SIGNAL_PATTERNS.items():
-        for match in re.finditer(pattern, text, re.DOTALL):
+        for match in re.finditer(pattern, text, re.DOTALL | re.IGNORECASE | re.MULTILINE):
             groups = match.groups()
             signal: Dict[str, Any] = {"type": signal_type, "match": match.group(0)}
             if signal_type == "APPROVE":
@@ -114,23 +131,62 @@ def extract_double_check(text: str) -> Optional[Dict[str, str]]:
 def get_verdict(review_text: str) -> str:
     """Extract the verdict from a review output.
 
-    Enforces strict word boundaries and checks for bracketed tags to avoid false positives.
+    Enforces strict word boundaries and checks for explicit verdict tags to avoid false positives.
     """
-    # Prefer explicit bracketed verdicts first
-    fail_match = re.search(r"\[\s*VERDICT\s*:\s*FAIL\s*\]", review_text, re.IGNORECASE)
-    pass_match = re.search(r"\[\s*VERDICT\s*:\s*PASS\s*\]", review_text, re.IGNORECASE)
-    
+    # Prefer explicit verdict tags first (brackets optional; tolerate lowercase/spacing)
+    fail_match = re.search(
+        r"^\s*(?:\[\s*)?VERDICT\s*:\s*FAIL\s*(?:\s*\])?\s*$",
+        review_text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    pass_match = re.search(
+        r"^\s*(?:\[\s*)?VERDICT\s*:\s*PASS\s*(?:\s*\])?\s*$",
+        review_text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+
     if fail_match:
         return "FAIL"
     if pass_match:
         return "PASS"
-        
-    # Fallback to strict word boundaries if brackets are omitted
-    if re.search(r"\bFAIL(?:ED|URE)?\b", review_text, re.IGNORECASE):
-        return "FAIL"
-    if re.search(r"\bPASS(?:ED)?\b", review_text, re.IGNORECASE):
-        return "PASS"
-        
+
+    # Fallback: only match FAIL/PASS when they appear as a standalone verdict line
+    # (e.g. "FAIL" or "**FAIL**" or "Result: FAIL"), NOT mid-sentence words like
+    # "could fail to compile" or "unit test failed".  The line must end with the
+    # word (optional punctuation/markdown bold markers), which prevents prose hits.
+    if re.search(
+        r"(?:^|[\s:*_])FAIL(?:ED|URE)?(?:[\s*_.,]|$)",
+        review_text,
+        re.IGNORECASE | re.MULTILINE,
+    ):
+        # Extra guard: ignore lines that contain hedging verbs before the word
+        _fail_lines = [
+            ln for ln in review_text.splitlines()
+            if re.search(r"(?:^|[\s:*_])FAIL(?:ED|URE)?(?:[\s*_.,]|$)", ln, re.IGNORECASE)
+            and not re.search(
+                r"\b(?:could|would|might|may|should|will|can|if|when|unless|avoid|prevent|cause)\b",
+                ln, re.IGNORECASE,
+            )
+        ]
+        if _fail_lines:
+            return "FAIL"
+    if re.search(
+        r"(?:^|[\s:*_])PASS(?:ED)?(?:[\s*_.,]|$)",
+        review_text,
+        re.IGNORECASE | re.MULTILINE,
+    ):
+        # Same guard as FAIL: ignore hedged lines so "would pass" does not trigger
+        _pass_lines = [
+            ln for ln in review_text.splitlines()
+            if re.search(r"(?:^|[\s:*_])PASS(?:ED)?(?:[\s*_.,]|$)", ln, re.IGNORECASE)
+            and not re.search(
+                r"\b(?:could|would|might|may|should|will|can|if|when|unless|avoid|prevent|cause)\b",
+                ln, re.IGNORECASE,
+            )
+        ]
+        if _pass_lines:
+            return "PASS"
+
     return "UNKNOWN"
         
 

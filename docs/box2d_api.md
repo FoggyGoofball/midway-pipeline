@@ -1,6 +1,8 @@
-# Box2D API Reference <a name="box2d-api"></a>
-> Source: Box2D GitHub | Generated: 2026-04-30
-> Focus: Fixture creation, mass data recalculation, world stepping
+# ~~Box2D API Reference~~ (DEPRECATED) <a name="box2d-api"></a>
+> **Box2D is fully deprecated under the Unified Jolt Standard.** This file is retained for archival reference only.
+> All attractions — 2D planar and 3D volumetric alike — must run inside the global Jolt Physics world.
+> See [`docs/jolt_api.md`](jolt_api.md) for the current physics API reference.
+> Source: Box2D GitHub (archival) | Generated: 2026-04-30
 
 ## Table of Contents
 - [b2World](#b2world)

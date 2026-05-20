@@ -52,7 +52,16 @@ class CppCompilerStrategy:
         ]
 
         if not starts:
-            # No diagnostic blocks found — guarantee fresh errors are visible
+            # No diagnostic blocks found — check for cmake/build-system config
+            # errors that are not real compiler diagnostics and should be suppressed.
+            _infra_kws = (
+                "could not load cache", "no cmake_cache", "run cmake first",
+                "cmake error", "cmake warning", "configuring incomplete",
+                "error: could not",
+            )
+            if any(kw in raw_logs.lower() for kw in _infra_kws):
+                return ""  # Not a compiler error — suppress entirely
+            # Guarantee fresh errors are visible
             return raw_logs[-1500:]
 
         # Build blocks by slicing from each start position to the next

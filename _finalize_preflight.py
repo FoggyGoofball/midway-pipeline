@@ -205,9 +205,11 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             "Remove all sol.* calls from Lua code. Use print() for logging.",
         ),
         # C8: Bare DestroyBody(...) without MidwayPhysics. namespace in Lua.
+        # Match only on non-comment lines (lines that are not Lua comment lines starting with --)
+        # to avoid false positives on "-- Example: DestroyBody(ballHandle)" stubs.
         (
             "Lua",
-            re.compile(r'(?<!MidwayPhysics\.)\bDestroyBody\s*\(', re.IGNORECASE),
+            re.compile(r'^(?!\s*--).*(?<!MidwayPhysics\.)\bDestroyBody\s*\(', re.IGNORECASE | re.MULTILINE),
             "bare DestroyBody() — missing MidwayPhysics. namespace",
             "DestroyBody is not a global function. "
             "Use MidwayPhysics.DestroyBody(handle) instead.",
@@ -366,14 +368,35 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                     _actual = _commas + 1
                     _min_exp, _max_exp = _expected
                     if not (_min_exp <= _actual <= _max_exp):
-                        _sig_hint = f"{_fn_name}({_min_exp}–{_max_exp} args)"
+                        # Build a human-readable positional signature so the fix
+                        # agent can copy the exact call pattern without guessing.
+                        _POS_LABELS = {
+                            "SpawnDynamicSphere":   "lx, ly, lz, radius [, mass]",
+                            "SpawnDynamicBox":      "lx, ly, lz, w, h, d [, mass]",
+                            "SpawnDynamicCapsule":  "lx, ly, lz, halfHeight, radius [, mass]",
+                            "SpawnDynamicCylinder": "lx, ly, lz, halfHeight, radius [, mass]",
+                            "SpawnDynamicMesh":     "lx, ly, lz, yaw, mass, path",
+                            "SpawnDynamicBoxR":     "lx, ly, lz, w, h, d, mass [, yawDeg]",
+                            "SpawnDynamicSphereR":  "lx, ly, lz, radius, mass [, yawDeg]",
+                            "SpawnStaticBox":       "lx, ly, lz, w, h, d",
+                            "SpawnStaticSphere":    "lx, ly, lz, radius",
+                            "SpawnStaticCapsule":   "lx, ly, lz, halfHeight, radius",
+                            "SpawnStaticCylinder":  "lx, ly, lz, halfHeight, radius",
+                            "SpawnStaticMesh":      "lx, ly, lz, yaw, path [, sx, sy, sz]",
+                            "SpawnKinematicBox":    "lx, ly, lz, w, h, d",
+                            "SpawnKinematicSphere": "lx, ly, lz, radius",
+                            "SpawnSensorBox":       "lx, ly, lz, w, h, d",
+                            "SpawnSensorSphere":    "lx, ly, lz, radius",
+                        }
+                        _pos_hint = _POS_LABELS.get(_fn_name, f"{_min_exp}–{_max_exp} positional args")
                         ctx.pre_flight_errors += (
                             f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
                             f"**Rule:** MidwayPhysics.{_fn_name} wrong argument count "
                             f"(got {_actual}, expected {_min_exp}–{_max_exp})\n"
                             f"**Why this is always wrong:** Wrong argument count causes a "
-                            f"runtime error or silent incorrect physics. "
-                            f"Signature: {_sig_hint}.\n"
+                            f"runtime error or silent incorrect physics.\n"
+                            f"**Required call signature:** "
+                            f"MidwayPhysics.{_fn_name}({_pos_hint})\n"
                             f"Fix this before the reviewer sees the code.\n"
                         )
                         print(f"  [Static Guard] ❌ Task {tid} [Lua]: {_fn_name} arg count {_actual}≠{_min_exp}–{_max_exp}")
@@ -435,6 +458,21 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                     "io.open", "io.close", "os.time", "os.clock",
                 }
                 _approved_lower = _approved_lua | _always_ok
+                # Build the approved-names hint once from the full merged set,
+                # grouped by namespace so it stays readable as the contract grows.
+                # We deliberately do NOT slice — every name in the live contract
+                # must be visible to the fix agent.
+                _ns_groups: dict = {}
+                for _entry in sorted(_approved_lower):
+                    _parts = _entry.split(".", 1)
+                    if len(_parts) == 2:
+                        _ns_groups.setdefault(_parts[0], []).append(_parts[1])
+                _approved_names_hint = "; ".join(
+                    f"{_ns}: {', '.join(sorted(_fns))}"
+                    for _ns, _fns in sorted(_ns_groups.items())
+                    if _ns in _ENGINE_NAMESPACES
+                )
+                _phantom_names_this_task: set = set()
                 for _api_m in re.finditer(
                     r'\b([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*\(',
                     content,
@@ -453,21 +491,59 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                     if _ns in ("math", "string", "table", "io", "os", "coroutine",
                                "package", "debug", "utf8"):
                         continue
+                    _bare_name = _api_m.group(1).split(".", 1)[1]  # e.g. "SetDensity"
+                    _phantom_names_this_task.add(_bare_name)
+                    # Keep the per-call error compact — the approved API hint is
+                    # emitted once as a deduplicated header block below, not
+                    # repeated inside every individual phantom error.
                     ctx.pre_flight_errors += (
                         f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
                         f"**Rule:** phantom API call '{_api_m.group(1)}'\n"
                         f"**Why this is always wrong:** '{_api_m.group(1)}' is not in the "
                         f"approved bridge contract. Any engine call not on the approved list "
-                        f"will crash at runtime. Check docs/engine_lua_bridge_contract.md.\n"
+                        f"will crash at runtime.\n"
+                        f"Do NOT invent a replacement name. Use ONLY the names from the "
+                        f"'Approved Bridge API' block at the top of these errors.\n"
                         f"Fix this before the reviewer sees the code.\n"
                     )
                     print(f"  [Static Guard] ❌ Task {tid} [Lua]: phantom API '{_api_m.group(1)}'")
+                if _phantom_names_this_task:
+                    # Prepend the approved API hint ONCE per task, before all the
+                    # individual phantom errors, so the fix agent always sees it
+                    # regardless of how many calls were flagged.
+                    _hint_header = (
+                        f"\n## Approved Bridge API — Task {tid} [Lua] "
+                        f"(use ONLY these exact names)\n{_approved_names_hint}\n"
+                    )
+                    # Insert just before the first phantom-error block for this task.
+                    _marker = f"\n## Static Pattern Violation — Task {tid} [Lua]\n**Rule:** phantom API"
+                    _insert_pos = ctx.pre_flight_errors.rfind(_marker)
+                    if _insert_pos == -1:
+                        ctx.pre_flight_errors += _hint_header
+                    else:
+                        ctx.pre_flight_errors = (
+                            ctx.pre_flight_errors[:_insert_pos]
+                            + _hint_header
+                            + ctx.pre_flight_errors[_insert_pos:]
+                        )
+                if _phantom_names_this_task:
+                    try:
+                        from ledger import retract_ledger_entries
+                        retract_ledger_entries(_phantom_names_this_task)
+                    except Exception:
+                        pass
 
         # ── C10: Duplicate top-level function definition in Lua ───────────────
         if domain == "Lua":
             _fn_names_seen: dict = {}
-            for _fn_m in re.finditer(r'^function\s+(\w+)\s*\(', content, re.MULTILINE):
-                _name = _fn_m.group(1)
+            # Match both declaration styles:
+            #   function Foo()   — classic style
+            #   Foo = function() — assignment style
+            for _fn_m in re.finditer(
+                r'^(?:(?:local\s+)?function\s+(\w+)\s*\(|(\w+)\s*=\s*function\s*\()',
+                content, re.MULTILINE
+            ):
+                _name = _fn_m.group(1) or _fn_m.group(2)
                 _fn_names_seen[_name] = _fn_names_seen.get(_name, 0) + 1
             for _name, _count in _fn_names_seen.items():
                 if _count > 1:
@@ -511,8 +587,12 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                                 f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
                                 f"**Rule:** local variable '{_ref}' used in {_fn} but declared in OnLoad/OnLoadStatic\n"
                                 f"**Why this is always wrong:** Local variables are scoped to their "
-                                f"function. '{_ref}' will be nil in {_fn}. "
-                                f"Declare it as a module-level (file-scope) variable instead.\n"
+                                f"function. '{_ref}' will be nil in {_fn}.\n"
+                                f"**How to fix:** Remove the 'local' keyword from the declaration inside "
+                                f"OnLoad/OnLoadStatic and instead declare '{_ref}' at the TOP of the file, "
+                                f"above all function definitions, like this:\n"
+                                f"  local {_ref}  -- module-level, accessible from all lifecycle functions\n"
+                                f"Then assign it inside OnLoad/OnLoadStatic without the 'local' keyword.\n"
                                 f"Fix this before the reviewer sees the code.\n"
                             )
                             print(f"  [Static Guard] ❌ Task {tid} [Lua]: local '{_ref}' out-of-scope in {_fn}")
@@ -719,8 +799,14 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             re.compile(r'MidwayPhysics\.SpawnStaticPlane', re.IGNORECASE),
             re.compile(r'MidwayPhysics\.ApplyForce\b', re.IGNORECASE),
             re.compile(r'MidwayPhysics\.SpawnStaticMesh\s*\(\s*[\'"]', re.IGNORECASE),
-            re.compile(r'(?<!MidwayPhysics\.)\bDestroyBody\s*\(', re.IGNORECASE),
+            re.compile(r'^(?!\s*--).*(?<!MidwayPhysics\.)\bDestroyBody\s*\(', re.IGNORECASE | re.MULTILINE),
             re.compile(r'\bsol\s*\.\s*(?:set_function|new_usertype|state)\s*\(', re.IGNORECASE),
+            # Phantom APIs that the Lua system prompt previously taught the model to use.
+            # If any of these appear in an output it must never become a clean anchor.
+            re.compile(r'\bsol\s*\.\s*log(?:_message)?\s*\(', re.IGNORECASE),
+            re.compile(r'\bMidwayPhysics\s*\.\s*log(?:_message)?\s*\(', re.IGNORECASE),
+            re.compile(r'\bMidwayPhysics\s*\.\s*FindBodyByLabel\s*\(', re.IGNORECASE),
+            re.compile(r'\bMidwayPhysics\s*\.\s*SetPosition\s*\(', re.IGNORECASE),
         ]
         _last_good: dict = {}
         for _tid, _out in ctx.all_results_dict.items():
@@ -782,10 +868,41 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 + "\n"
             ) if _anchor_blocks else ""
 
+            # Build a compact bridge cheatsheet for the fix model so it has
+            # approved names in front of it — not just error messages.
+            # Edge cases: cartridge not mounted, section key absent, callable
+            # raises — all handled; cheatsheet degrades to empty string.
+            _fix_cheatsheet = ""
+            try:
+                from pipeline import _CTX as _pf_ctx
+                _bc_fix_fn = getattr(_pf_ctx, '_cartridge_build_bridge_contract', None) if _pf_ctx else None
+                if callable(_bc_fix_fn):
+                    _bc_fix = _bc_fix_fn()
+                    _api_fix  = list((_bc_fix.get("midwayphysics_spawn_api") or {}).keys())
+                    _pool_fix  = list((_bc_fix.get("object_pools") or {}).keys())
+                    _econ_fix  = list((_bc_fix.get("economy_api") or {}).keys())
+                    if _api_fix:
+                        _fix_cheatsheet = (
+                            "\n## \u26a1 Approved Bridge API (exhaustive — use ONLY these names)\n"
+                            + ("Physics: " + ", ".join(_api_fix) + "\n" if _api_fix else "")
+                            + ("Pools:   " + ", ".join(_pool_fix) + "\n" if _pool_fix else "")
+                            + ("Economy: " + ", ".join(_econ_fix) + "\n" if _econ_fix else "")
+                            + "Substitution quick-ref:\n"
+                            + "  SetPosition/Teleport \u2192 MoveKinematic(h,lx,ly,lz,dt)\n"
+                            + "  ApplyForce \u2192 ApplyImpulse(handle,ix,iy,iz)\n"
+                            + "  CheckCollision \u2192 IsSensorTriggered(handle) \u2192 bool\n"
+                            + "  table.clear(t) \u2192 for k in pairs(t) do t[k]=nil end\n"
+                        )
+                        if len(_fix_cheatsheet) > 700:
+                            _fix_cheatsheet = _fix_cheatsheet[:700]
+            except Exception:
+                pass
+
             fix_input = (
                 f"Domain: [{domain}]\n"
                 f"The following {domain} task(s) failed pre-flight checks.\n"
-                f"Errors:\n{TokenBudget._block_aware_collapse(ctx.pre_flight_errors, 1200)}\n"
+                f"Errors:\n{TokenBudget._block_aware_collapse(ctx.pre_flight_errors, 3000)}\n"
+                f"{_fix_cheatsheet}"
                 f"{_anchor_str}"
                 f"CRITICAL OUTPUT FORMAT RULES (violations will be discarded):\n"
                 f"1. Output ONLY working {domain} code. Do NOT output any [DELEGATE:...],"
@@ -794,12 +911,40 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 f"   Example for two tasks:\n"
                 f"   ### task_1\n   ```lua\n   -- corrected code here\n   ```\n\n"
                 f"   ### task_2\n   ```lua\n   -- corrected code here\n   ```\n"
-                f"3. Do NOT invent new API names. Use only approved engine primitives.\n"
+                f"3. Do NOT invent new API names. Use ONLY the exact names from the Approved Bridge API list above.\n"
             )
 
-            # Use domain-specific system prompt if available, else ARCHITECT_FIX_SYSTEM
-            from domain_registry import get_agent_system as _get_sys
-            domain_system = _get_sys(domain) or _prompts_mod.ARCHITECT_FIX_SYSTEM
+            # Build a compact, repair-specific system prompt for the fix call.
+            # Deliberately does NOT use get_agent_system(domain): that function
+            # injects the full Lua runtime prompt + mesh protocol + virtual-memory
+            # protocol (~11.8 k chars), leaving only ~469 chars for user content
+            # and causing the model to produce scaffolds instead of real repairs.
+            # The fix model already receives the approved API cheatsheet and anchor
+            # code in the user message, so a short repair mandate is sufficient.
+            _base_fix_system = _prompts_mod.ARCHITECT_FIX_SYSTEM
+            # Append the domain-specific prohibitions from the cartridge so the
+            # fix model still knows phantom APIs and lifecycle rules, but skip
+            # the full ledger, mesh, and virtual-memory protocols.
+            _domain_prohibitions = ""
+            try:
+                from pipeline import _CTX as _pf_ctx2
+                if _pf_ctx2:
+                    _cart = getattr(_pf_ctx2, 'mounted_cartridge', None)
+                    if _cart:
+                        _cart_domain = _cart.domains.get(domain)
+                        if _cart_domain:
+                            _sp = _cart_domain.system_prompt or ""
+                            # Extract only up to 1800 chars from the domain prompt
+                            # (enough for lifecycle + bridge rules) — no mesh/ledger.
+                            _domain_prohibitions = "\n\n## Domain Rules (summary)\n" + _sp[:1800]
+                    if not _domain_prohibitions:
+                        _ctx_reg = getattr(_pf_ctx2, 'domain_registry', None) or {}
+                        _dreg = _ctx_reg.get(domain, {})
+                        if isinstance(_dreg, dict) and _dreg.get('system_prompt'):
+                            _domain_prohibitions = "\n\n## Domain Rules (summary)\n" + _dreg['system_prompt'][:1800]
+            except Exception:
+                pass
+            domain_system = _base_fix_system + _domain_prohibitions
 
             # Use domain-specific model: prefer live cartridge registry, then kernel dict
             _live_registry = getattr(ctx, 'domain_registry', None) or {}
@@ -814,6 +959,10 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 domain_system, fix_input,
                 f"Architect Syntax Fix [{domain}]", fix_model
             )
+
+            # Strip the <fix-plan> reasoning block so it never contaminates
+            # SEARCH/REPLACE extraction or gets stored as generated code.
+            fixed_str = re.sub(r"<fix-plan>.*?</fix-plan>", "", fixed_str, flags=re.DOTALL).strip()
 
             # ── Primary extraction: LLM used required ### task_N headers ────
             # The regex tolerates any trailing label the model echoes after the
@@ -891,7 +1040,138 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                             except Exception:
                                 pass
                 else:
+                    # The batch arch-fix model returned nothing usable for these
+                    # tasks.  Rather than retaining known-broken output and cycling
+                    # into the next review/fix loop with the same errors, re-execute
+                    # each failing task individually through its original scripter
+                    # agent — the same path that produced the first output — but
+                    # with the preflight errors injected as targeted feedback into
+                    # task.context so the model knows exactly what to fix.
+                    #
+                    # Guard rails:
+                    #   - Circuit breaker: if retry_counts[tid] >= 3 we stop
+                    #     re-executing (same threshold as the wave validator) to
+                    #     prevent an infinite spin on a task the model genuinely
+                    #     cannot solve.  The broken output is retained as-is and
+                    #     the review cycle will surface it as a hard failure.
+                    #   - execute_task is imported lazily to avoid circular imports
+                    #     (preflight → _helpers_exec → pipeline → preflight).
+                    #   - task.context is temporarily extended with a focused error
+                    #     summary then restored, so the retry is self-contained and
+                    #     doesn't pollute later iteration context.
+                    #   - If execute_task itself raises, the broken output is kept
+                    #     and a warning is printed — we never crash the pipeline.
+                    try:
+                        from _helpers_exec import execute_task as _exec_task
+                    except ImportError:
+                        _exec_task = None
+
                     for tid in unapplied:
-                        print(f"  [Arch Fix] ⚠ No valid fallback block for {tid} ({domain}) — retaining previous output.")
+                        _strike = ctx.retry_counts.get(tid, 0)
+                        if _strike >= 3:
+                            print(f"  [Arch Fix] ⛔ Circuit breaker: {tid} ({domain}) "
+                                  f"has {_strike} strike(s) — skipping re-execution, "
+                                  f"retaining broken output.")
+                            continue
+
+                        if _exec_task is None:
+                            print(f"  [Arch Fix] ⚠ execute_task unavailable for {tid} "
+                                  f"({domain}) — retaining previous output.")
+                            continue
+
+                        task_obj = ctx.task_map.get(tid)
+                        if not task_obj:
+                            print(f"  [Arch Fix] ⚠ No task object for {tid} "
+                                  f"({domain}) — retaining previous output.")
+                            continue
+
+                        # Build a compact, focused error summary for this task only.
+                        # Pull only the violation blocks that mention this tid so
+                        # the model isn't distracted by sibling errors.
+                        _per_task_errors = "\n".join(
+                            line for line in (ctx.pre_flight_errors or "").splitlines()
+                            if tid in line or "## Static Pattern" in line
+                               or "## Arg Count" in line or "## Phantom" in line
+                               or "## Duplicate" in line or "## Scope" in line
+                        )
+                        if not _per_task_errors.strip():
+                            _per_task_errors = TokenBudget._block_aware_collapse(
+                                ctx.pre_flight_errors, 600
+                            )
+
+                        _error_injection = (
+                            f"\n\n## ⚠ Pre-Flight Failures — You MUST fix ALL of these\n"
+                            f"{_per_task_errors}\n"
+                            f"Re-implement the task correctly. "
+                            f"Do NOT repeat any of the violations listed above."
+                        )
+
+                        # Temporarily extend task.context with the error feedback.
+                        _saved_context = task_obj.context or ""
+                        task_obj.context = _saved_context + _error_injection
+
+                        ctx.retry_counts[tid] = _strike + 1
+                        print(f"  [Arch Fix] 🔁 Re-executing {tid} ({domain}) via "
+                              f"original scripter (strike {ctx.retry_counts[tid]}/3)...")
+
+                        try:
+                            _new_output = _exec_task(
+                                task_obj,
+                                user_prompt=ctx.user_prompt,
+                                director_output=ctx.director_output,
+                                all_results=ctx.all_results_dict,
+                                file_context="",
+                                gdd_context=ctx.gdd_context,
+                            )
+                            # If Ollama is down, execute_task returns a fatal
+                            # error sentinel.  Stop retrying this task — the
+                            # circuit breaker will already be armed, and we
+                            # must not overwrite existing output with an error
+                            # string that looks like code to downstream phases.
+                            try:
+                                from ollama_client import is_fatal_ollama_error as _is_fatal
+                            except ImportError:
+                                _is_fatal = None
+                            if _is_fatal and _is_fatal(_new_output):
+                                print(f"  [Arch Fix] ⛔ Ollama error during re-execution of "
+                                      f"{tid} ({domain}) — aborting retries for this task.")
+                                ctx.retry_counts[tid] = 3  # arm circuit breaker
+                            elif (_new_output and _new_output.strip()
+                                    and not _is_comment_only(_new_output)
+                                    and _task_has_code(_new_output)):
+                                ctx.all_results_dict[tid] = _new_output
+                                print(f"  [Arch Fix] ✅ Re-execution produced valid output "
+                                      f"for {tid} ({domain}).")
+                                try:
+                                    from ledger import update_internal_api_ledger
+                                    update_internal_api_ledger(_new_output, domain)
+                                except Exception:
+                                    pass
+                            else:
+                                print(f"  [Arch Fix] ⚠ Re-execution output for {tid} "
+                                      f"({domain}) is empty/comment-only — retaining "
+                                      f"previous output.")
+                        except Exception as _re_err:
+                            print(f"  [Arch Fix] ⚠ Re-execution raised for {tid} "
+                                  f"({domain}): {_re_err} — retaining previous output.")
+                        finally:
+                            # Always restore context so later iterations are clean.
+                            task_obj.context = _saved_context
+
+    # ── Post-Fix Re-Validation ─────────────────────────────────────────────
+    # After the arch-fix cycle patches task outputs, re-run the static checks
+    # so ctx.pre_flight_errors reflects only violations that are STILL present.
+    # Without this, the review loop's PASS-override at line ~535 of
+    # _finalize_review.py would block approval on errors that were already fixed.
+    if ctx.pre_flight_errors:
+        print("  [Pre-Flight] Re-validating after arch-fix to clear resolved errors...")
+        ctx.pre_flight_errors = ""
+        _inject_empty_output_errors(ctx)
+        _inject_static_pattern_errors(ctx)
+        if ctx.pre_flight_errors:
+            print(f"  [Pre-Flight] ⚠ {ctx.pre_flight_errors.count('## Static') + ctx.pre_flight_errors.count('## Empty')} "
+                  f"violation(s) remain after arch-fix.")
+        else:
+            print("  [Pre-Flight] ✅ All violations resolved after arch-fix.")
 
     return ctx

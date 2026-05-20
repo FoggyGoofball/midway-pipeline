@@ -27,6 +27,11 @@ def _run_conflict_resolution(ctx: PipelineContext) -> PipelineContext:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## Phase 5: Conflict Resolution\n")
 
+    # Prefer live cartridge registry for CONF so cartridge-overridden mediator prompts are used.
+    _live_dr = getattr(ctx, 'domain_registry', None) or {}
+    _conf_domain = _live_dr.get('CONF') or ALL_DOMAINS.get('CONF') or {}
+    _conf_system = _conf_domain.get('system_prompt', 'You are a conflict resolution mediator.')
+
     ctx.conflict_resolutions = []
     for veto in ctx.all_vetos:
         target = resolve_agent_name(veto["target"])
@@ -46,10 +51,13 @@ def _run_conflict_resolution(ctx: PipelineContext) -> PipelineContext:
                 f"## Output that triggered VETO\n{ctx.all_results_dict[veto['task_id']]}\n\n"
             )
 
+        from pipeline import DIRECTOR_MODEL as _director_model
         conflict_output = call_ollama(
-            ALL_DOMAINS["CONF"]["system_prompt"],
+            _conf_system,
             conflict_prompt,
             f"Conflict Resolution: {veto['from']} vs {veto['target']}",
+            _director_model,
+            skip_pre_summarizer=True,
         )
         ctx.conflict_resolutions.append(conflict_output)
         ctx.output_parts.append(
@@ -73,10 +81,13 @@ def _run_conflict_resolution(ctx: PipelineContext) -> PipelineContext:
                 f"## Output that triggered OBJECT\n{ctx.all_results_dict[obj['task_id']]}\n\n"
             )
 
+        from pipeline import DIRECTOR_MODEL as _director_model
         object_output = call_ollama(
-            ALL_DOMAINS["CONF"]["system_prompt"],
+            _conf_system,
             object_prompt,
             f"Conflict Resolution: {obj['from']} OBJECTS {obj['target']}",
+            _director_model,
+            skip_pre_summarizer=True,
         )
         ctx.conflict_resolutions.append(object_output)
         ctx.output_parts.append(

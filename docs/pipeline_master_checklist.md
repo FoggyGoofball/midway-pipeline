@@ -3,7 +3,7 @@
 > **Purpose:** Single-source-of-truth reference for pipeline features and invariants.  
 > Feed this to agents alongside prompts to ensure all features survive successive edits.  
 > **Refactored from monolithic `pipeline.py` (4,489 lines) into discrete modules.**  
-> **Orchestrator:** `midway-pipeline/pipeline.py` (357 lines) — thin coordinator only.  
+> **Orchestrator:** `midway-pipeline/pipeline.py` (593 lines) — thin coordinator only.  
 > **Last Verified:** 2026-05-05 — refactored module locations audited, 80/80 tests pass.
 
 ---
@@ -14,24 +14,33 @@ After refactoring, the monolithic pipeline was split into the following modules:
 
 | Module | Lines | Contains |
 |--------|-------|----------|
-| `pipeline.py` | 357 | Thin orchestrator, config, main entry, CLI |
-| `_prompts.py` | 175 | All 13 system prompt strings |
-| `_pipeline_helpers.py` | 645 | Doc cache, intent classification, librarian, project state, director, file tools, task execution, failure report |
+| `pipeline.py` | 593 | Thin orchestrator, config, CLI, _overwrite_constants_from_config() |
+| `_prompts.py` | 350 | 15 system prompt strings + VIRTUAL_MEMORY_PROTOCOL |
+| `_pipeline_helpers.py` | 217 | Doc cache, intent classification, project state, director, file tools, task execution, failure report |
 | `_mesh_api.py` | 213 | Mesh work queue, conflict resolution, progressive output |
-| `domain_registry.py` | 395 | `ALL_DOMAINS`, `AGENT_ALIAS_MAP`, `PERSONA_MAP`, `resolve_agent_name()`, `get_agent_system()` |
-| `signals.py` | 145 | Signal pattern parsing, `extract_signals()`, `extract_double_check()`, `get_verdict()` |
-| `models.py` | 262 | `SignalType`, `MeshSignal`, `ConsensusResult`, `Task`, `PipelineContext` |
-| `mesh_loops.py` | 475 | `run_fetches()` (Phases 0.5–3), `run_tasks()` (Phase 4) |
-| `mesh_finalize.py` | 660 | `run_code_merge()` (Phases 5–8), review-fix loop, consensus, final approval |
-| `ollama_client.py` | — | `call_ollama()`, `call_ollama_streamed()` |
-| `token_budget.py` | — | `TokenBudget` class |
-| `offload_store.py` | — | `OffloadStore` class |
-| `checkpoint.py` | — | `save_checkpoint()`, `load_checkpoint()`, `list_checkpoints()` |
-| `file_references.py` | — | `parse_file_references()`, `fetch_referenced_files()` |
-| `ledger.py` | — | `log_to_session_timeline()`, `ensure_ledger_header()`, `_append_to_ledger()` |
-| `gdd_extractor.py` | — | `extract_gdd_sections()`, `search_memory()` |
-| `fetch_handler.py` | — | `handle_fetch_signal()`, `read_offloaded_file()`, `_page_out_context()` |
-| `tagsuggester.py` | — | `TagSuggester` class |
+| `_finalize_preflight.py` | 196 | Pre-compilation file sync, SEARCH/REPLACE sanitization, domain-isolated circuit breaker |
+| `_finalize_conflicts.py` | 86 | VETO/OBJECT conflict resolution mediation |
+| `_finalize_review.py` | 450 | Review-fix loop, Architect fix cycle, consensus gate |
+| `_domain_sandbox.py` | 182 | Domain enforcement, extension whitelist, cross-domain write blocking |
+| `domain_registry.py` | 595 | `ALL_DOMAINS`, `AGENT_ALIAS_MAP`, `PERSONA_MAP`, runtime model resolution |
+| `signals.py` | 163 | Signal pattern parsing, `extract_signals()`, `extract_double_check()`, `get_verdict()` |
+| `models.py` | 369 | `SignalType` (14 signals), `MeshSignal`, `ConsensusResult`, `Task`, `PipelineContext`, `OrchestrationConfig` |
+| `mesh_loops.py` | 1312 | `run_fetches()` (Phases 0.5–3), `run_tasks()` (Phase 4 DAG waves) |
+| `mesh_finalize.py` | 708 | `run_code_merge()` (Phases 5–8), review-fix loop, consensus, final approval |
+| `ollama_client.py` | 640 | `call_ollama()`, `call_ollama_streamed()`, `_cooldown_and_retry()`, context-tiered model parsing |
+| `paging_kernel.py` | 936 | `PagingController`, `_resolve_dynamic_page_limit()`, `execute_page_in()`, ghost buffer resume |
+| `token_budget.py` | 266 | `TokenBudget` class |
+| `offload_store.py` | 220 | `OffloadStore` class |
+| `checkpoint.py` | 77 | `save_checkpoint()`, `load_checkpoint()`, `list_checkpoints()` |
+| `file_references.py` | 162 | `parse_file_references()`, `fetch_referenced_files()` |
+| `ledger.py` | 391 | `log_to_session_timeline()`, `ensure_ledger_header()`, `_append_to_ledger()` |
+| `gdd_extractor.py` | 461 | `extract_gdd_sections()`, `search_memory()` |
+| `context_extractor.py` | 146 | `extract_project_context()` |
+| `fetch_handler.py` | 257 | `handle_fetch_signal()`, `read_offloaded_file()`, `_page_out_context()` |
+| `tagsuggester.py` | 131 | `TagSuggester` class |
+| `pipeline_session.py` | 312 | `SessionManager` class, session isolation |
+| `pipeline_stream.py` | 208 | Stream generator with Queue, ping/keep-alive |
+| `pipeline_stream_server.py` | 379 | SSE HTTP server, StreamHandler |
 
 ---
 
@@ -66,37 +75,37 @@ User sees results in VS Code
 
 | Role | Model | Size | When |
 |------|-------|------|------|
-| **Coder** | `qwen2.5-coder:7b` | 7B | Core code generation (C++/Lua) |
-| **Director** | `phi-3:14b-q4_K_M` | 14B Q4 | Task decomposition, routing, review |
-| **Conflict Resolution** | `phi-3:14b-q4_K_M` | 14B Q4 | VETO/OBJECT negotiation |
-| **Diagnostic Oracle** | `phi-3:14b-q4_K_M` | 14B Q4 | Multi-turn diagnostic sessions |
+| **Coder** | `qwen3.5:9b` | 9B | Core code generation (C++/Lua) — AST synthesis |
+| **Director** | `llama3.1:8b-instruct-q4_K_M` | 8B | Task decomposition, routing, review |
+| **Reviewer** | `phi3.5:latest` | ~3.8B | Macro-review/Oracle — massive context (65536) for document evaluation |
+| **Analyst** | `phi3.5:latest` | ~3.8B | Project analysis, GDD synthesis |
+| **Conflict Resolution** | `phi3.5:latest` | ~3.8B | VETO/OBJECT negotiation |
+| **Diagnostic Oracle** | `phi3.5:latest` | ~3.8B | Multi-turn diagnostic sessions |
 | **Librarian** | `llama3.1:8b-instruct-q4_K_M` | 8B | Read-only research, memory TOC navigation |
-| **Syntax Gate (micro)** | `qwen2.5-coder-1.5b` | 1.5B | Fast pre-flight syntax checks on generated code |
-| **Intent Classifier (micro)** | `llama-3.2-1b` | 1B | Zero-shot MODIFICATION vs QUERY gate — lightweight, no reasoning needed |
+| **Syntax Gate (micro)** | `qwen2.5-coder:1.5b` | 1.5B | Fast pre-flight syntax checks on generated code |
+| **Intent Classifier (micro)** | `llama3.2:1b` | 1B | Zero-shot MODIFICATION vs QUERY gate |
 
-**Primary models are 7-14B for real work.** Review/reasoning roles use `phi-3:14b-q4_K_M` (14B Q4, ~8GB VRAM), code generation uses `qwen2.5-coder:7b` (7B), and `llama3.1:8b` is retained as a fallback reference. Micro-models (1-1.5B) are reserved for:
-- Intent classification (no reasoning required, just pattern matching)
-- Pre-flight syntax pass/fail on generated code
-- Quick routing decisions
-
-Model swap latency (~3-5 seconds for 7-14B models, ~1 second for micro-models) is acceptable — the pipeline is single-shot sequential with no tight-loop model swapping.
+**Compute topology:** Qwen 3.5 9B for AST synthesis (32768 context), Phi-3.5-mini as macro-reviewer/oracle (65536 context for document evaluation), Llama 3.1 8B as librarian fallback. Micro-models (1-1.5B) reserved for intent classification and pre-flight syntax.
 
 ### Model Registry Constants
 
-**File:** `pipeline.py` lines 138-148
+**File:** `pipeline.py` lines 145-156, `domain_registry.py` lines 22-26, `models.py` lines 37-55 (`OrchestrationConfig`)
 
 ```python
-CODER_MODEL = "qwen2.5-coder:7b"
-REVIEWER_MODEL = "phi-3:14b-q4_K_M"
+CODER_MODEL = "qwen3.5:9b"
+REVIEWER_MODEL = "phi3.5:latest"
+ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
 LIBRARIAN_MODEL = "llama3.1:8b-instruct-q4_K_M"
 SYNTAX_GATE_MODEL = "qwen2.5-coder:1.5b"
 INTENT_CLASSIFIER_MODEL = "llama3.2:1b"
+DIRECTOR_MODEL = "llama3.1:8b-instruct-q4_K_M"
 CHAT_MODEL = CODER_MODEL
 EXECUTION_MODEL = CODER_MODEL
 REASONING_MODEL = REVIEWER_MODEL
 MODEL = EXECUTION_MODEL
-DIRECTOR_MODEL = "llama3.1:8b-instruct-q4_K_M"
+OLLAMA_NUM_CTX = 32768   # baseline
+OLLAMA_TIMEOUT = 600     # elevated for massive pre-fill
 ```
 
 ---
@@ -456,7 +465,7 @@ All located in **`signals.py`** and **`models.py`**:
 
 | # | Class/Function | Module & Lines | Purpose |
 |---|----------------|----------------|---------|
-| 1 | `class SignalType(Enum)` | `models.py` L14-24 | Enum of all 9 signal types (QUERY, DELEGATE, RESULT, APPROVE, REVISE, VETO, OBJECT, RECOURSE, CONSULT) |
+| 1 | `class SignalType(Enum)` | `models.py` L14-33 | Enum of 14 signals: QUERY, DELEGATE, RESULT, APPROVE, REVISE, VETO, OBJECT, RECOURSE, CONSULT, APPEAL, MERGE, REJECT, MATH_EVAL, FETCH, READ_OFFLOADED, EXTRACT_SKELETON, FLUSH, REQUEST_API |
 | 2 | `class MeshSignal` | `models.py` L26-57 | Data class with `to_dict()` for REST serialization |
 | 3 | `extract_signals()` | `signals.py` L46-70 | Structured signal extractor |
 | 4 | `parse_signal()` | `signals.py` L121-145 | Returns MeshSignal objects |
@@ -489,10 +498,12 @@ All located in **`pipeline.py`** lines 136-161:
 | Constant | Current Value | Notes |
 |----------|---------------|-------|
 | `OLLAMA_HOST` | `http://192.168.0.16:11434` | Steam Deck address |
-| `CODER_MODEL` | `qwen2.5-coder:7b` | 7B primary |
-| `REVIEWER_MODEL` | `phi-3:14b-q4_K_M` | 14B Q4 — deeper reasoning |
-| `FALLBACK_REVIEWER_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B fallback reference |
-| `LIBRARIAN_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B librarian |
+| `CODER_MODEL` | `qwen3.5:9b` | 9B — AST synthesis |
+| `REVIEWER_MODEL` | `phi3.5:latest` | ~3.8B — macro-review, massive context (65536) |
+| `ANALYST_MODEL` | `phi3.5:latest` | Same as REVIEWER_MODEL |
+| `FALLBACK_REVIEWER_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B fallback |
+| `LIBRARIAN_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B research |
+| `DIRECTOR_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B task decomposition |
 | `SYNTAX_GATE_MODEL` | `qwen2.5-coder:1.5b` | 1.5B micro-model |
 | `INTENT_CLASSIFIER_MODEL` | `llama3.2:1b` | 1B micro-model |
 | `MAX_ITERATIONS` | `3` | Per-task self-correction limit |
@@ -501,8 +512,8 @@ All located in **`pipeline.py`** lines 136-161:
 | `REVIEW_MAX_ITERATIONS` | `3` | Review→fix→re-review cycles |
 | `SCOPE_FILE_LIMIT` | `5` | Files before TOO_BROAD |
 | `SCOPE_LINE_LIMIT` | `400` | Lines before TOO_BROAD |
-| `OLLAMA_TIMEOUT` | `420` | Seconds (7 min) |
-| `OLLAMA_NUM_CTX` | `32768` | 32K input context (KV cache q8_0) |
+| `OLLAMA_TIMEOUT` | `600` | Seconds (10 min — elevated for massive pre-fill) |
+| `OLLAMA_NUM_CTX` | `32768` | Baseline context (8192 aux, 32768 primary, 65536 oracle) |
 | `MAX_TOKENS` | `12000` | Output token ceiling |
 
 ---

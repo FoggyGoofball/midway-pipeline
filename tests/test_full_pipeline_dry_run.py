@@ -230,13 +230,17 @@ class TestFullPipelineDryRun:
         """Run the refactored pipeline with mocked LLM calls."""
         from pipeline import run_pipeline
 
+        # Patch LLM calls AND the Ollama health-check so no real HTTP traffic
         with patch("pipeline.call_ollama", side_effect=_make_canned_ollama):
             with patch("pipeline.call_ollama_streamed",
                        side_effect=_make_canned_streamed):
-                import ollama_client
-                with patch.object(ollama_client, "call_ollama",
-                                  side_effect=_make_canned_ollama):
-                    output = run_pipeline(prompt)
+                with patch("urllib.request.urlopen") as mock_health:
+                    mock_health.return_value.__enter__.return_value.status = 200
+                    mock_health.return_value.__enter__.return_value.read.return_value = b'{"models":[]}'
+                    import ollama_client
+                    with patch.object(ollama_client, "call_ollama",
+                                      side_effect=_make_canned_ollama):
+                        output = run_pipeline(prompt)
         return output
 
     # ── Baseline monolith runner ───────────────────────────────────────

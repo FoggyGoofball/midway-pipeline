@@ -9,20 +9,92 @@ No async/await — purely synchronous.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import platform
 import re
-import sys
-import subprocess
-import textwrap
-import time
-from collections import deque
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from _helpers_exec import PROJECT_ROOT
+# ── Local constant — no sibling cross-import ──────────────────────────────
+PROJECT_ROOT: Path = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway")))
+
+# ── Phase IV: Uncommitted Virtual Staging Filesystem (AIOS Alignment) ─────
+# Global staging flag — when True, all atomic_write_text calls redirect to
+# .staging_workspace/ replicating the parent directory layout.
+_STAGING_ACTIVE: bool = False
+_STAGING_DIR: Optional[Path] = None
+
+
+def enable_staging(project_root: Optional[Path] = None) -> Path:
+    """Enable staged filesystem mode. All subsequent atomic_write_text calls
+    will write to .staging_workspace/ instead of the target path.
+    
+    Returns the staging root directory.
+    """
+    global _STAGING_ACTIVE, _STAGING_DIR
+    pr = project_root or PROJECT_ROOT
+    _STAGING_DIR = pr / ".staging_workspace"
+    _STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    _STAGING_ACTIVE = True
+    print(f"  [Staging FS] ✅ Staging enabled — writes redirected to {_STAGING_DIR}")
+    return _STAGING_DIR
+
+
+def disable_staging() -> None:
+    """Disable staged filesystem mode. Writes return to normal."""
+    global _STAGING_ACTIVE
+    _STAGING_ACTIVE = False
+    print(f"  [Staging FS] ⏹ Staging disabled — writes target real paths")
+
+
+def is_staging_active() -> bool:
+    """Check whether staging mode is currently active."""
+    return _STAGING_ACTIVE
+
+
+def get_staging_path(target_path: Path, project_root: Optional[Path] = None) -> Path:
+    """Map a real target path to its .staging_workspace/ equivalent.
+    
+    Given a target like /project/src/Engine.cpp, returns
+    /project/.staging_workspace/src/Engine.cpp, mirroring the relative layout.
+    """
+    pr = (project_root or PROJECT_ROOT).resolve()
+    staging_root = _STAGING_DIR or (pr / ".staging_workspace")
+    try:
+        rel = target_path.resolve().relative_to(pr)
+        return (staging_root / rel).resolve()
+    except ValueError:
+        return target_path  # fallback: use original path if outside project
+
+
+def commit_staging(project_root: Optional[Path] = None) -> int:
+    """Atomic single-pass sync: mirror all .staging_workspace/ files back
+    onto the primary codebase roots. Returns the number of files synced."""
+    pr = (project_root or PROJECT_ROOT).resolve()
+    staging_root = _STAGING_DIR or (pr / ".staging_workspace")
+    if not staging_root.is_dir():
+        print(f"  [Staging FS] ⚠ No staging directory found at {staging_root}")
+        return 0
+    
+    count = 0
+    for staged_file in sorted(staging_root.rglob("*")):
+        if not staged_file.is_file():
+            continue
+        try:
+            rel = staged_file.relative_to(staging_root)
+            target = (pr / rel).resolve()
+            # Ensure target parent exists
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Copy staged content to target
+            content = staged_file.read_bytes()
+            target.write_bytes(content)
+            count += 1
+            print(f"  [Staging FS] ✅ Synced {rel}")
+        except Exception as e:
+            print(f"  [Staging FS] ⚠ Error syncing {staged_file}: {e}")
+    
+    print(f"  [Staging FS] 📦 Sync complete — {count} files transferred")
+    return count
 
 
 # ── Audio Chime Utility ─────────────────────────────────────────────────────
@@ -358,9 +430,6 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
         "dev console":  ["src/DevConsole.cpp", "src/DevConsole.h"],
         "dialog":       ["resources/dialog.json"],
         "gdd":          ["GDD/"],
-        "jolt":         ["docs/jolt_api.md"],
-        "box2d":        ["docs/box2d_api.md"],
-        "sol2":         ["docs/sol2_api.md"],
         "opengl":       ["docs/opengl_sdl_api.md"],
         "sdl":          ["docs/opengl_sdl_api.md"],
     }
@@ -391,16 +460,24 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
     for key, rule_path in rule_map.items():
         if key in persona_lower:
             candidate_paths.add(rule_path)
-    candidate_paths.add("docs/engine_lua_bridge_contract.md")
-    candidate_paths.add("docs/rules_review.md")
-    candidate_paths.add("docs/rules_logging.md")
+    # Bridge contract: only relevant to Lua and C++/PHYS execution agents,
+    # not to reviewers, observability, or generic personas.
+    if any(k in persona_lower for k in ("lua", "c++", "phys", "physics", "coder", "scripter")):
+        candidate_paths.add("docs/engine_lua_bridge_contract.md")
+    # Review rules: only for the reviewer persona
+    if "review" in persona_lower:
+        candidate_paths.add("docs/rules_review.md")
+    # Logging rules: only for the observability / logging persona
+    if any(k in persona_lower for k in ("observ", "log", "audit")):
+        candidate_paths.add("docs/rules_logging.md")
     if not candidate_paths:
-
         candidate_paths = {
             "src/Engine.h", "src/AttractionManager.h",
             "docs/rules_cpp.md", "docs/rules_lua.md",
-            "docs/engine_lua_bridge_contract.md",
         }
+        # Only add the bridge contract in the fallback if this is a code-execution persona
+        if any(k in persona_lower for k in ("lua", "c++", "phys", "physics", "coder", "scripter")):
+            candidate_paths.add("docs/engine_lua_bridge_contract.md")
     for rel_path in sorted(candidate_paths):
         full_path = pr / rel_path
         if full_path.is_file():
@@ -478,6 +555,64 @@ def search_memory(query: str = "", project_root: Path = None) -> str:
     return "\n\n".join(results)
 
 
+# ── Blueprint Context Pack ─────────────────────────────────────────────────
+
+def build_blueprint_context_pack(
+    gdd_context: str = "",
+    project_state: str = "",
+    structure: str = "",
+    project_root: Path = None,
+    ast_summary: str = "",
+    gdd_limit: int = 4000,
+    state_limit: int = 2500,
+    structure_limit: int = 2000,
+) -> str:
+    """Assemble a structured context pack for the blueprint (Lead Producer) agent.
+
+    Combines GDD context, current project state, directory structure, and the
+    workspace AST index into a single string sized to stay within the model's
+    context budget.  Large-file hints from the AST index tell the agent which
+    files require targeted PAGE_IN so it never tries to read them wholesale.
+
+    Args:
+        gdd_context:    Raw GDD text (will be capped at gdd_limit chars).
+        project_state:  Current project state text (capped at state_limit chars).
+        structure:      Directory structure text (capped at structure_limit chars).
+        project_root:   Project root for resolving memory files (optional).
+        ast_summary:    Pre-formatted AST index from ProjectTopology.format_ast_summary().
+        gdd_limit:      Max chars to include from the GDD context.
+        state_limit:    Max chars to include from the project state.
+        structure_limit: Max chars to include from the directory structure.
+
+    Returns:
+        A markdown-formatted context pack string.
+    """
+    parts: List[str] = []
+
+    if gdd_context:
+        snip = gdd_context[:gdd_limit]
+        if len(gdd_context) > gdd_limit:
+            snip += f"\n[... GDD truncated at {gdd_limit} chars. Use FILE_READ or PAGE_IN for full content ...]"
+        parts.append(f"## GDD Context\n{snip}")
+
+    if project_state:
+        snip = project_state[:state_limit]
+        if len(project_state) > state_limit:
+            snip += f"\n[... project state truncated at {state_limit} chars ...]"
+        parts.append(f"## Current Project State\n{snip}")
+
+    if structure:
+        snip = structure[:structure_limit]
+        if len(structure) > structure_limit:
+            snip += f"\n[... structure truncated at {structure_limit} chars ...]"
+        parts.append(f"## Project Directory Structure\n{snip}")
+
+    if ast_summary:
+        parts.append(ast_summary)
+
+    return "\n\n".join(parts) if parts else "(no project context available)"
+
+
 # ── Atomic File Write Helper ──────────────────────────────────────────────
 
 def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
@@ -485,7 +620,21 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
 
     Writes to a .tmp file first, flushes, then atomically renames to target.
     This prevents half-written files if the process is interrupted.
+
+    ── Phase IV: AIOS Staging Hook ─────────────────────────────────────
+    When staging is active, the target path is automatically redirected to
+    .staging_workspace/ to prevent dirty reads on the native source tree.
     """
+    # ── Phase IV: Redirect to staging workspace if active ────────────
+    if _STAGING_ACTIVE and _STAGING_DIR is not None:
+        staging_path = get_staging_path(path)
+        staging_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = staging_path.with_suffix(staging_path.suffix + '.tmp')
+        tmp_path.write_text(content, encoding=encoding)
+        tmp_path.touch()
+        tmp_path.replace(staging_path)
+        return
+
     tmp_path = path.with_suffix(path.suffix + '.tmp')
     tmp_path.write_text(content, encoding=encoding)
     # Ensure data is flushed to disk by touching the file

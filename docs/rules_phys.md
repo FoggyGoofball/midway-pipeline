@@ -1,11 +1,12 @@
 # Physics Architecture Review Checklist — Midway to Nowhere
-## Jolt Physics (3D) & Box2D (2D) Validation
+## Unified Jolt Physics Standard Validation
 
-### Engine Selection & Isolation
-- [ ] **3D attractions** (Coin Cascade, Claw Machine, Roulette Chamber, Globe of Death) use **Jolt Physics** exclusively.
-- [ ] **2D attractions** (Crumbling Façade, Plinko, Slingshot, Bumper Cars) use **Box2D** exclusively.
-- [ ] **Never mix** Jolt and Box2D in a single attraction. One attraction = one physics engine.
-- [ ] Jolt and Box2D run on **separate physics ticks**. Do not share timesteps or substep counts.
+### Engine Selection & Isolation (Unified Jolt Standard)
+- [ ] **ALL attractions** — both 3D volumetric (Coin Cascade, Claw Machine, Roulette Chamber, Globe of Death) and 2D planar (Crumbling Façade, Plinko, Slingshot, Bumper Cars) — run inside the **global Jolt Physics world**.
+- [ ] **Box2D is fully deprecated.** No Box2D initialization vectors, physics ticks, body creation, or API references anywhere in the codebase.
+- [ ] **3D volumetric attractions** use unconstrained Jolt rigid bodies (full 6-DOF).
+- [ ] **2D planar attractions** are modeled via **Degree-of-Freedom (DOF) constraints**: Z-translation locked, X/Y rotation locked, Z-only rotation permitted. Bodies remain confined to the XY plane inside the global Jolt world.
+- [ ] Single fixed-timestep accumulator (60 Hz) drives all physics. No separate tick rates for different modules.
 
 ### Vicious Cycle — Teleportation Stability
 - [ ] Teleport trigger: `|playerZ| >= 150.0f`. Check this every physics step.

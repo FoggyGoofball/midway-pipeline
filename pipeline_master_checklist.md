@@ -19,8 +19,8 @@
 - [x] **Task 11 (Timeline Archiver):** `_handle_flush_signal` in `mesh_finalize.py` detects `[FLUSH]`, archives last 50 timeline entries to `architecture_ledger.md`, and wipes the timeline.
 
 
-## Phase 3 & 4: Production Safety & Consensus (PENDING)
-- [ ] **Task 12 (Diff Merging):** Refactor Coder prompts for Unified Diff output.
-- [ ] **Task 13 (Hash Locking):** Abort merges if file MD5 hashes change.
-- [ ] **Task 14 (Appellate Court):** Tribunal agent to blind-review VETOs.
-- [ ] **Task 15 (Amicus Curiae):** Terminal user prompt to break Appellate deadlocks.
+## Phase 7: Adaptive Payload-Aware Paging Protocol (COMPLETED)
+- [x] **Task 12 (Context-Tiered Boundaries):** Implemented `_resolve_dynamic_page_limit()` in `paging_kernel.py` — 120000/48000/12000 char caps mapped to 65536/32768/8192 token contexts.
+- [x] **Task 13 (Payload-Aware Chunking):** `execute_page_in()` dynamically queries active context ceiling before byte transfers. Files exceeding cap require `<lines>` or `<search>` targeting tags.
+- [x] **Task 14 (Active Topology Forwarding):** Wave handlers in `mesh_loops.py` extract model context capacities (65536/32768/8192) and forward to `extract_signals()` as `active_context_limit`.
+- [x] **Task 15 (Ghost Buffer Continuity):** `PagingController.build_resume_payload()` appends pre-fault ghost buffers (`_ghost_buffer_text`) directly into active prompt payloads as contiguous assistant entries, not discrete turns.

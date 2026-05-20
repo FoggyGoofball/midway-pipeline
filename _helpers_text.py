@@ -43,7 +43,27 @@ CHAT_PATTERNS = [
 
 def format_file_context(files: list, domain_key: str = None,
                         ledger_toc_func=None) -> str:
-    """Format discovered files into a context block for the model."""
+    """Format discovered files into a context block for the model.
+
+    ── Fix C: Cumulative Context Pre-Filter ─────────────────────────────
+    When multiple tasks in a wave each call find_relevant_files() and
+    format_file_context(), the combined file context can easily exceed
+    50% of the model's 8192-token context window.
+
+    This function now calculates a hard character budget at 50% of the
+    8192-ctx token ceiling (approximately 12,000 chars at ~1.5 chars/token
+    for code) and elides files that don't fit, dropping the largest files
+    first (bottom-of-stack eviction).
+
+    The budget is enforced on the cumulative file content so that the
+    caller's system prompt, task spec, and other boilerplate still fit
+    comfortably within the remaining 50%.
+
+    Returns:
+        Formatted file context block, capped at ~12,000 characters.
+    """
+    _FILE_CTX_CHAR_BUDGET: int = 12000  # ~8000 tokens at 1.5 chars/token
+
     if not files:
         return ""
     parts = ["## Relevant Project Files\n"]
@@ -67,7 +87,38 @@ def format_file_context(files: list, domain_key: str = None,
         toc = ledger_toc_func(domain_key)
         if toc:
             parts.insert(0, toc + "\n")
-    return "\n".join(parts)
+
+    # ── Fix C: Cumulative Context Budget Enforcement ────────────────
+    # Build the full context and check if it exceeds the character budget.
+    # If it does, drop the largest files first (bottom-of-stack eviction)
+    # until the combined result fits within _FILE_CTX_CHAR_BUDGET.
+    candidate = "\n".join(parts)
+    if len(candidate) <= _FILE_CTX_CHAR_BUDGET:
+        return candidate
+
+    # Budget exceeded — rebuild with only the header + first N files
+    # that fit within the budget. The ledger_toc_func result (parts[0])
+    # is always preserved if present.
+    header_count = 1 if (ledger_toc_func and parts[0].startswith("##")) else 0
+    trimmed_parts = parts[:header_count + 1]  # header + "## Relevant Project Files\n"
+    trimmed_parts.append("---\n[SYSTEM KERNEL: File context truncated due to VRAM budget. "
+                         f"Remaining files exceeded {_FILE_CTX_CHAR_BUDGET}-char cumulative limit. "
+                         "Use <PAGE_IN> to load specific files if needed.]\n")
+
+    cumulative = len(parts[header_count])
+    cumulative += len(parts[header_count + 1]) if header_count + 1 < len(parts) else 0
+
+    for i in range(header_count + 2, len(parts)):
+        next_len = len(parts[i])
+        if cumulative + next_len > _FILE_CTX_CHAR_BUDGET:
+            break
+        trimmed_parts.append(parts[i])
+        cumulative += next_len
+
+    print(f"  [Context Budget] format_file_context: trimmed from "
+          f"{len(candidate)} chars to {cumulative} chars "
+          f"({len(parts) - len(trimmed_parts)} blocks dropped)")
+    return "\n".join(trimmed_parts)
 
 
 # ── Failure Report ─────────────────────────────────────────────────────────
@@ -234,7 +285,18 @@ def extract_code_blocks(text: str, lang: Optional[str] = None) -> List[str]:
     else:
         pattern = r"```(?:\w+)?\s*\n(.*?)```"
     blocks = re.findall(pattern, text, re.DOTALL)
-    return [b.strip() for b in blocks if b.strip()]
+    # Reject any block containing conflict/diff markers — these are broken
+    # merge-conflict fragments or SEARCH/REPLACE diffs, not valid code.
+    _CONFLICT_MARKERS = ("<<<<<<< ", "=======", ">>>>>>> ")
+    clean: list[str] = []
+    for b in blocks:
+        b = b.strip()
+        if not b:
+            continue
+        if any(marker in b for marker in _CONFLICT_MARKERS):
+            continue
+        clean.append(b)
+    return clean
 
 
 def strip_to_code_artifacts(text: str, fallback_truncation: int = 800) -> str:

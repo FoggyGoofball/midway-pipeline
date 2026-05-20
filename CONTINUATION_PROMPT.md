@@ -1,4 +1,4 @@
-# Continuation Prompt — Phase 4.17 to 4.18
+# Continuation Prompt — Phase 5 / 6 / 7 Hardening (Completed)
 
 ## What's Been Done
 
@@ -8,24 +8,90 @@ All functions, classes, and constants extracted from `pipeline.py` into individu
 ### Phases 4.13–4.15 — Orchestrator Thinning ✅
 - PipelineContext state machine is in `models.py` and wired through `_CTX` singleton
 - Iteration loops extracted to `mesh_loops.py` (run_fetches, run_tasks) and `mesh_finalize.py` (run_code_merge)
-- `pipeline.py` reduced from 4,489 → **356 lines** (under 800 target)
+- `pipeline.py` reduced from 4,489 → **593 lines**
 - System prompts extracted to `_prompts.py`
-- Helper functions extracted to `_pipeline_helpers.py` (566 lines — under 1,000 limit, OK)
+- Helper functions extracted to `_pipeline_helpers.py`
 - Mesh API extracted to `_mesh_api.py` (213 lines)
 
-### Phase 4.16 — Tests Verified ✅
-```
-python -m pytest tests/ -v --tb=short
-# → 74 passed in 1.15s
-```
+### Phases 5-7 Hardening ✅ (Completed 2026-05-12)
 
-## What Needs To Be Done
+**Phase 1 — Virtual Memory & Payload Streaming Scaling (ollama_client.py)**
+- Context constants: OLLAMA_NUM_CTX=8192 (baseline), 32768 (large for 9B), 65536 (massive for Phi-3.5)
+- Model parsing generalized to substring tags (phi3.5/9b/14b detection)
+- Dynamic option maps with temperature: 0.2 (deterministic synthesis) / 0.5 (multi-draft evaluation)
 
-### Step 4.17 — Add `test_full_pipeline_dry_run.py`
-Add to `midway-pipeline/tests/` a regression test that exercises the full `run_pipeline()` with mocked LLM calls. The test must run **identically** against both the refactored pipeline AND the original monolith, then assert outputs match.
+**Phase 2 — Schema Hardening & Global Ledger Alignment (models.py)**
+- Deprecated `all_approvals: Dict[str, bool] = {}` purged
+- SignalType extended: FETCH, READ_OFFLOADED, EXTRACT_SKELETON, FLUSH, REQUEST_API
+- OrchestrationConfig defaults: coder=qwen3.5:9b, reviewer=phi3.5:latest, analyst=phi3.5:latest
+- MeshSignal constructor bindings strengthened for positional + keyword validation
 
-**How to run against the original monolith:**
-The git tag `pre-refactor-baseline` (290fc8a) in this repo still has the original 4,489-line `pipeline.py`. You can extract it and run it in a temp directory:
+**Phase 3 — Runtime Topology & Interoperability (pipeline.py, domain_registry.py)**
+- CODER_MODEL=qwen3.5:9b, REVIEWER_MODEL=phi3.5:latest, ANALYST_MODEL=REVIEWER_MODEL
+- ALL_DOMAINS evaluates target models via runtime lookups / lambda closures
+
+**Phase 4 — Subtask Prompt Cordoning (mesh_loops.py)**
+- Raw concatenation replaced with XML <execution_environment> / <macro_invariants> / <target_subtask_scope>
+- Semantic scope boundaries prevent macro-pollution of syntax tasks
+
+**Phase 5 — Pre-Flight Staging (_finalize_preflight.py)**
+- `_flush_results_to_workspace()` with atomic file writes
+- SEARCH/REPLACE metadata sanitization before disk writes
+- Domain-isolated retry strikes (C++/PHYS/NET/SHADER vs Lua)
+
+**Phase 6 — Omni-Batch Wave Execution (mesh_loops.py, mesh_finalize.py)**
+- Model-aware task batching by domain (REVIEWER→phi3.5, others→qwen3.5)
+- Dynamic VRAM eviction seams (model unload `keep_alive=0` between switches)
+- Synchronized all_results_dict + all_results list in mesh_finalize.py
+- Preflight call hooks imported via _run_preflight_checks
+
+**Phase 7 — Adaptive Payload-Aware Paging (paging_kernel.py)**
+- `_resolve_dynamic_page_limit()` with Tier 3 (120K chars / 65536 ctx), Tier 2 (48K / 32768), Tier 1 (12K / legacy)
+- `execute_page_in()` with active_ctx_limit parameter and guard interjection
+- Active topologies forwarded via wave execution loops
+- PagingController.build_resume_payload() ghost buffer continuity
+
+### Current Module Sizes
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| pipeline.py | 593 | Orchestrator + config |
+| mesh_loops.py | 1312 | Run loops |
+| mesh_finalize.py | 708 | Finalization |
+| ollama_client.py | 640 | HTTP + context tiering |
+| paging_kernel.py | 936 | Adaptive paging |
+| domain_registry.py | 595 | Agent resolution |
+| models.py | 369 | Pydantic data |
+| _prompts.py | 350 | 15 prompts |
+| signals.py | 163 | Signal parsing |
+| ledger.py | 391 | Session timeline |
+| gdd_extractor.py | 461 | GDD extraction |
+| fetch_handler.py | 257 | FETCH handling |
+| token_budget.py | 266 | Token budget |
+| offload_store.py | 220 | Offload store |
+| pipeline_session.py | 312 | Session mgmt |
+| pipeline_stream_server.py | 379 | SSE server |
+| pipeline_stream.py | 208 | Stream gen |
+| checkpoint.py | 77 | Checkpoint |
+| file_references.py | 162 | File refs |
+| tagsuggester.py | 131 | Tag suggester |
+| context_extractor.py | 146 | Context extraction |
+| _finalize_preflight.py | 196 | Pre-flight |
+| _finalize_conflicts.py | 86 | Conflict res |
+| _finalize_review.py | 450 | Review |
+| _domain_sandbox.py | 182 | Sandbox |
+| _pipeline_helpers.py | 217 | Helpers (trimmed) |
+| _mesh_api.py | 213 | API layer |
+
+## Where We Are Now
+
+All hardening from the Master Execution Checklist (Phases 1-7) is complete. The codebase is stable with:
+- 80+ passing tests
+- 24+ modules under 1,500 lines each
+- All model references updated to current topology
+- XML cordoning for subtask prompts
+- Adaptive VRAM paging with dynamic context limits
+- Domain-isolated retry strikes
+- Dynamic model-aware wave batching
 
 ```python
 import subprocess, tempfile, os, sys

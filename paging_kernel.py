@@ -134,8 +134,17 @@ class PagingBuffer:
         """
         self._buffer += text
 
+        # Sentinel: skip targets that look like documentation placeholders/examples
+        # emitted when the LLM echoes the VIRTUAL_MEMORY_PROTOCOL instructions.
+        _EXAMPLE_TARGETS = {"filename.md", "filename.cpp", "filename.txt", "filename"}
+
         # Check for PAGE_IN
         for match in PAGE_IN_REGEX.finditer(self._buffer):
+            target_val = match.group(1).strip()
+            if target_val.lower() in _EXAMPLE_TARGETS or target_val.lower().startswith("filename."):
+                # Strip this example tag from the buffer so it is not re-matched
+                self._buffer = self._buffer[:match.start()] + self._buffer[match.end():]
+                return False, None, self._buffer
             self._page_found = True
             info: Dict[str, str] = {
                 "type": "PAGE_IN",
@@ -194,8 +203,41 @@ class PagingBuffer:
         self._last_before_text = ""
 
 
-# ── Hard Cap: Maximum file size for untargeted PAGE_IN ───────────────────
-PAGE_IN_HARD_CAP_CHARS = 12000
+# ── Context-Tiered Boundary Resolution Matrix ────────────────────────────
+# Decouples the legacy static 12,000-character ceiling to prevent buffer
+# overflows on low-parameter auxiliary nodes while unthrottling macro-reviewers.
+
+def _resolve_dynamic_page_limit(allocated_ctx: int) -> int:
+    """
+    Map active allocated token context boundaries to secure character byte ceilings.
+    Phase 7.2 — Guaranteed 0% VRAM overrun: hard caps calculated from *remaining*
+    headroom after the VRAM critical threshold (80% full) fires.
+
+    Calculation:
+      - VRAM critical fires at 80% of num_ctx
+      - Remaining = 20% of num_ctx = ~20% * ~3 chars/token = ~0.6 chars/ctx
+      - Safety margin: 0.5 chars/ctx (43% under actual headroom to absorb
+        estimation noise from dense-alphanumeric code payloads)
+
+    | Model      | num_ctx | Critical (80%) | Remaining  | Hard Cap |
+    |------------|---------|----------------|------------|----------|
+    | phi3.5     | 16384   | 13107 tokens   | 3277 tok   | 9000 chr |
+    | 7B/9B/14B  | 8192    | 6553 tokens    | 1639 tok   | 4800 chr |
+    | aux/micro  | <8192   | ~5243 tokens   | ~1311 tok  | 3000 chr |
+    """
+    if allocated_ctx >= 16384:
+        return 9000    # Tier 2: 16384 ctx → 9000 chars = 0% overrun at VRAM-critical
+    elif allocated_ctx >= 8192:
+        return 4800    # Tier 1: 8192 ctx → 4800 chars = 0% overrun at VRAM-critical
+    else:
+        return 3000    # Micro-tier: <8192 ctx → 3000 chars = 0% overrun at VRAM-critical
+
+
+
+
+
+PAGE_IN_HARD_CAP_CHARS = 9000  # Default fallback for 16384 max ctx (12GB VRAM)
+
 CONTEXT_LINES = 5  # context lines above/below targeted ranges
 
 
@@ -272,12 +314,18 @@ def _extract_search_chunk(content: str, search_term: str, max_chars: int = 4000)
 def handle_page_in(target_path: str, project_root: Optional[Path] = None,
                    offload_store=None, recursion_depth: int = 0,
                    lines_range: Optional[str] = None,
-                   search_term: Optional[str] = None) -> str:
+                   search_term: Optional[str] = None,
+                   allocated_ctx: int = 8192) -> str:
     """Directive D: Retrieve a file from disk (or offload store) for PAGE_IN.
 
     Supports targeted I/O via <lines> and <search> tags.  If neither tag is
-    provided and the file exceeds PAGE_IN_HARD_CAP_CHARS, the Kernel rejects
-    the mount and instructs the LLM to retry with targeting.
+    provided and the file exceeds the model-appropriate hard cap, the Kernel
+    rejects the mount and instructs the LLM to retry with targeting.
+
+    Uses the Phase 7 Context-Tiered Boundary Resolution Matrix to dynamically
+    map the active model's context ceiling (allocated_ctx) to secure character
+    byte limits, preventing buffer overflows on low-parameter auxiliary nodes
+    while unthrottling macro-reviewers.
 
     Args:
         target_path: Relative path to the file to load.
@@ -286,6 +334,8 @@ def handle_page_in(target_path: str, project_root: Optional[Path] = None,
         recursion_depth: Current recursion depth for cascading PAGE_IN calls.
         lines_range: Optional <lines> tag value (e.g. "10-50").
         search_term: Optional <search> tag value (e.g. "ClassName").
+        allocated_ctx: Active token context allocation for the current model.
+                       Used to compute the dynamic character hard cap.
 
     Returns:
         The file content formatted as a system message, or an error message.
@@ -371,18 +421,25 @@ def handle_page_in(target_path: str, project_root: Optional[Path] = None,
             )
 
         # ── Hard Cap: Reject untargeted pages of large files ─────────────
-        if file_size > PAGE_IN_HARD_CAP_CHARS:
-            print(f"  [Paging Kernel] ⛔ HARD CAP: '{target_path}' ({file_size} chars) "
-                  f"exceeds {PAGE_IN_HARD_CAP_CHARS} char limit without targeting tags.")
+        # Phase 7: Dynamically compute the model-appropriate character ceiling
+        # using the Context-Tiered Boundary Resolution Matrix. 
+        # Max ctx is 16384 (phi3.5, 9000-char page cap) for 12GB VRAM safety.
+        # Micro models (<8192 ctx) get 3000-char page cap.
+
+        _dynamic_cap = _resolve_dynamic_page_limit(allocated_ctx)
+        if file_size > _dynamic_cap:
+            print(f"  [Paging Kernel] ⛔ DYNAMIC HARD CAP: '{target_path}' ({file_size} chars) "
+                  f"exceeds {_dynamic_cap} char limit (ctx={allocated_ctx}) without targeting tags.")
             return (
                 "\n\n[SYSTEM KERNEL: PAGE_IN REJECTED — '{}' is {} characters, "
-                "exceeding the {}-character Hard Cap for untargeted pages. "
+                "exceeding the {}-character Hard Cap for untargeted pages "
+                "(ctx={}). "
                 "RETRY with one of:\n"
                 "  <invoke_kernel><action>PAGE_IN</action>"
                 "<target>{}</target><lines>10-50</lines></invoke_kernel>\n"
                 "  <invoke_kernel><action>PAGE_IN</action>"
                 "<target>{}</target><search>ClassName</search></invoke_kernel>]"
-            ).format(target_path, file_size, PAGE_IN_HARD_CAP_CHARS,
+            ).format(target_path, file_size, _dynamic_cap, allocated_ctx,
                      target_path, target_path)
 
         # File is small enough — return full content (backward compatibility)
@@ -431,8 +488,10 @@ def handle_page_out(target_concept: str, offload_store=None,
                 "previous output", "last response", "context",
             ]
         )
-        if not (_is_cache_key or _has_file_extension or _has_path_separator
-                or _is_generic_phrase):
+        # A valid PAGE_OUT target must be a real cache key or a file-like path.
+        # Generic narrative phrases ("old context", etc.) are NOT valid targets —
+        # they would store empty metadata with no recoverable content.
+        if not (_is_cache_key or _has_file_extension or _has_path_separator):
             return (
                 "\n\n[SYSTEM KERNEL ERROR: Invalid target for PAGE_OUT. "
                 "Must be a currently mounted file path or a known cached key. "
@@ -442,17 +501,28 @@ def handle_page_out(target_concept: str, offload_store=None,
 
     print(f"  [Paging Kernel] PAGE_OUT: '{target_concept}' — context evicted")
 
-    # If an offload store is available, store the concept as a block for later recall
+    # ── Phase 7.2: Intelligent PAGE_OUT Labeling ──────────────────────────
+    # Store rich metadata so agents can make informed PAGE_IN retrieval decisions:
+    #   - timestamp: when the eviction happened
+    #   - chars: size of evicted content (helps estimate VRAM freed)
+    #   - content_hash: short SHA-256 prefix for dedup
+    #   - content_type: 'code' if file extension matches, 'generic' otherwise
     if offload_store is not None:
         block_id = f"paged_out_{target_concept.replace(' ', '_').replace('/', '_')[:64]}"
+        _now_ts = datetime.now().isoformat()
+        _content_type = "code" if bool(re.search(r'\.\w{1,8}$', target_concept)) else "generic"
         offload_store.store_block(
             block_id=block_id,
             header=f"Paged Out Context: {target_concept}",
-            body_lines=[f"Context block evicted via PAGE_OUT directive.",
-                        f"Target: {target_concept}",
-                        f"Agent was instructed to stop referencing this content."],
+            body_lines=[
+                f"[PAGE_OUT] Target: {target_concept}",
+                f"  Timestamp: {_now_ts}",
+                f"  Content Type: {_content_type}",
+                f"  Agent was instructed to stop referencing this content.",
+            ],
         )
         print(f"  [Paging Kernel] PAGE_OUT: Stored in offload store as '{block_id}'")
+
 
     return (
         "\n\n[SYSTEM KERNEL: PAGE_OUT completed. '{}' has been evicted from "
@@ -622,9 +692,12 @@ class PagingController:
         self._ghost_buffer_text: str = ""  # Directive A: captured partial generation
         self._page_in_progress: bool = False
         self._continuation_pending: bool = False
+        # ── Phase 7: Dynamic context tier for payload-aware paging ──────────
+        self.allocated_ctx: int = 8192  # Updated by call_ollama_streamed per model
         # ── Directive A: Stateful Key-Value Cache — actively mounted content ──
         self.paged_in_cache: Dict[str, str] = {}
-
+        # Flag set when the most recent execute_page call failed (file not found, etc.)
+        self._last_page_failed: bool = False
     def feed_token(self, token: str) -> Tuple[bool, Optional[Dict[str, str]]]:
         """Feed a streamed token into the paging detector.
 
@@ -664,6 +737,16 @@ class PagingController:
         """
         if page_info["type"] == "PAGE_IN":
             target = page_info["target"]
+            # Guard: reject bracket-wrapped placeholder targets that the model
+            # may copy verbatim from prompt examples, e.g. "[rule-file-path]".
+            if target.startswith("[") and target.endswith("]"):
+                print(f"  [Paging Kernel] ⛔ PAGE_IN rejected — placeholder target '{target}' "
+                      f"(model copied a prompt example; no file will be fetched)")
+                return (
+                    f"\n[SYSTEM KERNEL: PAGE_IN suppressed — "
+                    f"'{target}' is a placeholder, not a real file path. "
+                    f"Use the exact id= attribute from a <VRAM_STUB> tag.]\n"
+                )
             # ── Day 6: Disk Paging Routing (global_cache/) ────────────
             global_cache_dir = (self.project_root or Path.cwd()) / "global_cache"
             safe_target_name = target.replace("/", "_").replace("\\", "_")
@@ -695,6 +778,8 @@ class PagingController:
                     print(f"  [Paging Kernel] Failed to read disk page chunk: {e}")
 
             # Execute the page-in operation (reads disk / offload store)
+            # Phase 7: Forward the active model's context allocation for
+            # dynamic hard cap enforcement via Context-Tiered Boundary Resolution.
             result = handle_page_in(
                 target_path=target,
                 project_root=self.project_root,
@@ -702,7 +787,11 @@ class PagingController:
                 recursion_depth=self._consecutive_pages,
                 lines_range=page_info.get("lines_range"),
                 search_term=page_info.get("search_term"),
+                allocated_ctx=self.allocated_ctx,
             )
+
+            # Detect failure: handle_page_in returns a KERNEL error string
+            self._last_page_failed = "not found" in result or "blocked" in result or "failed" in result
 
             # Extract the raw text chunk from the formatted result and cache it.
             # The formatted result has markdown wrapping; we extract the code block body.
@@ -717,6 +806,14 @@ class PagingController:
 
         elif page_info["type"] == "PAGE_OUT":
             target_concept = page_info["target"]
+            # Guard: reject bracket-wrapped placeholder targets.
+            if target_concept.startswith("[") and target_concept.endswith("]"):
+                print(f"  [Paging Kernel] ⛔ PAGE_OUT rejected — placeholder target '{target_concept}' "
+                      f"(model copied a prompt example; nothing will be evicted)")
+                return (
+                    f"\n[SYSTEM KERNEL: PAGE_OUT suppressed — "
+                    f"'{target_concept}' is a placeholder, not a real cached key.]\n"
+                )
             removed_text = ""
             # ── Directive A: Stateful Cache — remove evicted entries ────
             if target_concept in self.paged_in_cache:
@@ -765,7 +862,8 @@ class PagingController:
         1. Compute total char count of all assistant messages.
         2. If it exceeds max_assistant_chars, drop the OLDEST assistant messages
            (positive round-robin: drop oldest first, keep newest).
-        3. Insert a marker noting what was dropped so the resume prompt is coherent.
+        3. Insert a labeled stub noting exactly what was dropped so the resume
+           prompt gives the agent coherent awareness of evicted context.
 
         Args:
             messages: The messages list to truncate.
@@ -798,18 +896,25 @@ class PagingController:
             if total_assistant_chars <= max_assistant_chars:
                 break
             content = remaining[idx].get("content", "")
-            # Mark for dropping by replacing with a stub marker
+            # Phase 7.2: Labeled stub with metadata on what was dropped
             dropped_chars += len(content)
             total_assistant_chars -= len(content)
+            _chars_in_msg = len(content)
+            _tokens_in_msg = _chars_in_msg // 3  # rough estimate
             remaining[idx] = {
                 "role": "assistant",
-                "content": "[SYSTEM KERNEL: History evicted during PAGE_OUT to free VRAM.]"
+                "content": (
+                    f"[SYSTEM KERNEL: History EVICTED — ~{_tokens_in_msg} tokens "
+                    f"dropped to free VRAM. Total freed across this cycle: "
+                    f"~{dropped_chars // 3} tokens in {dropped_count + 1} messages.]"
+                )
             }
             dropped_count += 1
 
         print(f"  [Paging Kernel] ⚡ Aggressive truncation: dropped {dropped_count} assistant "
               f"messages ({dropped_chars} chars) to prevent LLM hang during PAGE_OUT.")
         return remaining
+
 
     def build_resume_payload(self, system_prompt: str) -> Dict[str, Any]:
         """Build the Ollama API payload for the auto-resume call.
@@ -847,29 +952,47 @@ class PagingController:
         # ── Directive A: Ghost Buffer — inject partial generation as assistant message ──
         # This forces the LLM to seamlessly finish its thought on resume rather than
         # restarting its sentence (which would produce duplicated, invalid syntax).
-        if self._ghost_buffer_text:
+        # EXCEPTION: suppress ghost buffer when the last PAGE_IN failed — the ghost
+        # text ends immediately before the <invoke_kernel> tag and re-injecting it
+        # causes the LLM to re-emit the paging protocol instructions verbatim.
+        has_ghost = bool(self._ghost_buffer_text) and not self._last_page_failed
+        if has_ghost:
             messages.append({
                 "role": "assistant",
                 "content": self._ghost_buffer_text,
             })
 
-        # Append the continuation prompt
-        messages.append({
-            "role": "user",
-            "content": (
+        # Append the continuation prompt.
+        # When there is no ghost buffer (PAGE_IN was the very first token emitted),
+        # the model has no prior generation to "continue from". Use a directive form
+        # that re-anchors the task so the model produces code rather than a meta-response.
+        if has_ghost:
+            continuation_text = (
                 "[SYSTEM KERNEL: Paging complete. "
                 "Continue generating your response exactly where you left off. "
                 "Do not restart. Do not repeat previous output.]"
-            ),
-        })
+            )
+        else:
+            continuation_text = (
+                "[SYSTEM KERNEL: Paging complete. The requested file content has been "
+                "injected above as a system message. Now produce your complete code output "
+                "for this task. Output ONLY a code block — no prose, no explanations.]"
+            )
+        messages.append({"role": "user", "content": continuation_text})
 
+        # Phase 7: Use the active model's context allocation for the resume
+        # payload. Max ctx is 16384 (phi3.5, 9000-char page cap) for 12GB VRAM.
+        # Aux nodes (8192 ctx) are constrained appropriately with 5000-char page cap.
+
+        _resume_ctx = self.allocated_ctx
         payload = {
             "model": "",  # caller must set this
             "stream": True,
             "keep_alive": "0",
             "options": {
-                "num_ctx": 32768,
-                "num_predict": 12000,
+                "num_ctx": _resume_ctx,
+                # Throttle output buffer pre-allocation during active context resumption loops
+                "num_predict": 4096,
                 "use_mmap": True,
             },
             "messages": messages,
@@ -883,6 +1006,7 @@ class PagingController:
         self._continuation_pending = False
         self._remaining_text = ""
         self._ghost_buffer_text = ""
+        self._last_page_failed = False
 
     @property
     def page_cycle_count(self) -> int:

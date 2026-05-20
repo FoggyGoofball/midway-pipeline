@@ -29,11 +29,13 @@ class TestSignalParsing:
         assert len(signals) >= 1
         assert signals[0]["type"] == "VETO"
 
-    def test_extract_fetch_signal(self):
+    def test_extract_fetch_signal_returns_empty(self):
+        """FETCH is deprecated — superseded by PagingKernel <invoke_kernel> schema.
+        Legacy FETCH pattern key is removed from SIGNAL_PATTERNS.
+        """
         text = "[FETCH:docs/memory/C++_ledger.md#PhysicsSystem]"
         signals = extract_signals(text)
-        assert len(signals) >= 1
-        assert signals[0]["type"] == "FETCH"
+        assert len(signals) == 0  # No longer matched
 
     def test_extract_multiple_signals(self):
         text = "[APPROVE][VETO:target:no][DELEGATE:C++:Lua:task]"

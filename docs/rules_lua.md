@@ -71,3 +71,6 @@
 - [ ] **Bridge logging:** All Lua↔C++ calls logged to `bridge_log.txt` with microsecond timestamps. `MoveKinematic` excluded from logging.
 - [ ] **Print statements:** Use `print()` for debug output. It appears in `midway.log`.
 - [ ] **F1 panel:** Live modifier sliders. Changes sync to Lua globals immediately.
+
+### Module Export & Sandbox Safety (Critical)
+- [ ] **No top-level execution loops.** Modules MUST only return their public table interface. You are strictly forbidden from including top-level synchronous loops, sample invocations, or active "Example Usage" execution blocks at the base of the file. All operational loops must reside exclusively inside registered callbacks (e.g., `OnStep`).

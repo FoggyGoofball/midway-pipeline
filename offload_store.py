@@ -60,6 +60,54 @@ class OffloadStore:
     def _block_path(self, block_id: str) -> Path:
         return self.store_dir / f"block_{block_id}.json"
 
+    def _generate_keywords(self, text: str, max_keywords: int = 8) -> list:
+        """Auto-generate keyword summary array from text content.
+
+        Extracts capitalized/emphasized terms, code-language identifiers,
+        and significant tokens to produce a targeted searchable summary.
+        Sub-agents use these keywords to locate offloaded blocks via
+        read_offloaded_file() without blind file retrieval.
+
+        Args:
+            text: The full text content to analyze.
+            max_keywords: Maximum number of keywords to generate.
+
+        Returns:
+            List of keyword strings.
+        """
+        import re as _re
+        keywords = set()
+
+        # Extract markdown headers (## or ### sections)
+        headers = _re.findall(r'^#{2,3}\s+(.+)', text, _re.MULTILINE)
+        for h in headers:
+            # Take first 1-2 significant words from each header
+            words = h.split()[:3]
+            for w in words:
+                w_clean = w.strip('*[]():;,!').lower()
+                if len(w_clean) > 3:
+                    keywords.add(w_clean)
+
+        # Extract capitalized proper nouns / identifiers
+        for match in _re.finditer(r'\b[A-Z][a-zA-Z]{2,}\b', text):
+            keywords.add(match.group(0).lower())
+            if len(keywords) >= max_keywords * 2:
+                break
+
+        # Extract code-like tokens (snake_case, camelCase, UPPER_CASE)
+        for match in _re.finditer(r'\b[a-z]+_[a-z]+\b|\b[A-Z][a-z]+[A-Z]\w*\b|\b[A-Z]{2,}(?:_[A-Z]+)*\b', text):
+            keywords.add(match.group(0).lower())
+            if len(keywords) >= max_keywords * 2:
+                break
+
+        # Extract file extensions
+        for match in _re.finditer(r'\b(\.[a-z]{2,4})\b', text):
+            keywords.add(match.group(1))
+
+        # Prioritize and truncate
+        sorted_kw = sorted(keywords, key=lambda x: (-text.lower().count(x), len(x)))
+        return sorted_kw[:max_keywords]
+
     def store_block(self, block_id: str, header: str, body_lines: list) -> bool:
         """Store a context block to disk.
 
@@ -75,6 +123,7 @@ class OffloadStore:
             self._load_index()
             full_text = "\n".join(body_lines) if isinstance(body_lines, list) else body_lines
             content_hash = hashlib.sha256(full_text.encode("utf-8")).hexdigest()[:16]
+            keywords = self._generate_keywords(full_text)
             info = {
                 "header": header,
                 "char_count": len(full_text),
@@ -82,6 +131,7 @@ class OffloadStore:
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "full_text": full_text,
                 "content_hash": content_hash,
+                "keywords": keywords,
             }
             path = self._block_path(block_id)
             path.write_text(json.dumps(info, indent=2), encoding="utf-8")
@@ -91,6 +141,7 @@ class OffloadStore:
         except OSError as e:
             print(f"  [OffloadStore] !! Failed to store block '{block_id}': {e}")
             return False
+
 
     def retrieve_block(self, block_id: str) -> str:
         """Retrieve a stored context block from disk.

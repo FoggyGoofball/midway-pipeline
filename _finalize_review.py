@@ -15,6 +15,7 @@ Exported:
 from __future__ import annotations
 
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -28,7 +29,7 @@ from _domain_sandbox import reject_cross_domain_output
 import _prompts as _prompts_mod  # live module ref — reads post-bootstrap values
 from pipeline import (
     ALL_DOMAINS,
-    resolve_agent_name, get_agent_system,
+    resolve_agent_name,
     call_ollama, get_verdict,
     _normalize_fix_fingerprint, check_insanity_similarity,
 )
@@ -340,7 +341,29 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         for _tid, _out in _task_items:
             _task_obj = ctx.task_map.get(_tid)
             _domain = (_task_obj.agent if _task_obj and getattr(_task_obj, 'agent', None) else "?")
-            _snippet = _out[:_task_code_budget] + ("\n…[truncated]" if len(_out) > _task_code_budget else "")
+            if len(_out) > _task_code_budget:
+                _snippet_overflow = _out[_task_code_budget:]
+                _snippet = _out[:_task_code_budget]
+                # Preserve overflow in OffloadStore so reviewer can PAGE_IN if it
+                # needs to see the full output rather than silently losing it.
+                try:
+                    from offload_store import get_offload_store as _rv_os
+                    _rv_store = _rv_os()
+                    _rv_oid = f"review_overflow_{_tid}"
+                    _rv_store.store_block(
+                        block_id=_rv_oid,
+                        header=f"Review overflow for {_tid} ({len(_snippet_overflow)} chars truncated)",
+                        body_lines=[_snippet_overflow],
+                    )
+                    _snippet += (
+                        f"\n[📄 {len(_snippet_overflow)} chars truncated — "
+                        f"use `<invoke_kernel><action>PAGE_IN</action>"
+                        f"<target>{_rv_oid}</target></invoke_kernel>` to retrieve full output.]"
+                    )
+                except Exception:
+                    _snippet += "\n…[truncated]"
+            else:
+                _snippet = _out
             inline_code_blocks.append(f"### [{_tid}] [{_domain}]\n{_snippet}")
 
         inline_code_str = "\n\n".join(inline_code_blocks)
@@ -491,6 +514,11 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 _prompts_mod.REVIEW_SYSTEM, review_input, cycle_label, _reviewer_model,
                 skip_pre_summarizer=True
             )
+            from ollama_client import is_fatal_ollama_error as _is_fatal_rev
+            if _is_fatal_rev(ctx.review_output):
+                print(f"  [Review-Fix] ⛔ Ollama error during review — aborting review loop.")
+                ctx.review_verdict = "BLOCKED"
+                break
             ctx.review_verdict = get_verdict(ctx.review_output)
 
         ctx.output_parts.append(
@@ -548,13 +576,32 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 f"Review Verdict Re-prompt (cycle {ctx.review_cycle})", _rv_model2,
                 skip_pre_summarizer=True,
             )
+            from ollama_client import is_fatal_ollama_error as _is_fatal_vn
+            if _is_fatal_vn(_retry_out):
+                print(f"  [Review-Fix] ⛔ Ollama error during verdict re-prompt — aborting review loop.")
+                ctx.review_verdict = "BLOCKED"
+                break
             _retry_verdict = get_verdict(_retry_out)
             if _retry_verdict in ("PASS", "FAIL"):
                 ctx.review_verdict = _retry_verdict
                 ctx.review_output = _retry_out
                 print(f"  [Review-Fix] Re-prompt resolved to {ctx.review_verdict}.")
                 if ctx.review_verdict == "PASS":
-                    break
+                    # FM3 (re-prompt path): same hard-gate as the primary PASS check.
+                    # The re-prompt model can emit PASS while static guards are still
+                    # open — treat open preflight errors as an automatic FAIL override.
+                    _open_pf_rp = (ctx.pre_flight_errors or "").strip()
+                    if _open_pf_rp:
+                        print(f"  [Review-Fix] ⛔ Re-prompt PASS overridden — preflight errors still open "
+                              f"(cycle {ctx.review_cycle}).")
+                        ctx.review_verdict = "FAIL"
+                        ctx.review_output = (
+                            ctx.review_output
+                            + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL — open pre-flight violations "
+                            "must be resolved before this run can be approved.]"
+                        )
+                    else:
+                        break
             else:
                 print(f"  [Review-Fix] Re-prompt still produced no verdict — treating as FAIL.")
                 ctx.review_verdict = "FAIL"
@@ -618,10 +665,27 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     continue
 
                 original_agent_key = resolve_agent_name(task_obj.agent)
-                original_agent_system = get_agent_system(original_agent_key)
 
-                if not original_agent_system:
-                    original_agent_system = _prompts_mod.ARCHITECT_FIX_SYSTEM
+                # Use a compact, repair-specific system prompt — NOT the full
+                # get_agent_system() which adds mesh/ledger/virtual-memory protocols
+                # (~11.8 k chars) and collapses the user payload to ~469 chars.
+                _base_review_fix_system = _prompts_mod.ARCHITECT_FIX_SYSTEM
+                _rv_domain_prohibitions = ""
+                try:
+                    _cart_rv = getattr(ctx, 'mounted_cartridge', None)
+                    if _cart_rv:
+                        _cart_rv_domain = _cart_rv.domains.get(original_agent_key)
+                        if _cart_rv_domain:
+                            _sp_rv = _cart_rv_domain.system_prompt or ""
+                            _rv_domain_prohibitions = "\n\n## Domain Rules (summary)\n" + _sp_rv[:1800]
+                    if not _rv_domain_prohibitions:
+                        _live_reg_rv = getattr(ctx, 'domain_registry', None) or {}
+                        _dreg_rv = _live_reg_rv.get(original_agent_key, {})
+                        if isinstance(_dreg_rv, dict) and _dreg_rv.get('system_prompt'):
+                            _rv_domain_prohibitions = "\n\n## Domain Rules (summary)\n" + _dreg_rv['system_prompt'][:1800]
+                except Exception:
+                    pass
+                original_agent_system = _base_review_fix_system + _rv_domain_prohibitions
 
                 domain_name = ALL_DOMAINS.get(original_agent_key, {}).get("name", original_agent_key)
                 print(f"    Routing critique for {tid} to {domain_name}")
@@ -682,6 +746,11 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     fix_model,
                     skip_pre_summarizer=True,
                 )
+
+                from ollama_client import is_fatal_ollama_error as _is_fatal_fix
+                if _is_fatal_fix(agent_fix_output):
+                    print(f"  [Review-Fix] ⛔ Ollama error during fix for {tid} — skipping, retaining previous output.")
+                    continue
 
                 # ── Directive A: Sandbox validation ──────────────────────
                 # Reject output if it attempts cross-domain file writes.
@@ -865,9 +934,32 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         print(f"  🔍 RECONCILIATION GATE — Active Rule Auditor")
         print(f"{'='*50}")
         print(f"  Tribunal struggled to reach consensus after {ctx.review_cycle} cycles.")
-        trigger_chime()
-        raise Exception(
-            "\n[INTERACTIVE GATE] Tribunal struggles to reach consensus. PIPELINE SUSPENDED. Please reply to this prompt with 'Y' to trigger the Auditor, or 'N' to abort."
+        # When running as a stream server there is no TTY, so input() would block
+        # forever or raise an EOFError and crash the worker thread.  Detect this
+        # and fall through to a clean FAIL result instead of raising an exception.
+        _has_tty = hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
+        if _has_tty:
+            trigger_chime()
+            try:
+                _audit_choice = input(
+                    "  [Reconciliation] Trigger Active Rule Auditor? (Y/n): "
+                ).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                _audit_choice = "n"
+            if _audit_choice not in ("n", "no"):
+                print("  [Reconciliation] Auditor triggered — review open preflight errors above.")
+        else:
+            print(
+                "  [Reconciliation] ⚠ No TTY detected (running as server). "
+                "Pipeline cannot interactively trigger the Auditor. "
+                "Returning FAIL result for client reporting."
+            )
+        ctx.review_verdict = "FAIL"
+        ctx.output_parts.append(
+            "\n## ❌ Pipeline Failed — Review did not converge\n"
+            f"Tribunal reached max cycles ({ctx.review_cycle}) without consensus.\n"
+            "Open preflight errors were still present at cycle limit. "
+            "Review the static guard output above and re-run with a more specific task description.\n"
         )
 
     return ctx

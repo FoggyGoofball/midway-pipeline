@@ -18,6 +18,15 @@ import re
 from pathlib import Path
 from typing import Optional
 
+__all__ = [
+    "DOMAIN_ALLOWED_EXTENSIONS",
+    "get_allowed_extensions",
+    "extract_file_paths_from_output",
+    "validate_domain_file_write",
+    "build_sandbox_constraint",
+    "reject_cross_domain_output",
+]
+
 
 # ── Canonical File Extension Mapping ──────────────────────────────────────
 # Maps domain keys to the set of file extensions they are ALLOWED to modify.
@@ -138,6 +147,36 @@ def validate_domain_file_write(
             )
 
     return len(violations) == 0, violations
+
+
+def build_sandbox_constraint(allowed_exts: set) -> str:
+    """Build a CRITICAL FILE RESTRICTION system-prompt fragment.
+
+    Args:
+        allowed_exts: Set of allowed file extensions for a domain.
+
+    Returns:
+        Formatted constraint string to append to an agent's system prompt.
+    """
+    if not allowed_exts:
+        return ""
+    if ".lua" in allowed_exts and len(allowed_exts) == 1:
+        return (
+            "\n\n---\n"
+            "CRITICAL FILE RESTRICTION:\n"
+            "You are physically restricted to modifying ONLY [.lua] files. "
+            "Any SEARCH/REPLACE blocks targeting .cpp, .h, .hpp, .py, .md, .json, or any "
+            "other extension will trigger a fatal system error and your output will be discarded."
+        )
+    ext_str = str(list(allowed_exts))
+    return (
+        "\n\n---\n"
+        "CRITICAL FILE RESTRICTION:\n"
+        "You are physically restricted to modifying "
+        f"{ext_str} files. "
+        "Any SEARCH/REPLACE blocks targeting files with extensions outside this set "
+        "will trigger a fatal system error and your output will be discarded."
+    )
 
 
 def reject_cross_domain_output(

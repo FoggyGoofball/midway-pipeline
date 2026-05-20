@@ -3,7 +3,7 @@
 > Use this index to find the correct doc file and anchor for any API lookup.
 
 
-## Jolt Physics → `docs/jolt_api.md`
+## Jolt Physics (Unified Standard) → `docs/jolt_api.md`
 
 | Search Term | Section Anchor |
 |-------------|----------------|
@@ -21,15 +21,9 @@
 | Object layer, collision group | [`#objectlayer`](jolt_api.md#objectlayer) |
 | EMotionType, static, kinematic, dynamic | [`#emotiontype`](jolt_api.md#emotiontype) |
 
-## Box2D → `docs/box2d_api.md`
+## ~~Box2D → `docs/box2d_api.md`~~ (DEPRECATED)
 
-| Search Term | Section Anchor |
-|-------------|----------------|
-| b2World, world creation, step, queries | [`#b2world`](box2d_api.md#b2world) |
-| b2Body, body creation, type, transform | [`#b2body`](box2d_api.md#b2body) |
-| b2Shape, shape creation, circle, polygon | [`#b2shape`](box2d_api.md#b2shape) |
-| b2MassData, mass, inertia | [`#b2massdata`](box2d_api.md#b2massdata) |
-| b2Vec2, vector operations | [`#b2vec2`](box2d_api.md#b2vec2) |
+> **Box2D is fully deprecated under the Unified Jolt Standard.** All attractions — 2D planar and 3D volumetric alike — run inside the global Jolt Physics world. 2D planar modules (Crumbling Façade, Plinko, Slingshot, Bumper Cars) use DOF constraints (Z-translation locked, X/Y rotation locked, Z-only rotation) rather than a separate 2D engine. See the [Jolt Physics](jolt_api.md) section above for all physics API references.
 
 ## sol2 → `docs/sol2_api.md`
 

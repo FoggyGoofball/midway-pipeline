@@ -32,8 +32,8 @@ iterate on code changes for C++, Lua, and GLSL source files.
 
 2. **Models pulled** on the Steam Deck (takes 5-15 min depending on bandwidth):
    ```bash
-   ollama pull qwen2.5-coder:7b
-   ollama pull phi3:14b
+   ollama pull qwen3.5:9b
+   ollama pull phi3.5:latest
    ollama pull llama3.1:8b-instruct-q4_K_M
    ollama pull qwen2.5-coder:1.5b
    ollama pull llama3.2:1b
@@ -114,25 +114,33 @@ The pipeline is fully modular. Key files inside `midway-pipeline/`:
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **Orchestrator** | `pipeline.py` | Thin entry point (~350 lines) — imports everything else |
-| **System Prompts** | `_prompts.py` | All LLM system prompts |
+| **Orchestrator** | `pipeline.py` | Thin entry point (~593 lines) — imports everything else |
+| **System Prompts** | `_prompts.py` | All 15 LLM system prompts + VIRTUAL_MEMORY_PROTOCOL |
 | **Helpers** | `_pipeline_helpers.py` | File scanning, task execution, failure reports |
 | **Mesh API** | `_mesh_api.py` | Distributed task submission/status |
-| **Mesh Loops** | `mesh_loops.py` | Phases 0.5-8 iteration loops (fetches, tasks) |
-| **Mesh Finalize** | `mesh_finalize.py` | Code merge, consensus, final approval |
-| **Models** | `models.py` | Dataclasses: Signal, Task, ConsensusResult, PipelineContext |
+| **Mesh Loops** | `mesh_loops.py` | Phases 0.5-8 iteration loops (fetches, tasks) — 1312 lines |
+| **Mesh Finalize** | `mesh_finalize.py` | Code merge, consensus, final approval — 708 lines |
+| **Models** | `models.py` | SignalType (14+ signals), MeshSignal, Task, PipelineContext, OrchestrationConfig |
 | **Signals** | `signals.py` | Signal parsing/extraction from LLM output |
-| **Domain Registry** | `domain_registry.py` | Agent definitions, persona maps, domain config |
-| **Ollama Client** | `ollama_client.py` | HTTP client for Ollama API |
+| **Domain Registry** | `domain_registry.py` | Agent definitions, persona maps, runtime model resolution |
+| **Ollama Client** | `ollama_client.py` | HTTP client for Ollama API — context-tiered model parsing |
+| **Paging Kernel** | `paging_kernel.py` | Adaptive VRAM paging, dynamic page limits, ghost buffer resume |
 | **Ledger** | `ledger.py` | Session timeline, anchor TOC, fix fingerprinting |
 | **Checkpoint** | `checkpoint.py` | Save/resume pipeline state |
 | **File References** | `file_references.py` | Parse and fetch referenced files |
+| **Context Extractor** | `context_extractor.py` | Project context extraction |
 | **GDD Extractor** | `gdd_extractor.py` | Section extraction from Game Design Document |
 | **Tag Suggester** | `tagsuggester.py` | Post-pipeline tag auto-detection |
 | **Fetch Handler** | `fetch_handler.py` | Signal-driven file fetch and offload |
 | **Token Budget** | `token_budget.py` | Context window management |
 | **Offload Store** | `offload_store.py` | Disk-based context offloading |
-| **Tests** | `tests/` | Pytest suite (80+ tests) |
+| **Pre-Flight** | `_finalize_preflight.py` | File sync + SEARCH/REPLACE sanitization + domain-isolated circuit breaker |
+| **Conflict Resolution** | `_finalize_conflicts.py` | VETO/OBJECT conflict mediation |
+| **Review** | `_finalize_review.py` | Review-fix loop, Architect fix cycle |
+| **Domain Sandbox** | `_domain_sandbox.py` | Domain enforcement, cross-domain write blocking |
+| **Session** | `pipeline_session.py` | SessionManager, session isolation |
+| **Stream Server** | `pipeline_stream_server.py` | SSE HTTP server for streaming |
+| **Tests** | `tests/` | Pytest suite |
 
 ---
 

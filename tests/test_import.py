@@ -36,12 +36,17 @@ def test_constants_exist():
 
 
 def test_signal_patterns_exist():
-    """Verify all signal pattern keys are present."""
+    """Verify all signal pattern keys are present (legacy FETCH superseded by PagingKernel)."""
     import pipeline
-    # Keys observed in the actual pipeline.py SIGNAL_PATTERNS dict
+    # Keys observed in the actual pipeline.py SIGNAL_PATTERNS dict.
+    # NOTE: FETCH, READ_OFFLOADED, MATH_EVAL are PURGED — superseded by
+    # the <invoke_kernel> XML schema in the PagingKernel. Legacy handlers
+    # are commented out in signals.py but the keys remain in SIGNAL_PATTERNS
+    # for APPEAL, MERGE, REJECT, FLUSH, REQUEST_API.
     expected_keys = [
-        "APPROVE", "CONSULT", "DELEGATE", "FETCH",
-        "OBJECT", "QUERY", "RECOURSE", "RESULT", "REVISE", "VETO"
+        "APPEAL", "APPROVE", "CONSULT", "DELEGATE", "FLUSH",
+        "MERGE", "OBJECT", "QUERY", "RECOURSE", "REJECT",
+        "REQUEST_API", "RESULT", "REVISE", "VETO",
     ]
     for key in expected_keys:
         assert key in pipeline.SIGNAL_PATTERNS, f"Missing SIGNAL_PATTERNS key: {key}"

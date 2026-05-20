@@ -18,7 +18,10 @@ from token_budget import TokenBudget
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).parent.resolve()
+# Use the env-var project root if set so FETCH targets resolve against the
+# game project tree, not the pipeline repo itself.
+import os as _os
+PROJECT_ROOT = Path(_os.environ.get("MIDWAY_PROJECT_ROOT", Path(__file__).parent)).resolve()
 
 
 def handle_fetch_signal(fetch_tag: str) -> str:

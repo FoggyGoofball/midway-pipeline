@@ -18,27 +18,41 @@
 
 ---
 
-## Target Architecture
+## Target Architecture (Post-Hardening)
 
-No file shall exceed **1,000 lines**. The orchestration remains **strictly synchronous** (no async/await). All MoE state passes through a single `PipelineContext` Pydantic model.
+No file shall exceed **1,500 lines**. The orchestration remains **strictly synchronous** (no async/await). All MoE state passes through a single `PipelineContext` Pydantic model.
 
 ```
 midway-pipeline/
-├── pipeline.py           ← ~800 lines (thin orchestrator only)
-├── __init__.py           ← Re-exports PipelineContext
-├── models.py             ← Pydantic models + TypedDicts
-├── signals.py            ← Signal parsing + regex patterns
-├── domain_registry.py    ← Agent name resolution
-├── ollama_client.py      ← HTTP client for Ollama
-├── token_budget.py       ← TokenBudgetManager
-├── offload_store.py      ← OffloadStore class
-├── checkpoint.py         ← PipelineCheckpoint
-├── file_references.py    ← FileReferenceCache
-├── ledger.py             ← Memory ledger + fingerprint normalization
-├── gdd_extractor.py      ← GDD section parsing
-├── tagsuggester.py       ← TagSuggester class
-├── fetch_handler.py      ← FETCH signal handler
-└── tests/                ← Existing 74 tests (untouched)
+├── pipeline.py               ← ~593 lines (thin orchestrator + config constants)
+├── __init__.py               ← Re-exports PipelineContext
+├── models.py                 ← SignalType, MeshSignal, Task, PipelineContext, OrchestrationConfig
+├── signals.py                ← Signal parsing + regex patterns
+├── domain_registry.py        ← Agent names + runtime model resolution
+├── ollama_client.py          ← HTTP client + context-tiered model parsing
+├── paging_kernel.py          ← PagingController + dynamic page limits + ghost buffers
+├── token_budget.py           ← TokenBudget class
+├── offload_store.py          ← OffloadStore class
+├── checkpoint.py             ← save/load/list checkpoints
+├── file_references.py        ← FileReferenceCache
+├── ledger.py                 ← Memory ledger + fingerprint normalization
+├── context_extractor.py      ← Project context extraction
+├── gdd_extractor.py          ← GDD section parsing
+├── tagsuggester.py           ← TagSuggester class
+├── fetch_handler.py          ← FETCH signal handler + page-out
+├── mesh_loops.py             ← run_fetches() + run_tasks() — 1312 lines
+├── mesh_finalize.py          ← run_code_merge() + review/consensus — 708 lines
+├── _pipeline_helpers.py      ← Doc cache, helpers, file tools — 217 lines
+├── _mesh_api.py              ← REST API mesh work queue — 213 lines
+├── _prompts.py               ← All 15 system prompts — 350 lines
+├── _finalize_preflight.py    ← Pre-compilation file sync + SEARCH/REPLACE sanitization — 196 lines
+├── _finalize_conflicts.py    ← VETO/OBJECT mediation — 86 lines
+├── _finalize_review.py       ← Review-fix loop + Architect fix — 450 lines
+├── _domain_sandbox.py        ← Domain enforcement — 182 lines
+├── pipeline_session.py       ← SessionManager — 312 lines
+├── pipeline_stream.py        ← Stream generator — 208 lines
+├── pipeline_stream_server.py ← SSE HTTP server — 379 lines
+└── tests/                    ← Existing 80 tests (untouched)
 ```
 
 ---

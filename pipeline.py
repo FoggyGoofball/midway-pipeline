@@ -51,6 +51,7 @@ import ledger as ledger_module
 import context_extractor
 import tagsuggester
 import fetch_handler
+import gdd_extractor
 
 # Models
 from models import SignalType, MeshSignal, ConsensusResult, TaskDescriptor, PipelineContext, Task
@@ -111,6 +112,11 @@ from tagsuggester import TagSuggester
 # Fetch Handler
 from fetch_handler import handle_fetch_signal, read_offloaded_file, handle_read_offloaded_signal, _page_out_context
 
+# GDD Extractor
+GDD_SECTION_MAP = gdd_extractor.GDD_SECTION_MAP
+KEYWORD_TO_SECTION = gdd_extractor.KEYWORD_TO_SECTION
+extract_gdd_sections = gdd_extractor.extract_gdd_sections
+
 # ── Mesh Loops — lazy-imported to break circular imports ───────────────────
 # mesh_loops.py imports from pipeline, so we use __getattr__.
 _mesh_loops_lazy = None
@@ -136,10 +142,13 @@ _CTX = PipelineContext(
 # ── Configuration ──────────────────────────────────────────────────────────
 OLLAMA_HOST = "http://192.168.0.16:11434"
 
+# Qwen Coder 3.5 profile (9B) — uncomment when backend hardware supports it
+# CODER_MODEL = "qwen3.5:9b"
 CODER_MODEL = "qwen2.5-coder:7b"
 REVIEWER_MODEL = "phi3:14b"
 ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
+PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini — compresses large context before phi3:14b review
 LIBRARIAN_MODEL = "llama3.1:8b-instruct-q4_K_M"
 SYNTAX_GATE_MODEL = "qwen2.5-coder:1.5b"
 INTENT_CLASSIFIER_MODEL = "llama3.2:1b"
@@ -154,11 +163,12 @@ PROJECT_ROOT = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().pa
 MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
 MAX_SUBTASKS_PER_AGENT = 5
-REVIEW_MAX_ITERATIONS = 3
+REVIEW_MAX_ITERATIONS = 4
 SCOPE_FILE_LIMIT = 5
 SCOPE_LINE_LIMIT = 400
 OLLAMA_TIMEOUT = 420
-OLLAMA_NUM_CTX = 32768
+# Hardened global context ceiling aligned to 16GB host RAM / 12GB dedicated safety margin
+OLLAMA_NUM_CTX = 16384
 MAX_TOKENS = 12000
 CHECKPOINT_DIR = PROJECT_ROOT / ".pipeline_checkpoints"
 MEMORY_DIR = PROJECT_ROOT / "docs" / "memory"
@@ -222,14 +232,163 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
 
     ctx = _CTX
     ctx.reset_state()
+
+    # Clear the internal API ledger so this run starts from a blank slate.
+    # Without this, signatures from previous runs accumulate and mislead agents.
+    from ledger import reset_internal_api_ledger
+    reset_internal_api_ledger()
     
-    # Mount the preserved Midway Agent Ecosystem Cartridge
+    # ── Mount the selected Cartridge (kernel/cartridge separation) ────────────
+    # Use cartridge_loader to discover and load the configured cartridge.
+    # On first run, defaults to Midway. After that, respects .pipeline_config.json.
     try:
-        from cartridges.midway_ecosystem import MidwayAgentCartridge
-        ctx.mount_cartridge(MidwayAgentCartridge)
-    except ImportError:
-        print("  [Kernel] WARNING: Could not load MidwayAgentCartridge. Ecosystem may be unmapped.")
-    
+        from cartridge_loader import load_cartridge
+        loaded_cartridge = load_cartridge()
+        if loaded_cartridge:
+            ctx.mount_cartridge(loaded_cartridge)
+            cart_name = getattr(ctx, "_cartridge_ecosystem_name", "<unknown>")
+            print(f"  [Kernel] Mounted cartridge for project: {cart_name}")
+        else:
+            print("  [Kernel] ERROR: Could not load any cartridge. Pipeline cannot proceed.")
+            ctx.final_output = "Error: No cartridge loaded."
+            return ctx.final_output
+    except Exception as e:
+        print(f"  [Kernel] ERROR loading cartridge: {e}")
+        ctx.final_output = f"Error: Cartridge load failed — {e}"
+        return ctx.final_output
+
+    # ── Cartridge-Driven Constant Override ────────────────────────────────────
+    # Dynamically pull and overwrite primary top-level constants from the mounted
+    # cartridge context. Reads OrchestrationConfig fields (and cartridge metadata)
+    # and applies them to the module-level globals that downstream modules import.
+    # Uses globals() to rewrite module-scoped variables so downstream imports and
+    # callers (mesh_loops, mesh_finalize) see the updated values.
+    def _overwrite_constants_from_config(cfg):
+        """Overwrite module-level pipeline globals from OrchestrationConfig.
+        
+        Also propagates model overrides into domain_registry.ALL_DOMAINS
+        so expert agents resolve dynamically-switched models at runtime.
+        """
+        _g = globals()
+        _g['OLLAMA_HOST'] = cfg.ollama_host
+        _g['CODER_MODEL'] = cfg.coder_model
+        _g['REVIEWER_MODEL'] = cfg.reviewer_model
+        _g['ANALYST_MODEL'] = cfg.analyst_model
+        _g['FALLBACK_REVIEWER_MODEL'] = cfg.fallback_reviewer_model
+        _g['PRE_SUMMARIZER_MODEL'] = cfg.pre_summarizer_model
+        _g['LIBRARIAN_MODEL'] = cfg.librarian_model
+        _g['SYNTAX_GATE_MODEL'] = cfg.syntax_gate_model
+        _g['INTENT_CLASSIFIER_MODEL'] = cfg.intent_classifier_model
+        _g['DIRECTOR_MODEL'] = cfg.director_model
+        _g['CHAT_MODEL'] = _g['CODER_MODEL']
+        _g['EXECUTION_MODEL'] = _g['CODER_MODEL']
+        _g['REASONING_MODEL'] = _g['REVIEWER_MODEL']
+        _g['MODEL'] = _g['EXECUTION_MODEL']
+        _g['MAX_ITERATIONS'] = cfg.max_iterations
+        _g['MAX_CONSENSUS_ITERATIONS'] = cfg.max_consensus_iterations
+        _g['MAX_SUBTASKS_PER_AGENT'] = cfg.max_subtasks_per_agent
+        _g['REVIEW_MAX_ITERATIONS'] = cfg.review_max_iterations
+        _g['SCOPE_FILE_LIMIT'] = cfg.scope_file_limit
+        _g['SCOPE_LINE_LIMIT'] = cfg.scope_line_limit
+        _g['OLLAMA_TIMEOUT'] = cfg.ollama_timeout
+        _g['OLLAMA_NUM_CTX'] = cfg.ollama_num_ctx
+        _g['MAX_TOKENS'] = cfg.max_tokens
+        
+        # ── Propagate model overrides into domain_registry module ──────
+        # ALL_DOMAINS in domain_registry.py is evaluated at import time
+        # with static constants. After cartridge override, we must update
+        # both the module-level constants and the ALL_DOMAINS dict entries
+        # so execute_task() resolves dynamic models.
+        import domain_registry
+        domain_registry.EXECUTION_MODEL = _g['EXECUTION_MODEL']
+        domain_registry.CODER_MODEL = _g['CODER_MODEL']
+        domain_registry.REVIEWER_MODEL = _g['REVIEWER_MODEL']
+        domain_registry.REASONING_MODEL = _g['REASONING_MODEL']
+        domain_registry.PRE_SUMMARIZER_MODEL = _g['PRE_SUMMARIZER_MODEL']
+        domain_registry.LIBRARIAN_MODEL = _g['LIBRARIAN_MODEL']
+
+        # ── Propagate into ollama_client and _pipeline_helpers ──────────
+        # mesh_tasks.py re-exports model constants from _pipeline_helpers
+        # which in turn re-exports from ollama_client.  Those module-level
+        # names are bound at import time, so we must patch them in-place
+        # after the cartridge config override runs.
+        import ollama_client as _oc
+        import _pipeline_helpers as _ph
+        for _mod in (_oc, _ph):
+            for _attr, _val in (
+                ('CODER_MODEL',          _g['CODER_MODEL']),
+                ('REVIEWER_MODEL',       _g['REVIEWER_MODEL']),
+                ('DIRECTOR_MODEL',       _g['DIRECTOR_MODEL']),
+                ('EXECUTION_MODEL',      _g['EXECUTION_MODEL']),
+                ('REASONING_MODEL',      _g['REASONING_MODEL']),
+                ('PRE_SUMMARIZER_MODEL', _g['PRE_SUMMARIZER_MODEL']),
+            ):
+                if hasattr(_mod, _attr):
+                    setattr(_mod, _attr, _val)
+        
+        # Update each domain's model field in ALL_DOMAINS
+        from domain_registry import ALL_DOMAINS
+        _model_map = {
+            "C++": _g['EXECUTION_MODEL'],
+            "PHYS": _g['EXECUTION_MODEL'],
+            "SHADER": _g['CODER_MODEL'],
+            "Lua": _g['EXECUTION_MODEL'],
+            "DOC": _g['REASONING_MODEL'],
+            "OBSERVABILITY": _g['EXECUTION_MODEL'],
+            "CONF": _g['REASONING_MODEL'],
+            "TRIBUNAL": _g['REASONING_MODEL'],
+            "LIBRARIAN": _g['LIBRARIAN_MODEL'],
+        }
+        for domain_key, model_name in _model_map.items():
+            if domain_key in ALL_DOMAINS:
+                ALL_DOMAINS[domain_key]["model"] = model_name
+                
+        # Also sync _helpers_exec._ALL_DOMAINS which execute_task() reads
+        from _helpers_exec import _ALL_DOMAINS as _exec_domains
+        for domain_key, model_name in _model_map.items():
+            if domain_key in _exec_domains:
+                _exec_domains[domain_key]["model"] = model_name
+
+
+    # Merge OrchestrationConfig from the cartridge into module-level globals
+    if getattr(ctx, 'config', None) is not None:
+        _overwrite_constants_from_config(ctx.config)
+        print("  [Kernel] Module-level constants overwritten from cartridge context.")
+        # ── Patch ctx.domain_registry model fields ──────────────────────
+        # get_domain_registry() was called during mount_cartridge (before this
+        # override ran), so ctx.domain_registry may have pre-override model
+        # strings.  Re-apply the same _model_map so fix routing reads live values.
+        _live_dr = getattr(ctx, 'domain_registry', None)
+        if _live_dr:
+            _dr_model_map = {
+                "C++":          globals()['EXECUTION_MODEL'],
+                "PHYS":         globals()['EXECUTION_MODEL'],
+                "SHADER":       globals()['CODER_MODEL'],
+                "Lua":          globals()['EXECUTION_MODEL'],
+                "DOC":          globals()['REASONING_MODEL'],
+                "OBSERVABILITY":globals()['EXECUTION_MODEL'],
+                "CONF":         globals()['REASONING_MODEL'],
+                "TRIBUNAL":     globals()['REASONING_MODEL'],
+                "LIBRARIAN":    globals()['LIBRARIAN_MODEL'],
+            }
+            for _dk, _mn in _dr_model_map.items():
+                if _dk in _live_dr and isinstance(_live_dr[_dk], dict):
+                    _live_dr[_dk]["model"] = _mn
+    else:
+        print("  [Kernel] No cartridge config present — using built-in defaults.")
+
+    # ── Bootstrap prompt factories from the mounted cartridge ─────────────
+    # Must run AFTER mount_cartridge and _overwrite_constants_from_config so
+    # that _project_name() resolves to the real ecosystem name and all
+    # cartridge-supplied fields (reasoning_gate_domains, coding_mandates,
+    # review_prompt_extra, terminology_note) are present.
+    try:
+        from _prompts import pipeline_bootstrap_prompts
+        pipeline_bootstrap_prompts()
+        print("  [Kernel] Prompt factories refreshed from cartridge.")
+    except Exception as _pbe:
+        print(f"  [Kernel] WARNING: prompt bootstrap failed — {_pbe}")
+
     ctx.user_prompt = user_prompt
     ctx.project_root = PROJECT_ROOT
     ctx.session_mgr = session_mgr
@@ -415,6 +574,20 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
 
     # ── Phase 4: Task Execution ──
     ctx = run_tasks(ctx)
+
+    # ── VRAM Abort Guard: Skip Phases 5–8 if TPS watchdog fired ──
+    # If the VRAM Circuit Breaker in run_tasks detected token speed below
+    # 2.0 tok/s, ctx.final_verdict is set to "VRAM_OVERRUN" and all
+    # remaining waves are aborted. We must NOT proceed to Phases 5–8
+    # because that will immediately load models and trigger another
+    # cascade of VRAM overruns (as seen in the Architect Syntax Fix loop).
+    if getattr(ctx, 'final_verdict', None) == "VRAM_OVERRUN":
+        print(f"\n  [VRAM Abort Guard] ⛔ Pipeline aborted during task execution "
+              f"(VRAM overrun). Skipping Phases 5–8.\n")
+        output_path = PROJECT_ROOT / f"pipeline_abort_{datetime.now():%Y%m%d_%H%M%S}.md"
+        atomic_write_text(output_path, ctx.final_output)
+        print(f"  Abort report saved to {output_path.name}")
+        return ctx.final_output
 
     # ── Phases 5–8: Code Merge, Review, Consensus, Final Approval ──
     ctx = run_code_merge(ctx)
