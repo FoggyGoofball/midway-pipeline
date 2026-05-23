@@ -453,17 +453,26 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             
             Replaces the naive regex '([^)]{0,200})' which breaks on inline
             arithmetic with nested parentheses like (i * ball_radius).
+            
+            NOTE: The opening '(' is NOT included in the returned string,
+            and the closing ')' is stripped. This ensures comma-splitting
+            logic (which tracks depth) does not see depth==1 immediately,
+            which would cause all internal commas to be skipped.
             """
             _depth = 0
             _result = []
             for _ch in text[start_pos:]:
                 if _ch == '(':
                     _depth += 1
+                    if _depth == 1:
+                        # Skip the outermost '(' — do NOT add it to _result
+                        continue
                 elif _ch == ')':
                     _depth -= 1
                     if _depth == 0:
                         break
-                if _depth > 0:
+                    # Closing paren at depth > 0 is a nested close — keep it
+                if _depth >= 1:
                     _result.append(_ch)
             return "".join(_result).strip()
 
