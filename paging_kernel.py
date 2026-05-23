@@ -221,16 +221,20 @@ def _resolve_dynamic_page_limit(allocated_ctx: int) -> int:
 
     | Model      | num_ctx | Critical (80%) | Remaining  | Hard Cap |
     |------------|---------|----------------|------------|----------|
+    | 7B/8B      | 32768   | 26214 tokens   | 6554 tok   | 24000 chr |
     | phi3.5     | 16384   | 13107 tokens   | 3277 tok   | 9000 chr |
-    | 7B/9B/14B  | 8192    | 6553 tokens    | 1639 tok   | 4800 chr |
+    | legacy 8K  | 8192    | 6553 tokens    | 1639 tok   | 4800 chr |
     | aux/micro  | <8192   | ~5243 tokens   | ~1311 tok  | 3000 chr |
     """
-    if allocated_ctx >= 16384:
+    if allocated_ctx >= 32768:
+        return 24000   # Tier 3: 32768 ctx → 24000 chars (unlocked 7B/8B models)
+    elif allocated_ctx >= 16384:
         return 9000    # Tier 2: 16384 ctx → 9000 chars = 0% overrun at VRAM-critical
     elif allocated_ctx >= 8192:
         return 4800    # Tier 1: 8192 ctx → 4800 chars = 0% overrun at VRAM-critical
     else:
         return 3000    # Micro-tier: <8192 ctx → 3000 chars = 0% overrun at VRAM-critical
+
 
 
 
@@ -570,27 +574,48 @@ def inject_paged_content(messages: List[Dict[str, str]],
     return messages
 
 
-def inject_continuation_prompt(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def inject_continuation_prompt(messages: List[Dict[str, str]],
+                                system_prompt: str = "") -> List[Dict[str, str]]:
     """Inject the 'paging complete, continue' continuation prompt.
 
     This is appended as a user message so the LLM knows to resume generation
     exactly where it left off.
 
+    Fix 2: Uses dynamic continuation text based on agent role (reviewer vs coder).
+    Fix 3: Checks if last message is already user — concatenates instead of
+           appending a duplicate user message object.
+
     Args:
         messages: The current messages array.
+        system_prompt: The system prompt (used to detect reviewer persona).
 
     Returns:
         Updated messages array.
     """
-    continuation = (
-        "[SYSTEM KERNEL: Paging complete. "
-        "Continue generating your response exactly where you left off. "
-        "Do not restart. Do not repeat previous output.]"
+    # Fix 2: Dynamic continuation based on agent role
+    _is_reviewer = (
+        "Review" in system_prompt or "Reviewer" in system_prompt
     )
-    messages.append({
-        "role": "user",
-        "content": continuation,
-    })
+    if _is_reviewer:
+        continuation = (
+            "[SYSTEM KERNEL: Paging complete. Continue your evaluation of the code. "
+            "Provide your PASS/FAIL verdict.]"
+        )
+    else:
+        continuation = (
+            "[SYSTEM KERNEL: Paging complete. "
+            "Continue generating your response exactly where you left off. "
+            "Do not restart. Do not repeat previous output.]"
+        )
+
+    # Fix 3: Avoid double-user message echoing
+    if messages and messages[-1].get("role") == "user":
+        messages[-1]["content"] = messages[-1]["content"] + "\n" + continuation
+    else:
+        messages.append({
+            "role": "user",
+            "content": continuation,
+        })
     return messages
 
 
@@ -938,8 +963,13 @@ class PagingController:
 
         if self.active_messages:
             for msg in self.active_messages.messages:
-                if msg["role"] != "system":  # avoid duplicate system
-                    messages.append(msg)
+                # Only skip the root system_prompt, NOT dynamically injected
+                # system messages (paged-in context blocks). Static guard against
+                # silent context stripping that previously discarded every system
+                # message including PAGE_IN content.
+                if msg["role"] == "system" and msg["content"] == system_prompt:
+                    continue
+                messages.append(msg)
 
         # ── Directive C: Hard truncation before PAGE_OUT resume ────────────
         # If the messages array is bloated with assistant history from prior
@@ -962,23 +992,45 @@ class PagingController:
                 "content": self._ghost_buffer_text,
             })
 
-        # Append the continuation prompt.
-        # When there is no ghost buffer (PAGE_IN was the very first token emitted),
-        # the model has no prior generation to "continue from". Use a directive form
-        # that re-anchors the task so the model produces code rather than a meta-response.
+        # Determine the appropriate continuation prompt based on agent role.
+        # Previously the coder prompt was hardcoded, which destroyed reviewer persona
+        # and caused the reviewer to produce code output instead of evaluation.
+        _is_reviewer = (
+            "Review" in system_prompt or "Reviewer" in system_prompt
+        )
         if has_ghost:
-            continuation_text = (
-                "[SYSTEM KERNEL: Paging complete. "
-                "Continue generating your response exactly where you left off. "
-                "Do not restart. Do not repeat previous output.]"
-            )
+            if _is_reviewer:
+                continuation_text = (
+                    "[SYSTEM KERNEL: Paging complete. Continue your evaluation of the code. "
+                    "Provide your PASS/FAIL verdict.]"
+                )
+            else:
+                continuation_text = (
+                    "[SYSTEM KERNEL: Paging complete. "
+                    "Continue generating your response exactly where you left off. "
+                    "Do not restart. Do not repeat previous output.]"
+                )
         else:
-            continuation_text = (
-                "[SYSTEM KERNEL: Paging complete. The requested file content has been "
-                "injected above as a system message. Now produce your complete code output "
-                "for this task. Output ONLY a code block — no prose, no explanations.]"
-            )
-        messages.append({"role": "user", "content": continuation_text})
+            if _is_reviewer:
+                continuation_text = (
+                    "[SYSTEM KERNEL: Paging complete. The requested file content has been "
+                    "injected above as a system message. Now evaluate the code. "
+                    "Provide your PASS/FAIL verdict.]"
+                )
+            else:
+                continuation_text = (
+                    "[SYSTEM KERNEL: Paging complete. The requested file content has been "
+                    "injected above as a system message. Now produce your complete code output "
+                    "for this task. Output ONLY a code block — no prose, no explanations.]"
+                )
+
+        # Fix double-user message echoing: if the last message is already a "user"
+        # message, concatenate the continuation_text to it instead of appending
+        # a duplicate "user" message object.
+        if messages and messages[-1].get("role") == "user":
+            messages[-1]["content"] = messages[-1]["content"] + "\n" + continuation_text
+        else:
+            messages.append({"role": "user", "content": continuation_text})
 
         # Phase 7: Use the active model's context allocation for the resume
         # payload. Max ctx is 16384 (phi3.5, 9000-char page cap) for 12GB VRAM.

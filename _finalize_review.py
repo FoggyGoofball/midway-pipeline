@@ -40,6 +40,15 @@ from _helpers_exec import compile_project
 #  Directive C — Context Pruning for Fix Cycles
 # ──────────────────────────────────────────────────────────────────────
 
+def _strip_fix_plan(text: str) -> str:
+    """Aggressively strip <fix-plan>...</fix-plan> reasoning blocks from
+    raw LLM output before code block extraction and review passes.
+    
+    Uses re.DOTALL so the pattern matches across multiple lines.
+    """
+    return re.sub(r"<fix-plan>.*?</fix-plan>", "", text, flags=re.DOTALL).strip()
+
+
 def _prune_fix_context(
     domain_key: str,
     task_obj: 'Any',
