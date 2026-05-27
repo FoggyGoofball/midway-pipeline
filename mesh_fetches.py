@@ -1712,6 +1712,26 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
         except Exception:
             pass
 
+    # ── Inject the approved blueprint checklist so the Director is bound to it.
+    # This is the single most important context block — it must survive the
+    # pre-summarizer unchanged, so it is wrapped in a labelled HARD CONSTRAINT
+    # block rather than buried in prose that the compressor may discard.
+    _blueprint_path_for_director = ctx.project_root / "docs" / "project_blueprint.md"
+    _blueprint_constraint_block = ""
+    try:
+        _bp_text = _blueprint_path_for_director.read_text(encoding="utf-8").strip()
+        if _bp_text:
+            _blueprint_constraint_block = (
+                "\n\n## APPROVED BLUEPRINT — MANDATORY TASK LIST (DO NOT OMIT ANY ITEM)\n"
+                "The following checklist was reviewed and approved. "
+                "You MUST generate exactly one Director task for every unchecked item below. "
+                "Do NOT collapse, merge, or drop any item:\n"
+                + _bp_text
+                + "\n"
+            )
+    except Exception:
+        pass
+
     base_director_input = (
         f"{director_prompt}\n\n"
         f"## Relevant GDD Context\n{gdd_snippet}\n\n"
@@ -1720,6 +1740,7 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
         + _build_completed_work_snapshot(ctx)
         + _build_director_scope_mandate(ctx)
         + _build_attraction_design_block(ctx)
+        + _blueprint_constraint_block
         + f"---\nUSER REQUEST:\n{ctx.user_prompt}"
     )
 
@@ -2042,6 +2063,56 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
     if not ctx.tasks_list:
         ctx.tasks_list.append({"id": "1", "domain": "C++", "title": "Full Implementation", "depends_on": []})
         print(f"  [Director] CRITICAL ERROR: Maximum parsing recovery retries exceeded. Forced default fallback.")
+
+    # ── Mandatory-task injection: ensure economy/modifier tasks always exist ──
+    # The pre-summarizer can compress the blueprint context, causing the Director
+    # to omit mandatory tasks. Programmatically append any that are missing so
+    # downstream Lua agents always receive them — no extra LLM pass needed.
+    if _d_scope_mode in ("NEW_ATTRACTION", "MODIFY_ATTRACTION") and ctx.tasks_list:
+        _task_titles_lower = " ".join(t.get("title", "") for t in ctx.tasks_list).lower()
+        _canonical_file = _user_file_constraint_canonical or ""
+        _next_id = str(len(ctx.tasks_list) + 1)
+        _last_id = ctx.tasks_list[-1].get("id", _next_id)
+
+        if not any(kw in _task_titles_lower for kw in ("modifier", "attractionconstants", "engine_mod_")):
+            _mod_task = {
+                "id": _next_id,
+                "domain": "Lua",
+                "title": (
+                    "Integrate modifier system — read AttractionConstants.modifiers every OnStep "
+                    "frame and apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND to gameplay variables"
+                    + (f" - {_canonical_file}" if _canonical_file else "")
+                ),
+                "depends_on": [_last_id],
+                "target_file": _canonical_file,
+                "hooks": ["OnStep"],
+            }
+            ctx.tasks_list.append(_mod_task)
+            _next_id = str(int(_next_id) + 1)
+            _last_id = _mod_task["id"]
+            print(
+                f"  [Director Guard] ⚙ Injected mandatory modifier task "
+                f"(task_{_mod_task['id']}) — was absent from Director output."
+            )
+
+        if not any(kw in _task_titles_lower for kw in ("awardtickets", "awardtokens", "economy", "tickets", "tokens")):
+            _eco_task = {
+                "id": _next_id,
+                "domain": "Lua",
+                "title": (
+                    "Implement economy hooks — call Engine.AwardTickets(n, label) "
+                    "with Engine.GetStreak() multiplier on win/score events"
+                    + (f" - {_canonical_file}" if _canonical_file else "")
+                ),
+                "depends_on": [_last_id],
+                "target_file": _canonical_file,
+                "hooks": ["OnStep"],
+            }
+            ctx.tasks_list.append(_eco_task)
+            print(
+                f"  [Director Guard] ⚙ Injected mandatory economy task "
+                f"(task_{_eco_task['id']}) — was absent from Director output."
+            )
 
     print(f"  [Director] Created {len(ctx.tasks_list)} task(s)")
     return ctx
