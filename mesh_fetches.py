@@ -1421,8 +1421,11 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
             )
 
         # ── File-constraint enforcement ─────────────────────────────────────
-        # If the user previously specified a single target file, reject any
-        # blueprint that references a different .lua file.
+        # If the user previously specified a single target file, first attempt
+        # a cheap programmatic rewrite for near-match paths (e.g. typos like
+        # 'attractions/skeebal/skeeball.lua').  Only paths that differ in more
+        # than the directory/filename spelling (i.e. a genuinely different
+        # attraction entirely) are escalated to the LLM retry queue.
         if _user_file_constraint_canonical:
             _expected_lower = _user_file_constraint_canonical.lower()
             _other_lua = re.findall(
@@ -1434,13 +1437,53 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
                 if f.strip().lower() != _expected_lower
             ]
             if _violating:
-                _unique_v = list(dict.fromkeys(_violating))[:6]
-                _bp_issues.append(
-                    f"Blueprint references Lua file(s) other than the required "
-                    f"'{_user_file_constraint_canonical}': "
-                    + ", ".join(_unique_v)
-                    + ". ALL tasks MUST target only the single required file."
+                # Determine the canonical attraction stem for typo detection.
+                # e.g. 'attractions/skeeball/skeeball.lua' → stem = 'skeeball'
+                _canon_stem = (
+                    _user_file_constraint_canonical.rstrip("/")
+                    .split("/")[-1]          # filename
+                    .replace(".lua", "")
+                    .lower()
                 )
+
+                def _is_typo_path(bad: str) -> bool:
+                    """True when the bad path is just a misspelling of the
+                    canonical file — same basename stem (after edit-distance
+                    heuristic) or the same stem appears somewhere in the path."""
+                    bad_lower = bad.lower()
+                    bad_stem = bad_lower.rstrip("/").split("/")[-1].replace(".lua", "")
+                    # Accept if stems share ≥ 80 % of characters (Jaccard on chars)
+                    s1, s2 = set(_canon_stem), set(bad_stem)
+                    jaccard = len(s1 & s2) / max(len(s1 | s2), 1)
+                    return jaccard >= 0.8 or _canon_stem in bad_lower
+
+                _typo_paths   = [f for f in _violating if _is_typo_path(f)]
+                _foreign_paths = [f for f in _violating if not _is_typo_path(f)]
+
+                if _typo_paths:
+                    # Rewrite every typo variant directly in the blueprint string.
+                    _rewritten = 0
+                    for _bad in set(_typo_paths):
+                        blueprint = re.sub(
+                            re.escape(_bad),
+                            _user_file_constraint_canonical,
+                            blueprint,
+                            flags=re.IGNORECASE,
+                        )
+                        _rewritten += 1
+                    print(
+                        f"  [Blueprint Validator] 🔧 Programmatically corrected "
+                        f"{_rewritten} typo path(s) → '{_user_file_constraint_canonical}'"
+                    )
+
+                if _foreign_paths:
+                    _unique_v = list(dict.fromkeys(_foreign_paths))[:6]
+                    _bp_issues.append(
+                        f"Blueprint references Lua file(s) other than the required "
+                        f"'{_user_file_constraint_canonical}': "
+                        + ", ".join(_unique_v)
+                        + ". ALL tasks MUST target only the single required file."
+                    )
 
         if _bp_issues:
             _issues_text = "\n".join(f"  - {i}" for i in _bp_issues)
