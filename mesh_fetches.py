@@ -1182,6 +1182,13 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
         "Lua variables or tables. Do NOT describe them as engine primitives, C++ features, "
         "or inventory systems. Example — CORRECT: 'Track remaining balls with a Lua counter'. "
         "WRONG: 'Create an inventory system for balls'.\n"
+        "13. ECONOMY MANDATE (NON-NEGOTIABLE): The blueprint MUST include BOTH of the following "
+        "as explicit tasks:\n"
+        "    a. A task that reads AttractionConstants.modifiers inside OnStep every frame "
+        "(never cache modifier values at load time).\n"
+        "    b. A task that calls Engine.AwardTickets(n, label) or Engine.AwardTokens(n, label) "
+        "on win/score events, using Engine.GetStreak() as a multiplier.\n"
+        "    Omitting either will cause an AUTOMATIC REJECTION of the blueprint.\n"
         + (
             f"\n## HARD FILE CONSTRAINT — MANDATORY:\n"
             f"This is a NEW_ATTRACTION request. ALL Lua code MUST be placed in exactly ONE file:\n"
@@ -1368,6 +1375,28 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
                 _bp_issues.append(
                     "No lifecycle task found. The first task MUST define OnLoadAttraction() "
                     "(or OnLoadStatic/OnLoad/OnUnload) entry points and register MidwayPhysics.OnStep."
+                )
+
+        # Economy mandate check — applies to all attraction scopes
+        if _scope_mode in ("NEW_ATTRACTION", "MODIFY_ATTRACTION"):
+            _bp_lower = blueprint.lower()
+            _has_modifier = any(kw in _bp_lower for kw in (
+                "attractionconstants.modifiers", "engine_mod_", "modifier",
+            ))
+            _has_economy = any(kw in _bp_lower for kw in (
+                "awardtickets", "awardtokens", "economy", "tickets", "tokens",
+            ))
+            if not _has_modifier:
+                _bp_issues.append(
+                    "ECONOMY VIOLATION: No task reads AttractionConstants.modifiers inside OnStep. "
+                    "Add an explicit task: 'Integrate modifier system — read AttractionConstants.modifiers "
+                    "every OnStep frame and apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND to gameplay variables'."
+                )
+            if not _has_economy:
+                _bp_issues.append(
+                    "ECONOMY VIOLATION: No task calls Engine.AwardTickets or Engine.AwardTokens. "
+                    "Add an explicit task: 'Implement economy hooks — call Engine.AwardTickets(n, label) "
+                    "with Engine.GetStreak() multiplier on win/score events'."
                 )
 
         # Detect phantom API names in task lines.
