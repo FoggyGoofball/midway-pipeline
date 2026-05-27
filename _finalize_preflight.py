@@ -216,12 +216,58 @@ def _inject_empty_output_errors(ctx: PipelineContext) -> None:
                     _file_content = _target_path.read_text(encoding="utf-8", errors="replace")
                     _patched_content = _strip_search_replace_metadata(content)
                     if _patched_content != content:
+                        # Before broadcasting, verify the patched content doesn't
+                        # contain static-guard violations.  A SEARCH/REPLACE block
+                        # that introduces phantom APIs (e.g. SpawnStaticMesh with a
+                        # string path, BUTTON.x, SLOT_X globals) must never be
+                        # propagated to sibling tasks — that would poison every task
+                        # sharing the file with the same bad pattern.
+                        _SR_GUARD_PATTERNS = [
+                            re.compile(r'MidwayPhysics\.SpawnStaticMesh\s*\(\s*[\'"]', re.IGNORECASE),
+                            re.compile(r'MidwayPhysics\.SpawnStaticPlane', re.IGNORECASE),
+                            re.compile(r'MidwayPhysics\.ApplyForce\b', re.IGNORECASE),
+                            re.compile(r'\bBUTTON\s*\.', re.MULTILINE),
+                            re.compile(r'\bSLOT_[XYZ]\b', re.MULTILINE),
+                            re.compile(r'\bSharedBooth\s*\.', re.MULTILINE),
+                            re.compile(r'\bsol\s*\.\s*(?:set_function|new_usertype|state)\s*\(', re.IGNORECASE),
+                        ]
+                        _sr_guard_hit = next(
+                            (p for p in _SR_GUARD_PATTERNS if p.search(_patched_content)),
+                            None,
+                        )
+                        if _sr_guard_hit:
+                            ctx.pre_flight_errors += (
+                                f"\n## Static Pattern Violation — Task {tid} [SEARCH/REPLACE blocked]\n"
+                                f"**Rule:** SEARCH/REPLACE output contains a static-guard violation "
+                                f"(matched: `{_sr_guard_hit.pattern}`) and was NOT broadcast to sibling tasks.\n"
+                                f"Rewrite task {tid} without phantom APIs, undefined globals (BUTTON, SLOT_X, "
+                                f"SharedBooth), or unsupported SpawnStaticMesh overloads.\n"
+                            )
+                            print(f"  [Pre-Flight] ⛔ SEARCH/REPLACE for task {tid} blocked — static guard hit: {_sr_guard_hit.pattern}")
+                            continue
                         # SEARCH/REPLACE was applied — store globally for all
                         # tasks targeting this file.
                         ctx.all_results_dict[tid] = _patched_content
+                        # Sync all_results for the primary task.
+                        _fp_f0 = False
+                        for _fp_i0, _fp_e0 in enumerate(ctx.all_results):
+                            if _fp_e0.get("task_id") == tid:
+                                ctx.all_results[_fp_i0] = {"task_id": tid, "output": _patched_content}
+                                _fp_f0 = True
+                                break
+                        if not _fp_f0:
+                            ctx.all_results.append({"task_id": tid, "output": _patched_content})
                         for _otid, _otask in ctx.task_map.items():
                             if _otid != tid and _otask.target_file == _task_obj.target_file:
                                 ctx.all_results_dict[_otid] = _patched_content
+                                _fp_f1 = False
+                                for _fp_i1, _fp_e1 in enumerate(ctx.all_results):
+                                    if _fp_e1.get("task_id") == _otid:
+                                        ctx.all_results[_fp_i1] = {"task_id": _otid, "output": _patched_content}
+                                        _fp_f1 = True
+                                        break
+                                if not _fp_f1:
+                                    ctx.all_results.append({"task_id": _otid, "output": _patched_content})
                         # Write patched content to disk
                         _target_path.parent.mkdir(parents=True, exist_ok=True)
                         atomic_write_text(_target_path, _patched_content)
@@ -258,24 +304,9 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             "nlohmann/json is a C++ library and cannot be require()'d from Lua. "
             "Use Engine.LoadJSON(path) or parse via the bridge contract instead.",
         ),
-        # Lua: SpawnDynamicBall / SpawnStaticBall — never existed in the bridge.
-        (
-            "Lua",
-            re.compile(r'\bMidwayPhysics\.(SpawnDynamicBall|SpawnStaticBall)\s*\(', re.IGNORECASE),
-            "phantom API MidwayPhysics.SpawnDynamic/StaticBall — use SpawnDynamicSphere / SpawnStaticSphere",
-            "SpawnDynamicBall and SpawnStaticBall do not exist in the bridge contract. "
-            "Use MidwayPhysics.SpawnDynamicSphere(lx, ly, lz, r, [mass]) or "
-            "MidwayPhysics.SpawnStaticSphere(lx, ly, lz, r) instead.",
-        ),
-        # Lua: require('midway_physics') — the bridge exposes globals, not a module.
-        (
-            "Lua",
-            re.compile(r"""require\s*\(\s*['"]midway_physics['"]\s*\)""", re.IGNORECASE),
-            "phantom require('midway_physics') — bridge APIs are globals, not a module",
-            "The C++ bridge injects MidwayPhysics.* as globals directly into the Lua state. "
-            "There is no 'midway_physics' module to require(). "
-            "Remove the require() call and use MidwayPhysics.SpawnDynamicSphere(...) directly.",
-        ),
+        # NOTE: SpawnDynamicBall, SpawnStaticBall, require('midway_physics'), and other
+        # phantom API names are now caught universally by the contract validator (C9).
+        # Individual entries here are no longer needed.
         # C++: lua.set_function("X.Y", ...) — sol2 dot-notation table paths.
         (
             "C++",
@@ -295,29 +326,12 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             "Remove all sol.* calls (including sol.input.*, sol.state.*, etc.) from Lua code. "
             "Use print() for logging; player input is handled by engine callbacks, not sol.",
         ),
-        # C8: Bare DestroyBody(...) without MidwayPhysics. namespace in Lua.
-        # Match only on non-comment lines (lines that are not Lua comment lines starting with --)
-        # to avoid false positives on "-- Example: DestroyBody(ballHandle)" stubs.
-        (
-            "Lua",
-            re.compile(r'^(?!\s*--).*(?<!MidwayPhysics\.)\bDestroyBody\s*\(', re.IGNORECASE | re.MULTILINE),
-            "bare DestroyBody() — missing MidwayPhysics. namespace",
-            "DestroyBody is not a global function. "
-            "Use MidwayPhysics.DestroyBody(handle) instead.",
-        ),
-        # F19: SpawnStaticPlane — phantom API, never existed in the bridge.
-        (
-            "Lua",
-            re.compile(r'\bMidwayPhysics\.SpawnStaticPlane\s*\(', re.IGNORECASE),
-            "phantom API MidwayPhysics.SpawnStaticPlane — does not exist",
-            "SpawnStaticPlane is not in the bridge contract. "
-            "Use SpawnStaticBox with a very small Y half-extent to approximate a ground plane, "
-            "e.g. MidwayPhysics.SpawnStaticBox(0, 0, 0, 10, 0.05, 10).",
-        ),
-        # C10: Duplicate top-level function definition in Lua.
-        # Detected via post-guard check below — regex finds all names first.
-        # C12: Bare OnStep defined — reliable two-pass check (see below).
-        # C++: re-registering existing bridge spawn functions.
+        # C8 / C8b / C8c / C8d: Bare engine calls (DestroyBody, IsSensorTriggered,
+        # SpawnXxx, ApplyImpulse, etc.) without the required namespace prefix are now
+        # caught universally by the contract validator (C9 / bare-call pass).
+        # F19: SpawnStaticPlane and other phantom MidwayPhysics.* names are also
+        # caught by the contract validator.
+        # C15: MidwayPhysics.log / .log_message — subsumed by contract validator.
         (
             "C++",
             re.compile(
@@ -357,13 +371,10 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             "C++ uses the :: scope operator. "
             "Replace MidwayPhysics.ApplyImpulse(...) with MidwayPhysics::ApplyImpulse(...) etc.",
         ),
-        # C15: MidwayPhysics.log / MidwayPhysics.log_message — not in the bridge.
-        (
-            "Lua",
-            re.compile(r'\bMidwayPhysics\.(log_message|log)\s*\(', re.IGNORECASE),
-            "phantom API MidwayPhysics.log_message / MidwayPhysics.log — not registered in the bridge",
-            "MidwayPhysics exposes no logging function. Use print() for Lua-side logging.",
-        ),
+        # C10: Duplicate top-level function definition in Lua.
+        # Detected via post-guard check below — regex finds all names first.
+        # C12: Bare OnStep defined — reliable two-pass check (see below).
+        # C++: re-registering existing bridge spawn functions.
         # C17: MidwayInput called with an unknown action name.
         # The only valid action strings are the five defined in MidwayInput.cpp.
         (
@@ -394,6 +405,55 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             "Attraction scripts are loaded by AttractionManager directly. "
             "Do not use require() to load other attraction files. "
             "Define OnLoadAttraction() and OnUnload() directly in the target file.",
+        ),
+        # S1: Lua scaffold function — body is only a TODO comment or return nil stub.
+        # Matches functions whose entire body (ignoring whitespace/comments) is one of:
+        #   -- TODO / -- todo / -- placeholder / -- implement / -- stub / -- FIXME
+        #   return nil / return false / return 0 / return {} / ... (Lua vararg pass-through)
+        # These are never valid shipped implementations.
+        (
+            "Lua",
+            re.compile(
+                r'\bfunction\b[^\n]*\n'           # function header
+                r'(?:\s*(?:--[^\n]*)?\n)*'        # optional leading comment lines
+                r'\s*(?:'
+                    r'--\s*(?:TODO|FIXME|stub|placeholder|implement\s+me|to[-\s]?do)\b'
+                    r'|return\s+(?:nil|false|0|\{\s*\})'
+                    r'|\.\.\.'
+                r')\s*\n'
+                r'(?:\s*(?:--[^\n]*)?\n)*'        # optional trailing comment lines
+                r'\s*end\b',
+                re.IGNORECASE | re.DOTALL,
+            ),
+            "scaffold/stub Lua function — body is a TODO, return nil, or ... pass-through",
+            "The function contains only a placeholder body and is not a real implementation. "
+            "Replace the stub body with a complete, working implementation.",
+        ),
+        # S2: C++ scaffold function — body contains only a TODO comment or a bare return.
+        (
+            "C++",
+            re.compile(
+                r'\)\s*(?:const\s*)?\{[^}]{0,200}'    # short function body
+                r'(?://\s*(?:TODO|FIXME|stub|placeholder|implement\s+me|to[-\s]?do)\b'
+                r'|/\*\s*(?:TODO|FIXME|stub|placeholder)[^*]*\*/'
+                r'|\breturn\s*;\s*'
+                r')',
+                re.IGNORECASE | re.DOTALL,
+            ),
+            "scaffold/stub C++ function — body is a TODO comment or empty return",
+            "The C++ function body is a placeholder and not a real implementation. "
+            "Provide a complete function body with actual logic.",
+        ),
+        # G1: Undefined booth globals — BUTTON, SLOT_X/Y/Z, SharedBooth.
+        # These are never defined anywhere in the Midway runtime and will crash at load.
+        # Models hallucinate them from booth_shared.lua comments.
+        (
+            "Lua",
+            re.compile(r'\b(?:BUTTON|SLOT_[XYZ]|SharedBooth)\b', re.MULTILINE),
+            "undefined booth global (BUTTON / SLOT_X/Y/Z / SharedBooth)",
+            "BUTTON, SLOT_X, SLOT_Y, SLOT_Z, and SharedBooth are NOT defined in the "
+            "Midway runtime. Do not reference them. Use literal numeric coordinates "
+            "from the attraction spec instead.",
         ),
     ]
 
@@ -596,6 +656,14 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                             _new_content_g = _old_content_g.replace(_bad_call_raw, _corrected_call, 1)
                             if _new_content_g != _old_content_g:
                                 ctx.all_results_dict[tid] = _new_content_g
+                                _fg_found = False
+                                for _fg_i, _fg_e in enumerate(ctx.all_results):
+                                    if _fg_e.get("task_id") == tid:
+                                        ctx.all_results[_fg_i] = {"task_id": tid, "output": _new_content_g}
+                                        _fg_found = True
+                                        break
+                                if not _fg_found:
+                                    ctx.all_results.append({"task_id": tid, "output": _new_content_g})
                                 print(f"  [Fix G] ✅ Auto-patched {_fn_name} arg count "
                                       f"({_actual}→{_min_exp}) in task {tid}")
                                 # Update ledger signatures for the corrected call
@@ -624,142 +692,62 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                         )
                         print(f"  [Static Guard] ❌ Task {tid} [Lua]: {_fn_name} arg count {_actual}≠{_min_exp}–{_max_exp}")
 
-        # ── C9: Phantom API scan — Lua calls not in the bridge contract ───────
+        # ── C9: Contract-driven API validation ────────────────────────────────
+        # Instead of a growing blacklist of known-bad names, we validate
+        # positively against the authoritative bridge contract from the
+        # cartridge.  This catches both phantom (unknown namespaced) calls
+        # AND bare calls (missing namespace prefix) for every symbol in the
+        # contract — universally, without per-symbol maintenance.
         if domain == "Lua":
-            _approved_lua = getattr(ctx, '_bridge_exclusion_set', set())
-            if _approved_lua:
-                # Strip Lua single-line comments before scanning so that lines
-                # like '-- MidwayPhysics.SetPosition(...)' never produce false
-                # phantom-API positives.  Block comments (--[[ ... ]]) are rare
-                # in generated code; single-line stripping is sufficient.
-                _content_for_phantom_scan = re.sub(r'--[^\n]*', '', content)
-                # Engine namespaces whose methods we validate; user-defined table
-                # methods (skeeball.score, self.handle, etc.) are NOT engine calls
-                # and must never be flagged as phantom APIs.
-                _ENGINE_NAMESPACES = {"midwayphysics", "engine", "attractionconstants", "sol"}
-                # Comprehensive list of all valid bridge calls (lowercased).
-                # Keeps C9 from firing when the cartridge exclusion set has a parse gap.
-                _always_ok = {
-                    # MidwayPhysics — spawn
-                    "midwayphysics.spawnstaticbox", "midwayphysics.spawnstaticsphere",
-                    "midwayphysics.spawnstaticcapsule", "midwayphysics.spawnstaticcylinder",
-                    "midwayphysics.spawnstaticmesh",
-                    "midwayphysics.spawnstaticboxr", "midwayphysics.spawnstaticspherer",
-                    "midwayphysics.spawnstaticcapsuler", "midwayphysics.spawnstaticcylinderr",
-                    "midwayphysics.spawnkinematicbox", "midwayphysics.spawnkinematicsphere",
-                    "midwayphysics.spawnkinematiccapsule", "midwayphysics.spawnkinematiccylinder",
-                    "midwayphysics.spawnkinematicboxr",
-                    "midwayphysics.spawndynamicbox", "midwayphysics.spawndynamicsphere",
-                    "midwayphysics.spawndynamiccapsule", "midwayphysics.spawndynamiccylinder",
-                    "midwayphysics.spawndynamicmesh",
-                    "midwayphysics.spawndynamicboxr", "midwayphysics.spawndynamicspherer",
-                    "midwayphysics.spawndynamiccapsuler", "midwayphysics.spawndynamiccylinderr",
-                    "midwayphysics.spawnsensorbox", "midwayphysics.spawnsensorsphere",
-                    # MidwayPhysics — queries / movement
-                    "midwayphysics.destroybody", "midwayphysics.onstep",
-                    "midwayphysics.getposition", "midwayphysics.getvelocity",
-                    "midwayphysics.getrotation", "midwayphysics.isactive",
-                    "midwayphysics.issensortriggered",
-                    "midwayphysics.movekinematic",
-                    # MidwayPhysics — impulse / velocity
-                    "midwayphysics.setlinearvelocity", "midwayphysics.addlinearvelocity",
-                    "midwayphysics.applyimpulse", "midwayphysics.applyangularimpulse",
-                    # MidwayPhysics — per-body properties
-                    "midwayphysics.setfriction", "midwayphysics.setrestitution",
-                    "midwayphysics.setgravityfactor", "midwayphysics.setmass",
-                    "midwayphysics.setlineardamping", "midwayphysics.setangulardamping",
-                    # MidwayPhysics — pools
-                    "midwayphysics.createpool", "midwayphysics.poolacquire",
-                    "midwayphysics.poolreturn", "midwayphysics.poolcullbelow",
-                    "midwayphysics.poolfree", "midwayphysics.pooltotal",
-                    # Engine economy
-                    "engine.awardtickets", "engine.awardtokens",
-                    "engine.gettickets", "engine.gettokens", "engine.getstreak",
-                    # AttractionConstants
-                    "attractionconstants.modifiers", "attractionconstants.booth",
-                    "attractionconstants.runtime",
-                    # Lua stdlib (belt-and-suspenders; namespace guard below also covers these)
-                    "table.insert", "table.remove", "table.concat", "table.sort",
-                    "math.floor", "math.ceil", "math.abs", "math.max", "math.min",
-                    "math.sqrt", "math.random", "string.format", "string.len",
-                    "string.sub", "string.find", "string.gsub",
-                    "io.open", "io.close", "os.time", "os.clock",
-                }
-                _approved_lower = _approved_lua | _always_ok
-                # Build the approved-names hint once from the full merged set,
-                # grouped by namespace so it stays readable as the contract grows.
-                # We deliberately do NOT slice — every name in the live contract
-                # must be visible to the fix agent.
-                _ns_groups: dict = {}
-                for _entry in sorted(_approved_lower):
-                    _parts = _entry.split(".", 1)
-                    if len(_parts) == 2:
-                        _ns_groups.setdefault(_parts[0], []).append(_parts[1])
-                _approved_names_hint = "; ".join(
-                    f"{_ns}: {', '.join(sorted(_fns))}"
-                    for _ns, _fns in sorted(_ns_groups.items())
-                    if _ns in _ENGINE_NAMESPACES
-                )
-                _phantom_names_this_task: set = set()
-                for _api_m in re.finditer(
-                    r'\b([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*\(',
-                    _content_for_phantom_scan,
-                ):
-                    _call = _api_m.group(1).lower()
-                    _ns = _call.split(".")[0]
-                    # Only validate calls whose namespace is a known engine namespace.
-                    # User-defined table methods (e.g. skeeball.score()) are NOT engine
-                    # calls and must never be reported as phantom APIs.
-                    if _ns not in _ENGINE_NAMESPACES:
-                        continue
-                    # Skip if it matches any approved name
-                    if _call in _approved_lower:
-                        continue
-                    # Skip Lua stdlib namespaces
-                    if _ns in ("math", "string", "table", "io", "os", "coroutine",
-                               "package", "debug", "utf8"):
-                        continue
-                    _bare_name = _api_m.group(1).split(".", 1)[1]  # e.g. "SetDensity"
-                    _phantom_names_this_task.add(_bare_name)
-                    # Keep the per-call error compact — the approved API hint is
-                    # emitted once as a deduplicated header block below, not
-                    # repeated inside every individual phantom error.
-                    ctx.pre_flight_errors += (
-                        f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                        f"**Rule:** phantom API call '{_api_m.group(1)}'\n"
-                        f"**Why this is always wrong:** '{_api_m.group(1)}' is not in the "
-                        f"approved bridge contract. Any engine call not on the approved list "
-                        f"will crash at runtime.\n"
-                        f"Do NOT invent a replacement name. Use ONLY the names from the "
-                        f"'Approved Bridge API' block at the top of these errors.\n"
-                        f"Fix this before the reviewer sees the code.\n"
+            try:
+                from contract_validator import build_lua_contract, validate_lua_content
+                # Resolve the bridge contract from the active cartridge.
+                _bc_fn = getattr(ctx, '_cartridge_build_bridge_contract', None)
+                _raw_bc = _bc_fn() if callable(_bc_fn) else {}
+                if _raw_bc:
+                    _lua_contract = build_lua_contract(
+                        _raw_bc,
+                        extra_engine_namespaces={"sol"},
                     )
-                    print(f"  [Static Guard] ❌ Task {tid} [Lua]: phantom API '{_api_m.group(1)}'")
-                if _phantom_names_this_task:
-                    # Prepend the approved API hint ONCE per task, before all the
-                    # individual phantom errors, so the fix agent always sees it
-                    # regardless of how many calls were flagged.
-                    _hint_header = (
-                        f"\n## Approved Bridge API — Task {tid} [Lua] "
-                        f"(use ONLY these exact names)\n{_approved_names_hint}\n"
-                    )
-                    # Insert just before the first phantom-error block for this task.
-                    _marker = f"\n## Static Pattern Violation — Task {tid} [Lua]\n**Rule:** phantom API"
-                    _insert_pos = ctx.pre_flight_errors.rfind(_marker)
-                    if _insert_pos == -1:
-                        ctx.pre_flight_errors += _hint_header
-                    else:
-                        ctx.pre_flight_errors = (
-                            ctx.pre_flight_errors[:_insert_pos]
-                            + _hint_header
-                            + ctx.pre_flight_errors[_insert_pos:]
+                    _cv_violations = validate_lua_content(content, _lua_contract)
+                    _cv_phantom_names: set = set()
+                    for _viol in _cv_violations:
+                        ctx.pre_flight_errors += (
+                            f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
+                            f"**Rule:** {_viol.label}\n"
+                            f"**Why this is always wrong:** {_viol.explanation}\n"
+                            f"Fix this before the reviewer sees the code.\n"
                         )
-                if _phantom_names_this_task:
-                    try:
-                        from ledger import retract_ledger_entries
-                        retract_ledger_entries(_phantom_names_this_task)
-                    except Exception:
-                        pass
+                        print(f"  [Static Guard] ❌ Task {tid} [Lua]: {_viol.label}")
+                        if _viol.kind in ("phantom_api", "bare_call"):
+                            _cv_phantom_names.add(_viol.call_text.split(".")[-1])
+                    if _cv_violations:
+                        # Prepend a single approved-API hint block before the first
+                        # violation for this task so the fix agent always has the
+                        # complete approved surface visible at the top of the errors.
+                        _hint_header = (
+                            f"\n## Approved Bridge API — Task {tid} [Lua] "
+                            f"(use ONLY these exact names)\n"
+                            f"{_lua_contract.approved_names_hint}\n"
+                        )
+                        _marker = f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
+                        _insert_pos = ctx.pre_flight_errors.rfind(_marker)
+                        if _insert_pos == -1:
+                            ctx.pre_flight_errors += _hint_header
+                        else:
+                            ctx.pre_flight_errors = (
+                                ctx.pre_flight_errors[:_insert_pos]
+                                + _hint_header
+                                + ctx.pre_flight_errors[_insert_pos:]
+                            )
+                    if _cv_phantom_names:
+                        try:
+                            from ledger import retract_ledger_entries
+                            retract_ledger_entries(_cv_phantom_names)
+                        except Exception:
+                            pass
+            except Exception as _cv_err:
+                print(f"  [Static Guard] ⚠ C9 contract validator error: {_cv_err}")
 
         # ── C10: Duplicate top-level function definition in Lua ───────────────
         if domain == "Lua":
@@ -827,10 +815,14 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                             break  # one error per function pair is sufficient
 
         # ── C12: Bare OnStep defined without MidwayPhysics.OnStep registration ─
-        # Two-pass: (1) bare global OnStep exists, (2) MidwayPhysics.OnStep absent.
+        # Two-pass: (1) a non-local (module-level) bare global OnStep exists,
+        #           (2) MidwayPhysics.OnStep registration is absent.
+        # Scoping fix: 'local function OnStep' is valid as an upvalue passed to
+        # MidwayPhysics.OnStep — do NOT flag it.  Only flag a *non-local* bare
+        # global 'function OnStep' that has no corresponding registration call.
         if domain == "Lua":
             _has_bare_onstep = bool(re.search(
-                r'^(?:local\s+)?function\s+OnStep\s*\(',
+                r'^function\s+OnStep\s*\(',
                 content, re.MULTILINE
             ))
             _has_registered_onstep = bool(re.search(
@@ -865,7 +857,59 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     # regardless of compiler availability.
     _inject_static_pattern_errors(ctx)
 
-    # Platform-aware compilation check — only run if a configured build tree exists.
+    # Coverage check: every task in task_map must have a non-empty result.
+    # Tasks that were never executed (e.g. the LLM dropped them) are surfaced
+    # here so the fix loop has a concrete mandate to generate the missing output.
+    if ctx.task_map:
+        for _cov_tid, _cov_task in ctx.task_map.items():
+            _cov_out = ctx.all_results_dict.get(_cov_tid, "")
+            if not _cov_out or not _cov_out.strip():
+                _cov_dom = getattr(_cov_task, "agent", "?")
+                _cov_desc = getattr(_cov_task, "description", "") or getattr(_cov_task, "title", "")
+                ctx.pre_flight_errors += (
+                    f"\n## Missing Output — Task {_cov_tid} [{_cov_dom}]\n"
+                    f"Task {_cov_tid} ({_cov_desc[:120]}) was planned but produced no output. "
+                    f"A complete implementation is required for every planned task.\n"
+                )
+                print(f"  [Coverage Check] ⛔ Task {_cov_tid} [{_cov_dom}] has no output — injecting fix demand.")
+
+    # Integration schema conflict check: handle ownership collisions across tasks.
+    try:
+        from integration_schema import validate_schema_conflicts
+        _schema_conflict_text = validate_schema_conflicts(ctx)
+        if _schema_conflict_text:
+            ctx.pre_flight_errors += _schema_conflict_text
+            print(f"  [IntegrationSchema] ⚡ Schema conflicts detected — injecting into preflight errors.")
+    except Exception:
+        pass
+
+    # Feature coverage gap check: compare agent outputs against AttractionDesign checklist.
+    _design = getattr(ctx, 'attraction_design', None)
+    if _design and _design.feature_checklist:
+        _all_output = "\n".join(ctx.all_results_dict.values())
+        _gaps = []
+        for _feature in _design.feature_checklist:
+            # Heuristic: look for any 2+ consecutive non-stop-words from the
+            # feature string appearing in the combined output.
+            import re as _re_cov
+            _keywords = [w for w in _re_cov.findall(r'\b\w{4,}\b', _feature.lower())
+                         if w not in {'must', 'should', 'that', 'with', 'this', 'from', 'have', 'when', 'been', 'into', 'each'}]
+            if _keywords and not any(kw in _all_output.lower() for kw in _keywords[:3]):
+                _gaps.append(_feature)
+        if _gaps:
+            ctx.coverage_gaps = _gaps
+            _gap_lines = "\n".join(f"  - {g}" for g in _gaps)
+            ctx.pre_flight_errors += (
+                f"\n## ⚠️  Feature Coverage Gaps (from Attraction Design checklist)\n"
+                f"The following features from the design document appear to be missing from agent outputs:\n"
+                f"{_gap_lines}\n"
+                "Each agent responsible MUST ensure these features are implemented.\n"
+            )
+            print(f"  [Coverage Check] 📋 {len(_gaps)} design checklist item(s) appear missing.")
+        else:
+            print("  [Coverage Check] ✅ All design checklist items appear covered.")
+
+    # Platform-aware compilation check
     _cmake_cache = ctx.project_root / "CMakeCache.txt"
     _makefile = ctx.project_root / "Makefile"
     try:
@@ -996,19 +1040,89 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         f"\n## Unit Test Execution Error:\n```\n{e}\n```\n"
                     )
 
-    for lf in ctx.project_root.rglob("*.lua"):
-        try:
-            lua_proc = subprocess.run(
-                ["luac", "-p", str(lf)], capture_output=True, text=True, timeout=30,
-            )
-            if lua_proc.returncode != 0:
-                ctx.pre_flight_errors += (
-                    f"\n## Lua Syntax Error in {lf.name}:\n```\n{lua_proc.stderr}\n```"
+    # Scan both the real project tree and .staging_workspace/ so that files
+    # flushed to staging (when staging mode is active) are also syntax-checked.
+    from _helpers_io import is_staging_active, get_staging_path
+    _lua_roots = [ctx.project_root]
+    _staging_root = ctx.project_root / ".staging_workspace"
+    if is_staging_active() and _staging_root.is_dir():
+        _lua_roots.append(_staging_root)
+
+    _luac_missing = False
+    for _lua_root in _lua_roots:
+        if _luac_missing:
+            break
+        for lf in _lua_root.rglob("*.lua"):
+            try:
+                lua_proc = subprocess.run(
+                    ["luac", "-p", str(lf)], capture_output=True, text=True, timeout=30,
                 )
-        except subprocess.TimeoutExpired:
+                if lua_proc.returncode != 0:
+                    ctx.pre_flight_errors += (
+                        f"\n## Lua Syntax Error in {lf.name}:\n```\n{lua_proc.stderr}\n```"
+                    )
+            except subprocess.TimeoutExpired:
+                ctx.pre_flight_errors += (
+                    f"\n## Lua Syntax Error in {lf.name}:\n```\nluac timed out after 30s\n```\n"
+                )
+            except FileNotFoundError:
+                # luac is not installed — warn once and skip file-level Lua syntax checks.
+                # Static guards above still run; this is a degraded but not silent path.
+                print("  [Pre-Flight] ⚠ luac not found — Lua file-level syntax check skipped. "
+                      "Install luac for full Lua syntax coverage.")
+                _luac_missing = True
+                break
+            except Exception:
+                pass
+
+    # ── Headless Runtime Simulation ─────────────────────────────────────────
+    # Run the lightweight Lua tick harness against all Lua/physics task outputs.
+    # Surfaces nil-handle access, bad API calls, and global pollution before
+    # the output reaches the reviewer.  Non-fatal: errors become pre_flight_errors.
+    try:
+        from runtime_sim import run_runtime_sim
+        _sim_errors = run_runtime_sim(ctx)
+        if _sim_errors:
             ctx.pre_flight_errors += (
-                f"\n## Lua Syntax Error in {lf.name}:\n```\nluac timed out after 30s\n```\n"
+                "\n## ⚡ Runtime Simulation Errors\n"
+                + "\n".join(f"  {e}" for e in _sim_errors)
+                + "\n"
             )
+            print(f"  [RuntimeSim] ⛔ {len(_sim_errors)} runtime error(s) detected.")
+        else:
+            print("  [RuntimeSim] ✅ No runtime simulation errors detected.")
+    except Exception as _sim_ex:
+        print(f"  [RuntimeSim] ⚠ Simulation skipped: {_sim_ex}")
+    # Catches generated .py files with invalid syntax before the reviewer sees them.
+    # Vendor / build directories are excluded to avoid false positives from
+    # third-party code with deliberately non-standard syntax.
+    _PY_SCAN_EXCLUDE = {
+        "build", "vcpkg_installed", ".staging_workspace",
+        "__pycache__", ".venv", "venv", ".git",
+    }
+    import ast as _ast
+    for pf in ctx.project_root.rglob("*.py"):
+        # Skip vendor/build trees and the pipeline's own top-level source.
+        try:
+            _pf_rel = pf.relative_to(ctx.project_root)
+        except ValueError:
+            continue
+        # Exclude any file whose path contains a blacklisted directory component.
+        if any(part in _PY_SCAN_EXCLUDE for part in _pf_rel.parts):
+            continue
+        # Only check files at least two levels deep so pipeline source itself
+        # (e.g. _finalize_preflight.py at the root) is never re-checked.
+        if len(_pf_rel.parts) < 2:
+            continue
+        try:
+            _py_src = pf.read_text(encoding="utf-8", errors="replace")
+            _ast.parse(_py_src, filename=str(pf))
+        except SyntaxError as _se:
+            ctx.pre_flight_errors += (
+                f"\n## Python Syntax Error in {pf.name} (line {_se.lineno}):\n"
+                f"```\n{_se.msg}: {_se.text}\n```\n"
+            )
+            print(f"  [Pre-Flight] ⛔ Python SyntaxError in {pf.name}:{_se.lineno} — {_se.msg}")
         except Exception:
             pass
 
@@ -1033,6 +1147,8 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             re.compile(r'\bMidwayPhysics\s*\.\s*log(?:_message)?\s*\(', re.IGNORECASE),
             re.compile(r'\bMidwayPhysics\s*\.\s*FindBodyByLabel\s*\(', re.IGNORECASE),
             re.compile(r'\bMidwayPhysics\s*\.\s*SetPosition\s*\(', re.IGNORECASE),
+            # Undefined booth globals — never defined in the Midway runtime.
+            re.compile(r'\b(?:BUTTON|SLOT_[XYZ]|SharedBooth)\b', re.MULTILINE),
         ]
         _last_good: dict = {}
         for _tid, _out in ctx.all_results_dict.items():
@@ -1109,31 +1225,24 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
 
             # Build a compact bridge cheatsheet for the fix model so it has
             # approved names in front of it — not just error messages.
-            # Edge cases: cartridge not mounted, section key absent, callable
-            # raises — all handled; cheatsheet degrades to empty string.
+            # Consolidated: delegate to the shared builder in _finalize_review
+            # instead of maintaining a second inline copy here.
             _fix_cheatsheet = ""
             try:
                 from pipeline import _CTX as _pf_ctx
-                _bc_fix_fn = getattr(_pf_ctx, '_cartridge_build_bridge_contract', None) if _pf_ctx else None
-                if callable(_bc_fix_fn):
-                    _bc_fix = _bc_fix_fn()
-                    _api_fix  = list((_bc_fix.get("midwayphysics_spawn_api") or {}).keys())
-                    _pool_fix  = list((_bc_fix.get("object_pools") or {}).keys())
-                    _econ_fix  = list((_bc_fix.get("economy_api") or {}).keys())
-                    if _api_fix:
+                if _pf_ctx is not None:
+                    from _finalize_review import build_fix_bridge_snippet as _bfbs
+                    _base_snippet = _bfbs(_pf_ctx)
+                    if _base_snippet:
                         _fix_cheatsheet = (
-                            "\n## \u26a1 Approved Bridge API (exhaustive — use ONLY these names)\n"
-                            + ("Physics: " + ", ".join(_api_fix) + "\n" if _api_fix else "")
-                            + ("Pools:   " + ", ".join(_pool_fix) + "\n" if _pool_fix else "")
-                            + ("Economy: " + ", ".join(_econ_fix) + "\n" if _econ_fix else "")
+                            "\n## \u26a1 Approved Bridge API (exhaustive \u2014 use ONLY these names)\n"
+                            + _base_snippet
                             + "Substitution quick-ref:\n"
                             + "  SetPosition/Teleport \u2192 MoveKinematic(h,lx,ly,lz,dt)\n"
                             + "  ApplyForce \u2192 ApplyImpulse(handle,ix,iy,iz)\n"
                             + "  CheckCollision \u2192 IsSensorTriggered(handle) \u2192 bool\n"
                             + "  table.clear(t) \u2192 for k in pairs(t) do t[k]=nil end\n"
                         )
-                        if len(_fix_cheatsheet) > 4000:
-                            _fix_cheatsheet = _fix_cheatsheet[:4000]
             except Exception:
                 pass
 
@@ -1245,14 +1354,24 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     print(f"  [Arch Fix] ⚠ Duplicate block for {tid} ({domain}) — ignoring second copy.")
                     continue
                 if tid in ctx.all_results_dict:
-                    ctx.all_results_dict[tid] = _strip_search_replace_metadata(fixed_code)
+                    _af_code = _strip_search_replace_metadata(fixed_code)
+                    ctx.all_results_dict[tid] = _af_code
+                    # Keep all_results list in sync.
+                    _af_found = False
+                    for _af_i, _af_e in enumerate(ctx.all_results):
+                        if _af_e.get("task_id") == tid:
+                            ctx.all_results[_af_i] = {"task_id": tid, "output": _af_code}
+                            _af_found = True
+                            break
+                    if not _af_found:
+                        ctx.all_results.append({"task_id": tid, "output": _af_code})
                     applied_tids.add(tid)
                     print(f"  [Arch Fix] ✅ Applied fix for {tid} ({domain})")
                     # Ledger: record final committed signatures (arch-fix may be
                     # the first time real code appears for a task that delegated)
                     try:
                         from ledger import update_internal_api_ledger
-                        update_internal_api_ledger(fixed_code, domain)
+                        update_internal_api_ledger(_af_code, domain)
                     except Exception:
                         pass
 
@@ -1260,6 +1379,10 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             # ── SEARCH/REPLACE conflict-marker extraction ──
             # Check for Git-style <<<<<<< SEARCH / ======= / >>>>>>> REPLACE blocks
             # before falling back to standard markdown code fences.
+            # Compute unapplied HERE so the SR loop below can reference it.
+            # (It is also recomputed after the SR block in case more tids were
+            # applied; the final fallback path computes it one more time too.)
+            unapplied = [t for t in failing_tids if t not in applied_tids]
             sr_blocks = list(SEARCH_REPLACE_PATTERN.finditer(fixed_str))
             if sr_blocks:
                 # Map SR blocks to unapplied tasks by target_file matching.
@@ -1288,18 +1411,35 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         for tid in list(unapplied):
                             task = ctx.task_map.get(tid)
                             if task and task.target_file == matched_file:
-                                ctx.all_results_dict[tid] = _strip_search_replace_metadata(sr_payload)
+                                _sr_code = _strip_search_replace_metadata(sr_payload)
+                                ctx.all_results_dict[tid] = _sr_code
+                                _sr_f = False
+                                for _sr_i, _sr_e in enumerate(ctx.all_results):
+                                    if _sr_e.get("task_id") == tid:
+                                        ctx.all_results[_sr_i] = {"task_id": tid, "output": _sr_code}
+                                        _sr_f = True
+                                        break
+                                if not _sr_f:
+                                    ctx.all_results.append({"task_id": tid, "output": _sr_code})
                                 applied_tids.add(tid)
                                 print(f"  [Arch Fix] ✅ SEARCH/REPLACE matched for {tid} ({task.target_file})")
-                    else:
-                        # No file match — try all unapplied tasks if only one SR block
-                        if len(sr_blocks) == 1 and len(unapplied) > 0:
-                            # Single SR block: apply to first unapplied task
-                            tid = unapplied[0]
-                            if tid in ctx.all_results_dict:
-                                ctx.all_results_dict[tid] = _strip_search_replace_metadata(sr_payload)
-                                applied_tids.add(tid)
-                                print(f"  [Arch Fix] ✅ SEARCH/REPLACE applied (no file match) for {tid}")
+                    # No file match — try all unapplied tasks if only one SR block
+                    if len(sr_blocks) == 1 and len(unapplied) > 0:
+                        # Single SR block: apply to first unapplied task
+                        tid = unapplied[0]
+                        if tid in ctx.all_results_dict:
+                            _srnm_code = _strip_search_replace_metadata(sr_payload)
+                            ctx.all_results_dict[tid] = _srnm_code
+                            _srnm_f = False
+                            for _srnm_i, _srnm_e in enumerate(ctx.all_results):
+                                if _srnm_e.get("task_id") == tid:
+                                    ctx.all_results[_srnm_i] = {"task_id": tid, "output": _srnm_code}
+                                    _srnm_f = True
+                                    break
+                            if not _srnm_f:
+                                ctx.all_results.append({"task_id": tid, "output": _srnm_code})
+                            applied_tids.add(tid)
+                            print(f"  [Arch Fix] ✅ SEARCH/REPLACE applied (no file match) for {tid}")
                 # Recompute unapplied after SEARCH/REPLACE extraction
                 unapplied = [t for t in failing_tids if t not in applied_tids]
                 if not unapplied:
@@ -1322,7 +1462,16 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     # Single block, single un-patched task — safe 1:1 apply.
                     tid = unapplied[0]
                     if tid in ctx.all_results_dict:
-                        ctx.all_results_dict[tid] = _strip_search_replace_metadata(code_blocks[0])
+                        _sb_code = _strip_search_replace_metadata(code_blocks[0])
+                        ctx.all_results_dict[tid] = _sb_code
+                        _sb_found = False
+                        for _sb_i, _sb_e in enumerate(ctx.all_results):
+                            if _sb_e.get("task_id") == tid:
+                                ctx.all_results[_sb_i] = {"task_id": tid, "output": _sb_code}
+                                _sb_found = True
+                                break
+                        if not _sb_found:
+                            ctx.all_results.append({"task_id": tid, "output": _sb_code})
                         print(f"  [Arch Fix] ✅ Applied single-block fallback fix for {tid} ({domain})")
                         try:
                             from ledger import update_internal_api_ledger
@@ -1330,42 +1479,77 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         except Exception:
                             pass
                 elif len(code_blocks) == 1 and len(unapplied) > 1:
-                    # One block but multiple un-patched tasks — group by target_file.
-                    # If the single block resolves all pending tasks for a given file,
-                    # mark ALL tasks for that file as RESOLVED.
+                    # One block returned for multiple un-patched tasks.
+                    # NEVER broadcast a single skeleton to all tasks — doing so
+                    # silently collapses a full multi-section implementation into
+                    # the last task's narrow fix snippet.  Instead, reject the
+                    # response and inject a hard error demanding one ### task_N
+                    # block per task so the fix model must re-emit all sections.
                     from collections import defaultdict
-                    file_tasks = defaultdict(list)
+                    file_tasks: dict = defaultdict(list)
                     for tid in unapplied:
                         task = ctx.task_map.get(tid)
-                        if task and task.target_file:
-                            file_tasks[task.target_file].append(tid)
-                        else:
-                            file_tasks["__no_file__"].append(tid)
+                        tf = task.target_file if task else None
+                        file_tasks[tf or "__no_file__"].append(tid)
                     resolved_any = False
-                    code_block = code_blocks[0]
-                    # Try each file group: apply the block and verify it resolves
                     for target_file, tids in file_tasks.items():
-                        if target_file == "__no_file__":
+                        if target_file == "__no_file__" or len(tids) <= 1:
                             continue
-                        task_path = ctx.project_root / target_file
-                        if not task_path.is_file():
+                        # Multiple tasks share this file — refuse the single block.
+                        print(
+                            f"  [Arch Fix] \u26a0 Refused to broadcast single block to "
+                            f"{len(tids)} task(s) for {target_file} ({domain}) — "
+                            "would collapse implementation. Demanding per-task blocks."
+                        )
+                        ctx.pre_flight_errors += (
+                            f"\n## Arch Fix Output Rejected — {domain} ({target_file})\n"
+                            f"The fix agent returned exactly 1 code block for {len(tids)} "
+                            f"tasks ({', '.join(tids)}) that all write to `{target_file}`.\n"
+                            f"Broadcasting a single block would overwrite all tasks with "
+                            f"only one task's implementation, discarding the rest.\n"
+                            f"**Required:** Output one `### task_N` block per task, each "
+                            f"containing the COMPLETE implementation for that task. "
+                            f"Tasks: {', '.join(tids)}.\n"
+                        )
+                    # Single-task file groups are still safe to apply 1:1
+                    for target_file, tids in file_tasks.items():
+                        if target_file == "__no_file__" or len(tids) != 1:
                             continue
-                        # Read the current file content
-                        current_content = task_path.read_text(encoding="utf-8", errors="replace")
-                        # Apply the code block using _strip_search_replace_metadata
-                        patched_content = _strip_search_replace_metadata(code_block)
-                        # Write and re-validate (static guard check)
-                        # Write to the first task in the group
-                        first_tid = tids[0]
+                        tid = tids[0]
+                        if tid not in ctx.all_results_dict:
+                            continue
+                        patched_content = _strip_search_replace_metadata(code_blocks[0])
+                        ctx.all_results_dict[tid] = patched_content
+                        applied_tids.add(tid)
+                        _bc_found = False
+                        for _bc_i, _bc_e in enumerate(ctx.all_results):
+                            if _bc_e.get("task_id") == tid:
+                                ctx.all_results[_bc_i] = {"task_id": tid, "output": patched_content}
+                                _bc_found = True
+                                break
+                        if not _bc_found:
+                            ctx.all_results.append({"task_id": tid, "output": patched_content})
+                        resolved_any = True
+                        print(f"  [Arch Fix] \u2705 Applied fix for {tid} ({domain})")
+                    # Legacy broadcast path removed — see comment above.
+                    if False:
+                        first_tid = ""
                         if first_tid in ctx.all_results_dict:
-                            ctx.all_results_dict[first_tid] = patched_content
                             applied_tids.add(first_tid)
-                            # Mark ALL tasks for this file as applied
+                            # Mark ALL remaining tasks for this file as applied.
                             for tid in tids:
                                 if tid != first_tid:
                                     applied_tids.add(tid)
                                     if tid in ctx.all_results_dict:
                                         ctx.all_results_dict[tid] = patched_content
+                                        _bc_f2 = False
+                                        for _bc_i2, _bc_e2 in enumerate(ctx.all_results):
+                                            if _bc_e2.get("task_id") == tid:
+                                                ctx.all_results[_bc_i2] = {"task_id": tid, "output": patched_content}
+                                                _bc_f2 = True
+                                                break
+                                        if not _bc_f2:
+                                            ctx.all_results.append({"task_id": tid, "output": patched_content})
                             resolved_any = True
                             print(f"  [Arch Fix] ✅ Broadcast single block to {len(tids)} task(s)"
                                   f" for {target_file} ({domain})")
@@ -1382,11 +1566,20 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     # One block per un-patched task — zip in order
                     for tid, blk in zip(unapplied, code_blocks):
                         if tid in ctx.all_results_dict:
-                            ctx.all_results_dict[tid] = _strip_search_replace_metadata(blk)
+                            _oz_code = _strip_search_replace_metadata(blk)
+                            ctx.all_results_dict[tid] = _oz_code
+                            _oz_found = False
+                            for _oz_i, _oz_e in enumerate(ctx.all_results):
+                                if _oz_e.get("task_id") == tid:
+                                    ctx.all_results[_oz_i] = {"task_id": tid, "output": _oz_code}
+                                    _oz_found = True
+                                    break
+                            if not _oz_found:
+                                ctx.all_results.append({"task_id": tid, "output": _oz_code})
                             print(f"  [Arch Fix] ✅ Applied ordered fallback fix for {tid} ({domain})")
                             try:
                                 from ledger import update_internal_api_ledger
-                                update_internal_api_ledger(blk, domain)
+                                update_internal_api_ledger(_oz_code, domain)
                             except Exception:
                                 pass
                 else:
@@ -1489,12 +1682,22 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                             elif (_new_output and _new_output.strip()
                                     and not _is_comment_only(_new_output)
                                     and _task_has_code(_new_output)):
-                                ctx.all_results_dict[tid] = _strip_search_replace_metadata(_new_output)
+                                _re_code = _strip_search_replace_metadata(_new_output)
+                                ctx.all_results_dict[tid] = _re_code
+                                # Sync all_results list.
+                                _re_found = False
+                                for _re_i, _re_e in enumerate(ctx.all_results):
+                                    if _re_e.get("task_id") == tid:
+                                        ctx.all_results[_re_i] = {"task_id": tid, "output": _re_code}
+                                        _re_found = True
+                                        break
+                                if not _re_found:
+                                    ctx.all_results.append({"task_id": tid, "output": _re_code})
                                 print(f"  [Arch Fix] ✅ Re-execution produced valid output "
                                       f"for {tid} ({domain}).")
                                 try:
                                     from ledger import update_internal_api_ledger
-                                    update_internal_api_ledger(_new_output, domain)
+                                    update_internal_api_ledger(_re_code, domain)
                                 except Exception:
                                     pass
                             else:
