@@ -314,6 +314,32 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     except Exception:
                         pass
 
+                # ── Economy Mandate (Blueprint-phase enforcement) ─────────────
+                # Injected here so the agent KNOWS the requirements before it
+                # writes a single line — not discovered post-hoc in PhantomAPIGate.
+                _scope_mode = getattr(ctx, 'scope_mode', '')
+                _econ_hooks = []
+                if _design:
+                    try:
+                        _econ_hooks = list(_design.economy_hooks or [])
+                    except Exception:
+                        pass
+                if _scope_mode in ("NEW_ATTRACTION", "MODIFY_ATTRACTION") or _econ_hooks:
+                    task.context = (task.context or "") + (
+                        "\n\n## ECONOMY MANDATE (NON-NEGOTIABLE)\n"
+                        "Your implementation MUST satisfy ALL of the following or it will be "
+                        "rejected by the PhantomAPI Gate:\n"
+                        "1. **Modifier consumption** — inside your `OnStep` callback, read "
+                        "`AttractionConstants.modifiers` (or individual `ENGINE_MOD_*` globals) "
+                        "every frame. NEVER cache modifier values at load time.\n"
+                        "   Example: `local MOD = AttractionConstants.modifiers`\n"
+                        "2. **Economy hook** — call `Engine.AwardTickets(n, label)` or "
+                        "`Engine.AwardTokens(n, label)` on every win or score event.\n"
+                        "   Use `Engine.GetStreak()` as a multiplier for ticket payouts.\n"
+                        "   Example: `Engine.AwardTickets(score * Engine.GetStreak(), 'WIN')`\n"
+                        "Omitting either of these will cause an automatic pipeline failure.\n"
+                    )
+
                 output = execute_task(
                     task, ctx.user_prompt, ctx.director_output,
                     ctx.all_results_dict, file_context, ctx.gdd_context,
