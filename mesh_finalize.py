@@ -28,6 +28,7 @@ from _domain_sandbox import reject_cross_domain_output
 from _finalize_conflicts import _run_conflict_resolution
 from _finalize_review import _run_review_fix_loop
 from _finalize_preflight import _run_preflight_checks
+from runtime_sim import run_phantom_api_final_pass
 from _helpers_io import enable_staging, disable_staging, commit_staging, is_staging_active
 from pipeline import (
     PROJECT_ROOT, ALL_DOMAINS,
@@ -76,6 +77,7 @@ def run_code_merge(ctx: PipelineContext) -> PipelineContext:
                 
     ctx = _run_review_fix_loop(ctx)
     ctx = _run_observability_pass(ctx)
+    ctx = _run_phantom_api_gate(ctx)
     ctx = _run_consensus_and_finalization(ctx)
     ctx = _run_tagsuggester_post(ctx)
     # Save output snapshot
@@ -274,6 +276,35 @@ def _run_observability_pass(ctx: PipelineContext) -> PipelineContext:
     return ctx
 
 
+# ── Phase 6c: Final Phantom-API Gate ─────────────────────────────────
+
+def _run_phantom_api_gate(ctx: PipelineContext) -> PipelineContext:
+    """Phase 6c: Deterministic phantom-API and economy/modifier gate.
+
+    Runs AFTER observability so it catches any phantom calls introduced
+    by instrumentation.  Results are stored on ctx.phantom_pass_errors
+    and surfaced in the consensus gate so approval is physically blocked
+    on any violation.
+    """
+    print(f"\n{'='*70}")
+    print(f"  Phase 6c: Phantom API Final Gate")
+    print(f"{'='*70}")
+    ctx.output_parts.append("\n## Phase 6c: Phantom API Final Gate\n")
+
+    phantom_errors = run_phantom_api_final_pass(ctx)
+
+    if phantom_errors:
+        ctx.output_parts.append("### ❌ Phantom API violations found\n")
+        for err in phantom_errors:
+            ctx.output_parts.append(f"- {err}\n")
+            print(f"  [PhantomAPIGate] ❌ {err}")
+    else:
+        ctx.output_parts.append("### ✅ Phantom API gate — clean\n")
+        print("  [PhantomAPIGate] ✅ All outputs pass the phantom-API gate.")
+
+    return ctx
+
+
 # ── Phase 7-8: Consensus Gate, Final Approval, Failure Report ────────
 
 def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
@@ -305,6 +336,7 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
         "No active VETOs": not has_active_vetos,
         "Review passed": review_passed,
         "No RECOURSE pending": not has_recourses,
+        "Phantom API check": not bool(getattr(ctx, 'phantom_pass_errors', None)),
     }
 
     ctx.all_checks_pass = all(ctx.consensus_checks.values())

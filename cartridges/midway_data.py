@@ -32,13 +32,23 @@ def build_domain_registry(
     _SEARCH_REPLACE_MANDATE = (
         "\n\nCRITICAL FORMATTING MANDATE:\n"
         "1. You are strictly FORBIDDEN from using `diff --git` or GNU Unified Diffs.\n"
-        "2. You MUST use the exact SEARCH/REPLACE block format for ALL code modifications or creations:\n"
+        "2. You MUST use the EXACT conflict-marker format shown below for ALL code "
+        "modifications or creations. No other patch or diff format is accepted.\n"
+        "   CORRECT FORMAT:\n"
         "<<<<<<< SEARCH\n"
         "[exact original content to replace, or empty if this is a new file]\n"
         "=======\n"
         "[new content]\n"
         ">>>>>>> REPLACE\n"
-        "3. Do NOT wrap the SEARCH/REPLACE block in ```diff markdown tags."
+        "3. Do NOT wrap the SEARCH/REPLACE block in ```diff markdown tags.\n"
+        "4. FORBIDDEN FORMATS — these will be rejected and cost an extra model call:\n"
+        "   ### SEARCH / ### REPLACE  (markdown headers)\n"
+        "   ## SEARCH / ## REPLACE\n"
+        "   # SEARCH / # REPLACE\n"
+        "   [SEARCH] / [REPLACE]\n"
+        "   Any other variant that does not use the exact <<<<<<< SEARCH / >>>>>>> REPLACE "
+        "conflict markers shown above.\n"
+        "5. Multiple hunks are allowed — emit one SEARCH/REPLACE block per changed region."
     )
 
     # ── Midway project-wide prohibitions ────────────────────────────────────
@@ -74,6 +84,21 @@ def build_domain_registry(
         "  sol.on_load / sol.on_step / sol.on_unload / sol.set_function -> these do NOT exist.\n"
         "  function OnStep(dt) ... end (bare global) -> this is NEVER called by the engine; "
         "register via MidwayPhysics.OnStep(function(dt) ... end) inside OnLoad() instead.\n"
+        "  UnregisterOnStep / MidwayPhysics.UnregisterOnStep → does NOT exist. "
+        "OnStep callbacks are automatically released when the slot is unmounted. "
+        "OnUnload() only needs to call MidwayPhysics.DestroyBody() for each spawned handle.\n"
+        "  SetPosition / MidwayPhysics.SetPosition → does NOT exist. "
+        "To reposition a kinematic body use MidwayPhysics.MoveKinematic(handle, lx, ly, lz, dt). "
+        "To reposition a dynamic body use PoolReturn(poolName, handle) to park it, then PoolAcquire to re-place it, "
+        "or spawn a new body. There is NO teleport API for Lua scripts.\n"
+        "  MidwayPhysics.Teleport → does NOT exist in the Lua bridge. "
+        "Attraction Lua scripts cannot teleport bodies. Use PoolReturn/PoolAcquire to recycle "
+        "a ball to a new position, or DestroyBody + SpawnDynamic* to respawn it.\n"
+        "  MidwayPhysics.OnStep(nil) → NOT a valid way to unregister a callback. "
+        "OnStep callbacks are automatically released when the slot is unmounted. "
+        "Do NOT call OnStep(nil) or OnStep(false) to try to stop the callback — it will crash.\n"
+        "  table.clear(t) → NOT standard Lua 5.4. Use `for k in pairs(t) do t[k]=nil end` "
+        "or simply reassign: `t = {}`. Never call table.clear().\n"
         "P4. BOX2D: Box2D is permanently removed. Do NOT reference b2World, b2Vec2, "
         "b2Body, jpBody, or any Box2D header. All physics is Jolt-exclusive.\n"
         "P5. EMPTY OUTPUT: Your response MUST contain at least one concrete "
@@ -193,6 +218,21 @@ def build_domain_registry(
                 "CRITICAL: `OnStep` is NOT a bare global function. It is a callback registered by calling\n"
                 "`MidwayPhysics.OnStep(function(dt) ... end)` inside OnLoad(). Defining `function OnStep(dt)` \n"
                 "at global scope is a CRITICAL VIOLATION — the engine will NEVER invoke it.\n\n"
+                "STATE PERSISTENCE BETWEEN LIFECYCLE FUNCTIONS:\n"
+                "Use module-level `local` variables (declared at the top of the file, outside any function) "
+                "to share state between OnLoad, the OnStep callback, and OnUnload. "
+                "There is NO host-side property bag — `sol.set_custom_property`, `sol.get_custom_property`, "
+                "and any other `sol.*` calls do NOT exist in Lua and will CRASH. "
+                "CORRECT PATTERN:\n"
+                "  local balls = {}   -- module-level, visible to all functions\n"
+                "  local score = 0\n"
+                "  function OnLoad()\n"
+                "    balls[1] = MidwayPhysics.SpawnDynamicSphere(...)\n"
+                "    MidwayPhysics.OnStep(function(dt) ... end)\n"
+                "  end\n"
+                "  function OnUnload()\n"
+                "    MidwayPhysics.DestroyBody(balls[1])\n"
+                "  end\n\n"
                 "SOL2 BINDING RULES:\n"
                 "- Only call host APIs that are registered in MidwayPhysics.cpp or Engine.cpp.\n"
                 "- NEVER store or pass raw JPH::BodyID values. All physics objects are referenced "
@@ -208,8 +248,70 @@ def build_domain_registry(
                 "target position in local booth space each step. Do NOT add velocity*dt to get "
                 "the new position yourself — that is manual physics and is forbidden. "
                 "Use SetLinearVelocity or ApplyImpulse to drive dynamic bodies instead.\n\n"
+                "GETPOSITION RETURN VALUES:\n"
+                "MidwayPhysics.GetPosition(handle) returns THREE separate values: lx, ly, lz.\n"
+                "It does NOT return a table or object. CORRECT usage:\n"
+                "  local lx, ly, lz = MidwayPhysics.GetPosition(handle)\n"
+                "WRONG (will give nil errors):\n"
+                "  local pos = MidwayPhysics.GetPosition(handle)\n"
+                "  if pos.y < -10 then  -- ERROR: pos is a number, not a table\n"
+                "Likewise GetVelocity(handle) returns vx, vy, vz as three separate values.\n\n"
+                "SINGLE-FILE CONSTRAINT:\n"
+                "All attraction code MUST live in a SINGLE .lua file. "
+                "Do NOT split into init.lua, physics.lua, scoring.lua, etc. "
+                "The pipeline enforces one file per attraction. "
+                "All module-level locals, OnLoadStatic, OnLoad, OnUnload, and the OnStep closure "
+                "must coexist in the same file.\n\n"
+                "LUA FORWARD-REFERENCE RULE (CRITICAL):\n"
+                "In Lua 5.4, a `local function` is only visible AFTER its declaration. "
+                "If OnLoad() or the OnStep closure calls a helper function, that helper MUST be "
+                "declared BEFORE OnLoad() in the file. WRONG pattern:\n"
+                "  function OnLoad()\n"
+                "    MidwayPhysics.OnStep(function(dt) Helper(dt) end)  -- Helper not yet declared!\n"
+                "  end\n"
+                "  local function Helper(dt) ... end  -- TOO LATE: nil at call time\n"
+                "CORRECT pattern:\n"
+                "  local function Helper(dt) ... end  -- declared first\n"
+                "  function OnLoad()\n"
+                "    MidwayPhysics.OnStep(function(dt) Helper(dt) end)  -- OK\n"
+                "  end\n\n"
+                "TABLE.REMOVE INDEX RULE:\n"
+                "`table.remove(t, pos)` takes a NUMERIC INDEX, not a handle value. "
+                "When iterating with `for i, handle in ipairs(t)` use `table.remove(t, i)`. "
+                "WRONG: `table.remove(ballHandles, handle)` — this uses the integer body ID as "
+                "an index and silently corrupts the table. "
+                "CORRECT: `table.remove(ballHandles, i)`\n\n"
                 "CRITICAL TASK PRIMACY: Execute the instructions in your ## Task Specification exactly. "
-                "Do not add unrequested systems or lifecycle hooks."
+                "Do not add unrequested systems or lifecycle hooks.\n\n"
+                "ECONOMY & ENGINE MODIFIERS MANDATE (REQUIRED FOR EVERY NEW ATTRACTION):\n"
+                "Every attraction script MUST include both of the following or it will be\n"
+                "rejected by the Phantom API Gate before final approval.\n\n"
+                "1. MODIFIER CONSUMPTION — read AttractionConstants.modifiers inside OnStep each\n"
+                "   frame and apply the values to gameplay variables. You MUST consume ALL nine:\n"
+                "     local MOD = AttractionConstants.modifiers\n"
+                "     -- Core Physical (§4.1)\n"
+                "     MOD.mass          -- scale projectile/object mass\n"
+                "     MOD.volume        -- scale booth/gameplay volume\n"
+                "     MOD.friction      -- scale surface friction\n"
+                "     -- Meta-Navigational (§4.2)\n"
+                "     MOD.karma         -- RNG tilt / hidden luck direction\n"
+                "     MOD.luck          -- procedural generation bias\n"
+                "     MOD.persuasion    -- NPC/target difficulty bias\n"
+                "     MOD.heat          -- overall difficulty multiplier\n"
+                "     -- Tactile (§4.3)\n"
+                "     MOD.sleight_of_hand  -- TILT mechanic sensitivity\n"
+                "     MOD.nerve            -- timing window width\n"
+                "   If a modifier has no meaningful effect in your attraction, still read it and\n"
+                "   store it in a local variable with a comment — the pipeline gate requires a\n"
+                "   reference, even if the value is currently unused.\n\n"
+                "2. ECONOMY HOOKS — call Engine.AwardTickets or Engine.AwardTokens (or both) at\n"
+                "   every win/score event. NEVER skip this even for a demo or placeholder:\n"
+                "     Engine.AwardTickets(amount, 'WIN')    -- primary currency on win\n"
+                "     Engine.AwardTokens(amount, 'BONUS')   -- secondary currency on bonus\n"
+                "   Use Engine.GetStreak() to scale rewards by the player's current streak.\n"
+                "   FORBIDDEN: `economy:awardTickets(...)`, `economy:award(...)`,\n"
+                "   `Economy.Award(...)` — all colon-method or non-Engine-namespaced forms are\n"
+                "   phantom APIs and will hard-fail the gate.\n"
             ) + _MIDWAY_PROHIBITIONS + _SEARCH_REPLACE_MANDATE,
         },
         "DOC": {
@@ -969,10 +1071,22 @@ def build_bridge_contract() -> Dict[str, Any]:
             "OnStep_dt": "Read AttractionConstants.modifiers each frame. Never cache at load time.",
         },
         "midwayphysics_spawn_api": {
-            "SpawnStaticBox/Sphere/Capsule/Cylinder/Mesh": "Permanent geometry (lx, ly, lz, dimensions...) → handle",
-            "SpawnKinematicBox/Sphere/Capsule/Cylinder": "Moving platforms, pushers (lx, ly, lz, dimensions...) → handle",
-            "SpawnDynamicBox/Sphere/Capsule/Cylinder/Mesh": "Physics-simulated objects (lx, ly, lz, dimensions, [mass]) → handle",
-            "SpawnSensorBox/Sphere": "Trigger zones (lx, ly, lz, dimensions) → handle",
+            "SpawnStaticBox(lx, ly, lz, w, h, d) → handle": "Permanent static box",
+            "SpawnStaticSphere(lx, ly, lz, radius) → handle": "Permanent static sphere",
+            "SpawnStaticCapsule(lx, ly, lz, halfHeight, radius) → handle": "Permanent static capsule",
+            "SpawnStaticCylinder(lx, ly, lz, halfHeight, radius) → handle": "Permanent static cylinder",
+            "SpawnStaticMesh(lx, ly, lz, yaw, path) → handle": "Static mesh from asset file",
+            "SpawnKinematicBox(lx, ly, lz, w, h, d) → handle": "Moving platform / pusher — box",
+            "SpawnKinematicSphere(lx, ly, lz, radius) → handle": "Moving platform — sphere",
+            "SpawnKinematicCapsule(lx, ly, lz, halfHeight, radius) → handle": "Moving platform — capsule",
+            "SpawnKinematicCylinder(lx, ly, lz, halfHeight, radius) → handle": "Moving platform — cylinder",
+            "SpawnDynamicBox(lx, ly, lz, w, h, d [, mass]) → handle": "Physics-simulated box",
+            "SpawnDynamicSphere(lx, ly, lz, radius [, mass]) → handle": "Physics-simulated sphere",
+            "SpawnDynamicCapsule(lx, ly, lz, halfHeight, radius [, mass]) → handle": "Physics-simulated capsule",
+            "SpawnDynamicCylinder(lx, ly, lz, halfHeight, radius [, mass]) → handle": "Physics-simulated cylinder",
+            "SpawnDynamicMesh(lx, ly, lz, yaw, mass, path) → handle": "Dynamic mesh from asset file",
+            "SpawnSensorBox(lx, ly, lz, w, h, d) → handle": "Trigger zone — box",
+            "SpawnSensorSphere(lx, ly, lz, radius) → handle": "Trigger zone — sphere",
             "MoveKinematic(handle, lx, ly, lz, dt)": "Sets kinematic body target position each step.",
             "ApplyImpulse(handle, ix, iy, iz)": "Instantaneous force in local space.",
             "ApplyAngularImpulse(handle, ix, iy, iz)": "Instantaneous torque.",
@@ -984,6 +1098,7 @@ def build_bridge_contract() -> Dict[str, Any]:
             "IsActive(handle) → bool": "False for destroyed or parked bodies.",
             "IsSensorTriggered(handle) → bool": "Overlap state from previous physics step.",
             "DestroyBody(handle)": "Remove from handle map AND physics system.",
+            "OnStep(fn)": "Register per-frame callback: MidwayPhysics.OnStep(function(dt) ... end). Call inside OnLoad().",
         },
         "object_pools": {
             "CreatePool(name, hotN, coldN, paramsTable)": "Two-tier pool. params: shape, w, h, d, radius, halfH, mass, friction, restitution, damping.",
