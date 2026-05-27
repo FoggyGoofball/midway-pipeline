@@ -77,23 +77,46 @@ ARCHITECT_SYSTEM = (
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 
 
+def _repair_json(text: str) -> str:
+    """Apply lightweight heuristic repairs to a JSON string before parsing.
+
+    Handles the most common model output defects:
+    - Trailing ) or ); after the closing brace  (seen in phi3:14b output)
+    - Trailing commas before } or ]             (JSON spec violation)
+    - Single-quoted strings                     (Python-style output)
+    """
+    # Strip everything after the last closing brace
+    last_brace = text.rfind("}")
+    if last_brace != -1:
+        text = text[:last_brace + 1]
+    # Remove trailing commas before closing brace/bracket
+    text = re.sub(r",\s*(\}|\])", r"\1", text)
+    # Replace single-quoted string values/keys with double-quoted
+    text = re.sub(r"(?<![\\])'", '"', text)
+    return text
+
+
 def _extract_json(text: str) -> Optional[dict]:
     """Extract the first JSON object from a model response."""
     # Try fenced block first
     m = _JSON_FENCE_RE.search(text)
     if m:
-        try:
-            return json.loads(m.group(1))
-        except json.JSONDecodeError:
-            pass
-    # Try bare JSON object
+        candidate = m.group(1)
+        for attempt in (candidate, _repair_json(candidate)):
+            try:
+                return json.loads(attempt)
+            except json.JSONDecodeError:
+                pass
+    # Try bare JSON object with optional repair
     brace_start = text.find("{")
     if brace_start != -1:
-        for end in range(len(text), brace_start, -1):
-            try:
-                return json.loads(text[brace_start:end])
-            except json.JSONDecodeError:
-                continue
+        raw_candidate = text[brace_start:]
+        for attempt in (raw_candidate, _repair_json(raw_candidate)):
+            for end in range(len(attempt), 0, -1):
+                try:
+                    return json.loads(attempt[:end])
+                except json.JSONDecodeError:
+                    continue
     return None
 
 

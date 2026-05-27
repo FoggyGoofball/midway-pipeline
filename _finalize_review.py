@@ -615,8 +615,51 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     "must be resolved before this run can be approved.]"
                 )
             else:
-                print(f"  [Review-Fix] Passed on cycle {ctx.review_cycle}")
-                break
+                # FM4: Hard-gate PASS for attraction scopes against missing economy/modifier content.
+                # The reviewer model regularly passes Lua that omits AttractionConstants.modifiers
+                # and Engine.AwardTickets — catch it programmatically before the gate closes.
+                _rev_scope = getattr(ctx, '_scope_mode', '')
+                if _rev_scope in ("NEW_ATTRACTION", "MODIFY_ATTRACTION"):
+                    _all_lua = " ".join(
+                        v for v in (ctx.all_results_dict or {}).values()
+                    ).lower()
+                    _missing_economy: list[str] = []
+                    if not any(kw in _all_lua for kw in (
+                        "attractionconstants.modifiers", "engine_mod_", ".modifiers",
+                    )):
+                        _missing_economy.append(
+                            "No AttractionConstants.modifiers read found in OnStep — "
+                            "the attraction MUST read modifiers every frame."
+                        )
+                    if not any(kw in _all_lua for kw in (
+                        "awardtickets", "awardtokens",
+                    )):
+                        _missing_economy.append(
+                            "No Engine.AwardTickets or Engine.AwardTokens call found — "
+                            "the attraction MUST award tickets/tokens on win/score events "
+                            "using Engine.GetStreak() as a multiplier."
+                        )
+                    if _missing_economy:
+                        _econ_issues = "\n".join(f"  - {e}" for e in _missing_economy)
+                        print(
+                            f"  [Review-Fix] ⛔ Reviewer emitted PASS but mandatory economy "
+                            f"content is absent — overriding to FAIL (cycle {ctx.review_cycle}):\n"
+                            f"{_econ_issues}"
+                        )
+                        ctx.review_verdict = "FAIL"
+                        ctx.review_output = (
+                            ctx.review_output
+                            + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL — mandatory economy "
+                            "obligations are not met:\n" + _econ_issues + "\n"
+                            "Fix all items above before this run can be approved.]"
+                        )
+                        # Skip the break so the fix loop runs
+                    else:
+                        print(f"  [Review-Fix] Passed on cycle {ctx.review_cycle}")
+                        break
+                else:
+                    print(f"  [Review-Fix] Passed on cycle {ctx.review_cycle}")
+                    break
 
         # D13/D15: NO_VERDICT means the reviewer output contained no verdict line.
         # Give it one targeted re-prompt before treating as FAIL, so a single

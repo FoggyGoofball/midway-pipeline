@@ -1677,8 +1677,11 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
         except Exception:
             pass
 
-    gdd_snippet = TokenBudget._block_aware_collapse(ctx.gdd_context, 2000) if ctx.gdd_context else "(no GDD context)"
-    state_snippet = TokenBudget._block_aware_collapse(ctx.project_state, 2000) if ctx.project_state else "(no project state)"
+    # Keep snippets tight so the Director payload stays well under the
+    # pre-summarizer threshold — the blueprint constraint block is the
+    # important content; GDD/state are background only.
+    gdd_snippet = TokenBudget._block_aware_collapse(ctx.gdd_context, 800) if ctx.gdd_context else "(no GDD context)"
+    state_snippet = TokenBudget._block_aware_collapse(ctx.project_state, 600) if ctx.project_state else "(no project state)"
 
     # ── Inject live bridge contract API surface so the Director cannot invent
     # phantom tasks around non-existent functions. Pull from cartridge if mounted,
@@ -1815,8 +1818,12 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
         if attempt > 1:
             print(f"  [Director] Task parsing failed (missing brackets/alignment). Initiating autonomic retry {attempt}/{max_parsing_attempts}...")
 
+        # skip_pre_summarizer=True: the blueprint constraint block injected above
+        # is the authoritative task list — compressing it is the root cause of
+        # tasks being dropped. Snippets are already pre-compacted above.
         ctx.director_output = call_ollama(
-            DIRECTOR_SYSTEM, current_director_input, f"Director (Attempt {attempt})", DIRECTOR_MODEL
+            DIRECTOR_SYSTEM, current_director_input, f"Director (Attempt {attempt})", DIRECTOR_MODEL,
+            skip_pre_summarizer=True,
         )
 
         from ollama_client import is_fatal_ollama_error as _is_fatal_dir
