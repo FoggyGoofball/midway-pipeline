@@ -47,6 +47,87 @@ __all__ = ["finalize_mesh"]
 
 
 # ──────────────────────────────────────────────────────────────────────
+#  Adversarial TDD: post-integration test runner
+# ──────────────────────────────────────────────────────────────────────
+
+def _run_tdd_tests(ctx: PipelineContext) -> None:
+    """Execute all adversarial TDD test files that were generated during pro-mode.
+
+    Discovers test files via task_map entries that carry a `tdd_test_path`
+    attribute.  Runs each file with the appropriate test runner (pytest for
+    Python/Lua stubs, catch2 via ctest for C++/PHYS).  Results are printed
+    inline; a summary is appended to ctx.output_parts so it survives into
+    the final pipeline output.
+    """
+    import subprocess, sys as _sys
+    from pathlib import Path
+
+    tasks_with_tests = [
+        t for t in ctx.task_map.values()
+        if getattr(t, 'tdd_test_path', None)
+    ]
+    if not tasks_with_tests:
+        return
+
+    print(f"\n{'='*60}")
+    print(f"  ADVERSARIAL TDD — Post-Integration Test Run")
+    print(f"{'='*60}")
+
+    results_summary: list[str] = ["## Adversarial TDD Test Results (post-integration)\n"]
+    all_passed = True
+
+    for task in tasks_with_tests:
+        test_path = Path(task.tdd_test_path)
+        if not test_path.is_file():
+            msg = f"  ⚠ Test file missing: {test_path}"
+            print(msg)
+            results_summary.append(f"- **{task.task_id}**: MISSING ({test_path})")
+            all_passed = False
+            continue
+
+        ext = test_path.suffix.lower()
+        if ext in (".py",):
+            cmd = [_sys.executable, "-m", "pytest", str(test_path), "-v", "--tb=short"]
+        elif ext in (".lua",):
+            cmd = ["luajit", str(test_path)]
+        else:
+            # C++ / PHYS: attempt ctest from project root
+            cmd = ["ctest", "--test-dir", str(ctx.project_root), "-R", test_path.stem, "-V"]
+
+        print(f"  [TDD] Running {task.task_id}: {' '.join(cmd)}")
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True,
+                timeout=120, cwd=str(ctx.project_root)
+            )
+            passed = result.returncode == 0
+            status = "PASSED ✓" if passed else "FAILED ✗"
+            if not passed:
+                all_passed = False
+            output_snippet = (result.stdout + result.stderr)[-800:].strip()
+            print(f"  [TDD] {task.task_id}: {status}")
+            if not passed and output_snippet:
+                print(f"  --- test output (tail) ---\n{output_snippet}\n  ---")
+            results_summary.append(
+                f"- **{task.task_id}** `{test_path.name}`: {status}\n"
+                + (f"  ```\n  {output_snippet}\n  ```\n" if not passed else "")
+            )
+        except subprocess.TimeoutExpired:
+            print(f"  [TDD] {task.task_id}: TIMEOUT")
+            results_summary.append(f"- **{task.task_id}**: TIMEOUT")
+            all_passed = False
+        except FileNotFoundError:
+            msg = f"  [TDD] {task.task_id}: runner not found — skipped"
+            print(msg)
+            results_summary.append(f"- **{task.task_id}**: RUNNER NOT FOUND (skipped)")
+
+    overall = "ALL PASSED ✓" if all_passed else "SOME FAILURES ✗ — review fix cycle recommended"
+    print(f"\n  [TDD Summary] {overall}")
+    results_summary.append(f"\n**Overall:** {overall}")
+    ctx.output_parts.append("\n".join(results_summary))
+
+
+# ──────────────────────────────────────────────────────────────────────
 #  Public Entry Points
 # ──────────────────────────────────────────────────────────────────────
 
@@ -603,6 +684,8 @@ def _handle_approved(ctx: PipelineContext) -> None:
         else:
             print("  [Integration] ⚠ Staging not active — files were already written directly.")
         print("  [Integration] ✓ Code integrated into project.")
+        # ── Post-integration: run adversarial TDD tests ───────────────
+        _run_tdd_tests(ctx)
     else:
         if is_staging_active():
             print("  [Staging FS] ⏸ Staged files preserved at .staging_workspace/ — integration skipped.")

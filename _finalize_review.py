@@ -10,6 +10,7 @@ Exported:
                        pre_flight_errors, user_prompt,
                        paged_files_cache) -> str
     _run_review_fix_loop(ctx) -> PipelineContext
+    build_fix_bridge_snippet(ctx) -> str
 """
 
 from __future__ import annotations
@@ -32,8 +33,49 @@ from pipeline import (
     resolve_agent_name,
     call_ollama, get_verdict,
     _normalize_fix_fingerprint, check_insanity_similarity,
+    REVIEWER_MODEL as _REVIEWER_MODEL,
+    EXECUTION_MODEL as _EXECUTION_MODEL,
 )
 from _helpers_exec import compile_project
+from ollama_client import is_fatal_ollama_error as _is_fatal_ollama
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Shared bridge-snippet builder (single source of truth)
+# ──────────────────────────────────────────────────────────────────────
+
+def build_fix_bridge_snippet(ctx: 'PipelineContext') -> str:
+    """Return a concise, fix-agent-readable list of approved bridge APIs.
+
+    Renders the cartridge's bridge contract into a short text block so
+    domain fix agents know exactly which names are legal.  Used by
+    _finalize_review, _finalize_preflight, and _helpers_exec to avoid
+    maintaining three divergent copies of the same rendering logic.
+
+    Returns an empty string when no cartridge is mounted.
+    """
+    _build_bridge_fn = getattr(ctx, '_cartridge_build_bridge_contract', None)
+    if not callable(_build_bridge_fn):
+        return ""
+    try:
+        _bc = _build_bridge_fn()
+        if not _bc or not isinstance(_bc, dict):
+            return ""
+        _api   = list((_bc.get("midwayphysics_spawn_api") or {}).keys())
+        _pool  = list((_bc.get("object_pools") or {}).keys())
+        _econ  = list((_bc.get("economy_api") or {}).keys())
+        if not _api:
+            return ""
+        return (
+            "## Active Bridge Contract — APPROVED APIs (exhaustive list)\n"
+            "Use ONLY these exact function names. Any other name is a phantom API.\n"
+            "Physics: " + ", ".join(_api) + "\n"
+            "Pools: "   + ", ".join(_pool) + "\n"
+            "Economy: " + ", ".join(_econ) + "\n"
+        )
+    except Exception as _e:
+        return ""
+
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -153,6 +195,25 @@ def _prune_fix_context(
             + _anchor_collapsed
         )
 
+    # 5c. Adversarial TDD contract re-injection
+    # If the task has a generated test file, reload it from disk and inject it
+    # so the fixer is always working against the actual failing test contract —
+    # not a hallucinated signature that drifted after the test was written.
+    _tdd_path = getattr(task_obj, 'tdd_test_path', None) if task_obj else None
+    if _tdd_path:
+        try:
+            from pathlib import Path as _Path
+            _tdd_body = _Path(_tdd_path).read_text(encoding="utf-8")
+            parts.append(
+                "## Adversarial TDD Contract (DO NOT MODIFY THIS TEST)\n"
+                f"Test file: `{_tdd_path}`\n"
+                "Your implementation MUST make this test pass. "
+                "You are strictly forbidden from modifying the test file.\n"
+                f"```\n{_tdd_body}\n```"
+            )
+        except Exception:
+            pass
+
     # 6. Review issues
     # Uses block-aware collapse so multi-issue reviews are never silently
     # truncated before the fixer reads later issues (previous regression cause).
@@ -243,6 +304,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
     ctx.review_cycle = 0
 
     from pipeline import REVIEW_MAX_ITERATIONS as _REVIEW_MAX_ITERATIONS
+    from pipeline import CIRCUIT_BREAKER_MAX_FAILURES as _CB_MAX
     while ctx.review_cycle < _REVIEW_MAX_ITERATIONS:
         ctx.review_cycle += 1
         print(f"\n  [Review-Fix] Cycle {ctx.review_cycle}/{_REVIEW_MAX_ITERATIONS}")
@@ -250,7 +312,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         # ── Circuit Breaker: Check retry counts ─────────────────────────
         for tid in list(ctx.all_results_dict.keys()):
             count = ctx.retry_counts.setdefault(tid, 0)
-            if count >= 3:
+            if count >= _CB_MAX:
                 print(
                     f"\n{'='*70}\n"
                     f"  ⛔ [CIRCUIT BREAKER TRIPPED] Task {tid} has failed {count} times.\n"
@@ -451,8 +513,11 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         # sections first and protect the task code blocks — the reviewer must see
         # real code or it cannot produce a meaningful verdict.
         review_input_full = review_input_raw + _review_bridge_snippet + _prompts_mod.REVIEW_PROMPT
-        if len(review_input_full) > 16000:
-            _excess = len(review_input_full) - 16000
+        # Use the same model-aware hard cap computed above rather than a bare
+        # 16000 constant that ignores whether the reviewer model is a 7B or 14B.
+        _VRAM_GUARD_CAP = _REVIEW_HARD_CAP
+        if len(review_input_full) > _VRAM_GUARD_CAP:
+            _excess = len(review_input_full) - _VRAM_GUARD_CAP
             print(f"  [VRAM Guard] Review input oversized ({len(review_input_full)} chars) — "
                   f"collapsing {_excess} chars from code body via block-aware paging (tail preserved).")
             _tail = _review_bridge_snippet + _prompts_mod.REVIEW_PROMPT
@@ -468,8 +533,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 + f"\n{_visibility_mandate}\n{neg_guard_str}\n\n"
             )
             # If still oversized after frame collapse, fall back to body collapse preserving tail.
-            if len(_rebuilt_body) + len(_tail) > 16000:
-                _body_cap = 16000 - len(_tail) - 80
+            if len(_rebuilt_body) + len(_tail) > _VRAM_GUARD_CAP:
+                _body_cap = _VRAM_GUARD_CAP - len(_tail) - 80
                 _rebuilt_body = TokenBudget._block_aware_collapse(_rebuilt_body, _body_cap)
                 _rebuilt_body += (
                     "\n\n[SYSTEM KERNEL: Code body further collapsed via block-aware paging. "
@@ -518,13 +583,11 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             ctx.review_output = "### Verdict\n[VERDICT: FAIL]\n### Issues\nPhysical compilation failed. See compiler logs."
             ctx.review_verdict = "FAIL"
         else:
-            from pipeline import REVIEWER_MODEL as _reviewer_model
             ctx.review_output = call_ollama(
-                _prompts_mod.REVIEW_SYSTEM, review_input, cycle_label, _reviewer_model,
+                _prompts_mod.REVIEW_SYSTEM, review_input, cycle_label, _REVIEWER_MODEL,
                 skip_pre_summarizer=True
             )
-            from ollama_client import is_fatal_ollama_error as _is_fatal_rev
-            if _is_fatal_rev(ctx.review_output):
+            if _is_fatal_ollama(ctx.review_output):
                 print(f"  [Review-Fix] ⛔ Ollama error during review — aborting review loop.")
                 ctx.review_verdict = "BLOCKED"
                 break
@@ -579,14 +642,12 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 "If any pre-flight violations are listed above, you MUST emit [VERDICT: FAIL].\n"
                 "No other text on that line. Do NOT repeat your review.]"
             )
-            from pipeline import REVIEWER_MODEL as _rv_model2
             _retry_out = call_ollama(
                 _prompts_mod.REVIEW_SYSTEM, _verdict_nudge,
-                f"Review Verdict Re-prompt (cycle {ctx.review_cycle})", _rv_model2,
+                f"Review Verdict Re-prompt (cycle {ctx.review_cycle})", _REVIEWER_MODEL,
                 skip_pre_summarizer=True,
             )
-            from ollama_client import is_fatal_ollama_error as _is_fatal_vn
-            if _is_fatal_vn(_retry_out):
+            if _is_fatal_ollama(_retry_out):
                 print(f"  [Review-Fix] ⛔ Ollama error during verdict re-prompt — aborting review loop.")
                 ctx.review_verdict = "BLOCKED"
                 break
@@ -707,28 +768,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # catastrophic file_path.read_text() that would pull 40k+ chars.
                 # Build bridge contract snippet for fix context so agents
                 # use correct API names instead of hallucinating variants.
-                _fix_bridge_snippet = ""
-                _build_bridge_fn = getattr(ctx, '_cartridge_build_bridge_contract', None)
-                if callable(_build_bridge_fn):
-                    try:
-                        _bc_fix = _build_bridge_fn()
-                        _api_fix = list((_bc_fix.get("midwayphysics_spawn_api") or {}).keys())
-                        _pool_fix = list((_bc_fix.get("object_pools") or {}).keys())
-                        _econ_fix = list((_bc_fix.get("economy_api") or {}).keys())
-                        if _api_fix:
-                            _fix_bridge_snippet = (
-                                "## Active Bridge Contract — APPROVED APIs (exhaustive list)\n"
-                                "Use ONLY these exact function names. Any other name is a phantom API.\n"
-                                "Physics: " + ", ".join(_api_fix) + "\n"
-                                "Pools: " + ", ".join(_pool_fix) + "\n"
-                                "Economy: " + ", ".join(_econ_fix) + "\n"
-                                "IMPORTANT: SpawnDynamicBall does NOT exist. "
-                                "Use SpawnDynamicSphere(lx, ly, lz, radius) for ball-shaped objects.\n"
-                                "IMPORTANT: SpawnDynamicBody, ReleaseHandle, RemoveBody, CheckCollision, "
-                                "GetLinearVelocity do NOT exist. Use the names listed above only."
-                            )
-                    except Exception:
-                        pass
+                # Consolidated: all three callers now share build_fix_bridge_snippet().
+                _fix_bridge_snippet = build_fix_bridge_snippet(ctx)
 
                 agent_fix_input = _prune_fix_context(
                     domain_key=original_agent_key,
@@ -756,8 +797,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     skip_pre_summarizer=True,
                 )
 
-                from ollama_client import is_fatal_ollama_error as _is_fatal_fix
-                if _is_fatal_fix(agent_fix_output):
+                if _is_fatal_ollama(agent_fix_output):
                     print(f"  [Review-Fix] ⛔ Ollama error during fix for {tid} — skipping, retaining previous output.")
                     continue
 
@@ -798,8 +838,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                             else:
                                 # Malformed — route through fast-path syntax repair
                                 print(f"  [AST Reducer] ⚠ Malformed patch path '{target_path}' — routing to syntax repair")
-                                from pipeline import EXECUTION_MODEL as _syntax_model, SYNTAX_GATE_MODEL as _repair_model
-                                repair_model = _repair_model or "qwen2.5-coder:1.5b"
+                                from pipeline import SYNTAX_GATE_MODEL as _repair_model
+                                repair_model = _repair_model or _EXECUTION_MODEL
                                 repair_prompt = (
                                     f"Repair the following AST patch targeting invalid path '{target_path}'. "
                                     f"Extract the correct target file path and clean up the patch content. "
@@ -854,16 +894,35 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                             f"**Status:** {'Repaired' if patch.get('repaired') else 'Clean'}\n\n"
                             f"```\n{content}\n```"
                         )
-                        # Inject into the dict under the original task's key
-                        ctx.all_results_dict[f"{patch['task_id']}_ast_{tpath.replace('/', '_')}"] = tagged_output
+                        # Inject into the dict under the original task's key;
+                        # also append an entry to all_results so the two
+                        # collections stay in sync.
+                        _ast_key = f"{patch['task_id']}_ast_{tpath.replace('/', '_')}"
+                        ctx.all_results_dict[_ast_key] = tagged_output
+                        ctx.all_results.append({"task_id": _ast_key, "output": tagged_output})
 
                 domain_fix_outputs[tid] = agent_fix_output
                 ctx.output_parts.append(
                     f"### {domain_name} Fix ({tid})\n{agent_fix_output}\n"
                 )
 
-                # Update the result in-place
+                # ── Circuit Breaker: increment review-fix retry count ─────────
+                # retry_counts is only incremented during initial task execution
+                # in mesh_tasks.py.  We must also count fix-cycle attempts here
+                # so the circuit breaker at the top of the review loop can
+                # actually trip when a task keeps failing after repeated fixes.
+                ctx.retry_counts[tid] = ctx.retry_counts.get(tid, 0) + 1
+
+                # Update the result in-place, keeping all_results list in sync.
                 ctx.all_results_dict[tid] = agent_fix_output
+                _found_rv = False
+                for _i_rv, _e_rv in enumerate(ctx.all_results):
+                    if _e_rv.get("task_id") == tid:
+                        ctx.all_results[_i_rv] = {"task_id": tid, "output": agent_fix_output}
+                        _found_rv = True
+                        break
+                if not _found_rv:
+                    ctx.all_results.append({"task_id": tid, "output": agent_fix_output})
 
             # Build a combined fix output for backward compat
             fix_output = "\n\n".join(
@@ -892,7 +951,17 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     # rather than prose-only output that guarantees another FAIL.
                     # NOTE: _pre_fix_snapshot was captured before the domain fix loop above.
                     if _ftid in _pre_fix_snapshot:
-                        ctx.all_results_dict[_ftid] = _pre_fix_snapshot[_ftid]
+                        _reverted = _pre_fix_snapshot[_ftid]
+                        ctx.all_results_dict[_ftid] = _reverted
+                        # Keep all_results list in sync with the revert.
+                        _found_rv2 = False
+                        for _i_rv2, _e_rv2 in enumerate(ctx.all_results):
+                            if _e_rv2.get("task_id") == _ftid:
+                                ctx.all_results[_i_rv2] = {"task_id": _ftid, "output": _reverted}
+                                _found_rv2 = True
+                                break
+                        if not _found_rv2:
+                            ctx.all_results.append({"task_id": _ftid, "output": _reverted})
 
             # ── Post-Fix Static Guard Refresh ─────────────────────
             # Re-run the lightweight static pattern guards against the newly

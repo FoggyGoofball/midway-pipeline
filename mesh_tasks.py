@@ -249,6 +249,71 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     task.context = (task.context or "") + pro_test_injection
                 if resolve_agent_name(task.agent) in ("C++", "PHYS") and hasattr(ctx, 'interface_manifest'):
                     task.context = (task.context or "") + getattr(ctx, 'interface_manifest', '')
+
+                # ── Completed-Work Anchor: inject per-task symbol TOC ─────────
+                # If this task writes to a file that was already approved in a
+                # prior blueprint iteration, remind the coder agent of every
+                # symbol that is already on disk so it does not re-implement them.
+                _approved_snapshots: dict = getattr(ctx, 'completed_file_snapshots', {}) or {}
+                if _approved_snapshots and task.target_file:
+                    # Normalise path separators for lookup
+                    _tf_norm = task.target_file.replace("\\", "/").lstrip("/")
+                    _snap_content = None
+                    for _snap_path, _snap_body in _approved_snapshots.items():
+                        if _snap_path.replace("\\", "/").lstrip("/") == _tf_norm:
+                            _snap_content = _snap_body
+                            break
+                    if _snap_content:
+                        try:
+                            from mesh_fetches import _extract_symbol_toc as _sym_toc
+                            _symbols = _sym_toc(_snap_content, _tf_norm)
+                        except Exception:
+                            _symbols = []
+                        if _symbols:
+                            _sym_list = ", ".join(f"`{s}`" for s in _symbols)
+                            _anchor = (
+                                f"\n\n## ⚠️  ALREADY APPROVED — DO NOT RE-IMPLEMENT\n"
+                                f"File `{_tf_norm}` was written and approved in a previous iteration.\n"
+                                f"**Symbols already on disk:** {_sym_list}\n"
+                                f"Your ONLY job is to APPEND new symbols that are absent from this list.\n"
+                                f"Do NOT redefine, replace, or duplicate any symbol above.\n"
+                                f"To read a full body: "
+                                f"<invoke_kernel><action>PAGE_IN</action>"
+                                f"<target>{_tf_norm}</target>"
+                                f"<search>SYMBOL_NAME</search></invoke_kernel>\n"
+                            )
+                        else:
+                            # File exists but no extractable symbols (data file etc.)
+                            _char_count = len(_snap_content)
+                            _anchor = (
+                                f"\n\n## ⚠️  ALREADY APPROVED — DO NOT RE-IMPLEMENT\n"
+                                f"File `{_tf_norm}` ({_char_count} chars) was written and approved "
+                                f"in a previous iteration. Extend it — do NOT replace it.\n"
+                            )
+                        task.context = (task.context or "") + _anchor
+
+                # ── Shared Integration Schema + Attraction Design Injection ──
+                # Inject once per task so every agent writes compatible code.
+                try:
+                    from integration_schema import get_schema_context_block
+                    _schema_block = get_schema_context_block(ctx)
+                    if _schema_block:
+                        task.context = (task.context or "") + "\n\n" + _schema_block
+                except Exception:
+                    pass
+                _design = getattr(ctx, 'attraction_design', None)
+                if _design:
+                    try:
+                        _design_block = _design.to_context_block()
+                        if _design_block:
+                            task.context = (
+                                (task.context or "")
+                                + "\n\n## 🏗 Attraction Design Reference\n"
+                                + _design_block
+                            )
+                    except Exception:
+                        pass
+
                 output = execute_task(
                     task, ctx.user_prompt, ctx.director_output,
                     ctx.all_results_dict, file_context, ctx.gdd_context,
@@ -275,6 +340,29 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             ctx.all_results_dict[task.task_id] = output
             ctx.processed_ids.add(task.task_id)
             wave_results[task.task_id] = output
+
+            # ── Register task output into the live integration schema ─────────
+            # This must run after the output is stored so conflict detection is
+            # cumulative across the full wave.  Errors are non-fatal — a conflict
+            # just adds a warning to the schema; it will surface in preflight.
+            try:
+                from integration_schema import update_schema_from_task
+                _schema_conflicts = update_schema_from_task(ctx, task.task_id, output)
+                if _schema_conflicts:
+                    for _sc in _schema_conflicts:
+                        print(f"  [IntegrationSchema] ⚠ Handle conflict: {_sc.name} "
+                              f"(tasks: {', '.join(_sc.declared_by)})")
+            except Exception:
+                pass
+            # Keep all_results list in sync with all_results_dict.
+            _mt_found = False
+            for _mt_i, _mt_e in enumerate(ctx.all_results):
+                if _mt_e.get("task_id") == task.task_id:
+                    ctx.all_results[_mt_i] = {"task_id": task.task_id, "output": output}
+                    _mt_found = True
+                    break
+            if not _mt_found:
+                ctx.all_results.append({"task_id": task.task_id, "output": output})
 
             # Process signals
             _signal_queue: deque = deque()
@@ -370,7 +458,7 @@ def _run_pro_mode_tdd(task, ctx: PipelineContext, paged_note: str, ollama_params
     )
     test_writer_prompt = (
         f"## Task Specification\n{task.spec}\n\n"
-        f"## User's Feature Request\n{ctx.user_prompt}\n\n"
+        f"## User's Feature Request\n{ctx.canonical_request}\n\n"
         f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
         f"{paged_note}"
         f"---\n"
@@ -395,6 +483,8 @@ def _run_pro_mode_tdd(task, ctx: PipelineContext, paged_note: str, ollama_params
     test_file_path = test_dir / f"test_{task.task_id}{_meta['extension']}"
     atomic_write_text(test_file_path, test_body)
     print(f"  [Pro Mode] Adversarial TDD: Saved test to {test_file_path}")
+    # Persist path on the task so fix cycles can re-inject the contract
+    task.tdd_test_path = str(test_file_path)
 
     pro_test_injection = (
         f"\n\n---\n"
@@ -513,7 +603,7 @@ def _run_tribunal_merge(task, ctx: PipelineContext, paged_note: str, ollama_para
     )
     tribunal_prompt = (
         f"## Original Task Specification\n{task.spec}\n\n"
-        f"## User's Feature Request\n{ctx.user_prompt}\n\n"
+        f"## User's Feature Request\n{ctx.canonical_request}\n\n"
         f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
         f"## Draft A (temperature=0.2 — conservative)\n{drafts['draft_A'][:2000]}\n\n"
         f"## Draft B (temperature=0.5 — balanced)\n{drafts['draft_B'][:2000]}\n\n"

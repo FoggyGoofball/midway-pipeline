@@ -189,46 +189,60 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
     ctx.output_parts.append("\n## Phase 1 & 2: Autonomic Workspace Discovery\n" + ctx.project_state + "\n")
 
     # ── Scope classification (shared by blueprint AND director phases) ────────
-    # Computed once here so both NARROW (director-only) and TOO_BROAD (blueprint
-    # → director) paths receive identical scope constraints.
-    _s_mode, _s_target, _s_refs = _classify_blueprint_scope(
-        ctx.user_prompt, ctx.project_root, active_topology
-    )
-    # When the classifier returns NEW_ATTRACTION with an empty target name
-    # (e.g. Pass 0 fires because the attractions dir was empty), try to
-    # recover the attraction name directly from the user prompt so that
-    # downstream scoped extraction and the GDD re-extract can use it.
-    if _s_mode == "NEW_ATTRACTION" and not _s_target:
-        import re as _re_scope
-        _creation_verbs_scope = (
-            "build", "create", "make", "implement", "write", "add", "develop", "design",
+    # On blueprint continuation iterations the user_prompt has already been
+    # replaced by the next task description (e.g. "Implement ball launch…").
+    # Re-classifying against that text always returns GENERAL, which drops the
+    # A3 C++/PHYS guard and allows the director to emit out-of-scope tasks.
+    # Solution: when a non-GENERAL scope is already pinned on ctx from the
+    # first iteration, skip re-classification and reuse the existing values.
+    _existing_scope = getattr(ctx, '_scope_mode', 'GENERAL')
+    if is_auto_feed_request and _existing_scope != 'GENERAL':
+        _s_mode   = _existing_scope
+        _s_target = getattr(ctx, '_scope_target', '')
+        _s_refs   = getattr(ctx, '_scope_refs',   [])
+        print(f"  [Scope Classifier] Mode={_s_mode} (inherited from blueprint session)"
+              + (f", target={_s_target}" if _s_target else ""))
+    else:
+        # Computed once here so both NARROW (director-only) and TOO_BROAD (blueprint
+        # → director) paths receive identical scope constraints.
+        _s_mode, _s_target, _s_refs = _classify_blueprint_scope(
+            ctx.user_prompt, ctx.project_root, active_topology
         )
-        _stop_scope = {
-            "this", "that", "with", "from", "your", "their", "have", "will",
-            "using", "make", "want", "need", "should", "only", "into", "also",
-            "basic", "simple", "please", "just", "some", "more",
-        }
-        _pl = ctx.user_prompt.lower()
-        for _v in _creation_verbs_scope:
-            _m = _re_scope.search(
-                r'\b' + _v + r'\b\s+(?:(?:me|us|a|an|the|basic|simple|new)\s+)*(\b[a-z]{4,}\b)',
-                _pl,
+        # When the classifier returns NEW_ATTRACTION with an empty target name
+        # (e.g. Pass 0 fires because the attractions dir was empty), try to
+        # recover the attraction name directly from the user prompt so that
+        # downstream scoped extraction and the GDD re-extract can use it.
+        if _s_mode == "NEW_ATTRACTION" and not _s_target:
+            import re as _re_scope
+            _creation_verbs_scope = (
+                "build", "create", "make", "implement", "write", "add", "develop", "design",
             )
-            if _m and _m.group(1) not in _stop_scope:
-                _s_target = _m.group(1)
-                break
-        if not _s_target:
-            _words = _re_scope.findall(r'\b[a-z]{4,}\b', _pl)
-            _s_target = next((w for w in _words if w not in _stop_scope
-                               and not any(_re_scope.search(r'\b' + v + r'\b', w)
-                                           for v in _creation_verbs_scope)), "")
+            _stop_scope = {
+                "this", "that", "with", "from", "your", "their", "have", "will",
+                "using", "make", "want", "need", "should", "only", "into", "also",
+                "basic", "simple", "please", "just", "some", "more",
+            }
+            _pl = ctx.user_prompt.lower()
+            for _v in _creation_verbs_scope:
+                _m = _re_scope.search(
+                    r'\b' + _v + r'\b\s+(?:(?:me|us|a|an|the|basic|simple|new)\s+)*(\b[a-z]{4,}\b)',
+                    _pl,
+                )
+                if _m and _m.group(1) not in _stop_scope:
+                    _s_target = _m.group(1)
+                    break
+            if not _s_target:
+                _words = _re_scope.findall(r'\b[a-z]{4,}\b', _pl)
+                _s_target = next((w for w in _words if w not in _stop_scope
+                                   and not any(_re_scope.search(r'\b' + v + r'\b', w)
+                                               for v in _creation_verbs_scope)), "")
+        print(f"  [Scope Classifier] Mode={_s_mode}"
+              + (f", target={_s_target}" if _s_target else "")
+              + (f", {len(_s_refs)} reference-only file(s)" if _s_refs else ""))
 
-    ctx._scope_mode = _s_mode
+    ctx._scope_mode   = _s_mode
     ctx._scope_target = _s_target
-    ctx._scope_refs = _s_refs
-    print(f"  [Scope Classifier] Mode={_s_mode}"
-          + (f", target={_s_target}" if _s_target else "")
-          + (f", {len(_s_refs)} reference-only file(s)" if _s_refs else ""))
+    ctx._scope_refs   = _s_refs
 
     # ── Bridge exclusion list (shared) ───────────────────────────────────────
     # A3: Use the Lua-callable form of each name so the director recognises
@@ -367,9 +381,26 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
             )
             if match:
                 raw_line = match.group(0)
-                task_text = match.group(1)
-                ctx.user_prompt = task_text.strip()
-                print(f"  [Lead Producer] Auto-feeding next task: {task_text.strip()}")
+                task_text = match.group(1).strip()
+                # Use the persisted original request for <macro_invariants> so
+                # every continuation task agent sees the full feature context,
+                # not just the bare task title.
+                _orig_req = getattr(ctx, '_original_user_prompt', '') or task_text
+                ctx.user_prompt = (
+                    f"<execution_environment>\n"
+                    f"  <system_directives>\n"
+                    f"    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.\n"
+                    f"  </system_directives>\n"
+                    f"  <macro_invariants>\n"
+                    f"    {_orig_req.strip()}\n"
+                    f"  </macro_invariants>\n"
+                    f"  <target_subtask_scope>\n"
+                    f"    {task_text}\n"
+                    f"  </target_subtask_scope>\n"
+                    f"</execution_environment>\n\n"
+                    f"INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>."
+                )
+                print(f"  [Lead Producer] Auto-feeding next task: {task_text}")
                 new_content = content.replace(raw_line, raw_line.replace("[ ]", "[x]", 1), 1)
                 atomic_write_text(blueprint_path, new_content)
             else:
@@ -456,12 +487,17 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                     ctx.final_output = f"Pipeline aborted: Ollama unreachable during Scope Gate. {scope_eval.strip()}"
                     return ctx
                 all_verdicts = list(re.finditer(
-                    r"^\s*(?:\[\s*)?\*?\*?\s*VERDICT\s*\*?\*?\s*:\s*\*?\*?\s*"
-                    r"(?:\[\s*(?:VERDICT\s*:\s*)?)?"
+                    r"^\s*"
+                    r"(?:\[\s*)?"                          # optional opening [
+                    r"(?:\*{0,2}\s*VERDICT\s*:\s*){1,4}"  # 1-4 repetitions of VERDICT:
+                    r"\*{0,2}\s*"
+                    r"(?:\[\s*)?"                          # optional bracket around value
+                    r"\*{0,2}\s*"
                     r"(TOO_BROAD|NARROW)"
-                    r"\s*\*?\*?\s*(?:\])?\s*(?:\])?\s*$",
+                    r"\s*\*{0,2}"
+                    r"(?:\s*\]){0,2}\s*$",                # optional closing brackets (inner + outer)
                     scope_eval,
-                    re.IGNORECASE | re.MULTILINE,
+                    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
                 ))
                 analysis_end = scope_eval.rfind("</analysis>")
 
@@ -478,11 +514,17 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
 
             # ── Deterministic Path Routing ────────────────────────────────────
             # A2: If the scope classifier already determined this is a NEW_ATTRACTION,
-            # a NARROW verdict from the scope gate is almost certainly wrong — a fresh
-            # attraction file always warrants a blueprint.  Override to TOO_BROAD.
-            if final_verdict == "NARROW" and getattr(ctx, '_scope_mode', 'GENERAL') == "NEW_ATTRACTION":
-                print(f"\n  [Lead Producer] Scope override: NARROW → TOO_BROAD "
-                      f"(scope classifier identified a NEW_ATTRACTION request).")
+            # both a NARROW verdict and an exhausted-retry None verdict are wrong —
+            # a fresh attraction file always warrants a blueprint.  Override to TOO_BROAD.
+            # None here means the scope gate produced malformed output on every attempt;
+            # for a NEW_ATTRACTION that is still safer to blueprint than to pass-through.
+            if final_verdict in ("NARROW", None) and getattr(ctx, '_scope_mode', 'GENERAL') == "NEW_ATTRACTION":
+                _override_reason = (
+                    "scope classifier identified a NEW_ATTRACTION request"
+                    if final_verdict == "NARROW"
+                    else "scope gate exhausted retries — NEW_ATTRACTION always requires a blueprint"
+                )
+                print(f"\n  [Lead Producer] Scope override: {final_verdict} → TOO_BROAD ({_override_reason}).")
                 final_verdict = "TOO_BROAD"
 
             if final_verdict == "TOO_BROAD":
@@ -671,6 +713,186 @@ def _build_scope_annotated_ast(
     return raw_summary
 
 
+def _sanitize_attraction_path(
+    path: str,
+    canonical: str,
+    task_id: str = "",
+) -> str:
+    """Return the canonical attraction path, remapping any malformed variant.
+
+    Handles the known failure modes seen in live runs:
+      • Root-level file    : "skeeball.lua"           → canonical
+      • Flat attractions/  : "attractions/skeeball.lua"→ canonical
+      • Typo subfolder     : "attractions/skeebal/…"  → canonical
+      • Already correct    : "attractions/skeeball/skeeball.lua" → unchanged
+
+    Emits a one-line warning whenever a remap occurs.
+    """
+    if not path or not canonical:
+        return canonical or path
+    norm = path.replace("\\", "/").strip("/")
+    if norm == canonical:
+        return canonical
+    tag = f"Task {task_id}: " if task_id else ""
+    print(f"  [PathGuard] ⚠️  {tag}remapping '{norm}' → '{canonical}'")
+    return canonical
+
+
+def _extract_symbol_toc(content: str, rel_path: str) -> list[str]:
+    """Return a sorted list of top-level symbol names found in *content*.
+
+    Supports Lua (``function Name``, ``local function Name``,
+    ``Name = function``), Python (``def``, ``class``), and C++ (return-type
+    ``name(...)`` signatures).  Used by ``_build_completed_work_snapshot`` to
+    replace truncated code dumps with a compact, navigable symbol list.
+    """
+    symbols: list[str] = []
+    ext = rel_path.rsplit(".", 1)[-1].lower() if "." in rel_path else ""
+
+    for line in content.splitlines():
+        s = line.strip()
+        if not s or s.startswith("--") or s.startswith("//") or s.startswith("#"):
+            continue
+        if ext == "lua":
+            m = re.match(
+                r'^(?:local\s+)?function\s+([\w:.]+)\s*\('
+                r'|^([\w.]+)\s*=\s*function\s*\(',
+                s,
+            )
+            if m:
+                symbols.append(m.group(1) or m.group(2))
+        elif ext == "py":
+            m = re.match(r'^(?:async\s+)?def\s+(\w+)|^class\s+(\w+)', s)
+            if m:
+                symbols.append(m.group(1) or m.group(2))
+        else:
+            # C / C++ — simple return-type name(...) pattern
+            m = re.match(
+                r'^(?:static\s+|inline\s+|virtual\s+)?'
+                r'(?:void|int|float|double|bool|char|std::\w+|\w+)\s+'
+                r'([*&]?\s*\w+)\s*\(',
+                s,
+            )
+            if m:
+                symbols.append(m.group(1).strip())
+
+    # Deduplicate preserving order
+    seen: set = set()
+    result: list[str] = []
+    for sym in symbols:
+        if sym not in seen:
+            seen.add(sym)
+            result.append(sym)
+    return result
+
+
+def _build_attraction_design_block(ctx: "PipelineContext") -> str:
+    """Return a Director-prompt block containing the AttractionDesign if present.
+
+    Injected into the base_director_input immediately before the USER REQUEST
+    line so the Director's task decomposition aligns with the pre-approved design.
+    Returns an empty string when no design doc is available.
+    """
+    design = getattr(ctx, 'attraction_design', None)
+    if not design:
+        return ""
+    block = design.to_context_block()
+    if not block.strip():
+        return ""
+    return (
+        "\n\n---\n"
+        "## 🏗 PRE-APPROVED ATTRACTION DESIGN DOCUMENT\n"
+        "The following design was produced by the pre-decomposition Architect pass.\n"
+        "You MUST align every task with this design — use the exact handle names, "
+        "lifecycle order, and event flow listed here. Do NOT invent alternatives.\n\n"
+        + block
+        + "\n---\n\n"
+    )
+
+
+def _build_completed_work_snapshot(ctx: "PipelineContext") -> str:
+    """Return a Director-prompt block describing files already written in prior iterations.
+
+    Reads ``ctx.completed_file_snapshots`` (populated by the blueprint loop in
+    ``pipeline.py`` before each ``reset_state()`` call).  Each file's content is
+    truncated to a safe per-file cap, and the entire block is capped so it never
+    dominates the context window.
+
+    The block uses explicit MUST-NOT language so the Director cannot mistake
+    already-implemented code for a gap it needs to fill.
+
+    Returns an empty string when no prior iteration has completed (iteration 1).
+    """
+    snapshots: dict = getattr(ctx, 'completed_file_snapshots', {})
+    if not snapshots:
+        return ""
+
+    # Symbol-indexed entries are ~150 chars each; raise the total cap accordingly.
+    TOTAL_CAP_CHARS = 12000
+
+    # Include the canonical path in the header so the model is reminded of
+    # the single shared file it must extend (not replace) this iteration.
+    _snap_scope_mode   = getattr(ctx, '_scope_mode',   '')
+    _snap_scope_target = getattr(ctx, '_scope_target',  '')
+    _canonical_note = ""
+    if _snap_scope_mode == "NEW_ATTRACTION" and _snap_scope_target:
+        import re as _re_snap
+        _snap_slug = _re_snap.sub(r'[^\w]+', '_', _snap_scope_target.strip().lower()).strip('_')
+        if _snap_slug:
+            _canonical_path = f"attractions/{_snap_slug}/{_snap_slug}.lua"
+            _canonical_note = (
+                f"The ONLY valid output file for this attraction is: `{_canonical_path}`\n"
+                "Every task in this iteration MUST append/extend that file — "
+                "do NOT write to any other path.\n"
+            )
+
+    lines: list[str] = [
+        "\n\n## ⚠️  COMPLETED WORK — FILES ALREADY ON DISK\n"
+        "The following files were written and approved in PREVIOUS blueprint iterations.\n"
+        "You MUST NOT re-implement, re-stub, or duplicate any function, variable, or block "
+        "already present in them.\n"
+        "Your tasks for THIS iteration must ONLY implement what is ABSENT from these files.\n"
+        "Treat every symbol listed below as DONE AND LOCKED.\n"
+        "To read the full body of any symbol, emit:\n"
+        "  <invoke_kernel><action>PAGE_IN</action>"
+        "<target>PATH</target><search>SYMBOL_NAME</search></invoke_kernel>\n"
+        + _canonical_note,
+    ]
+
+    total_chars = 0
+    for rel_path, content in snapshots.items():
+        if total_chars >= TOTAL_CAP_CHARS:
+            lines.append(
+                f"... [{len(snapshots)} file(s) total — remaining files omitted to stay within context budget]\n"
+            )
+            break
+        # Build a symbol TOC instead of dumping truncated code.
+        symbols = _extract_symbol_toc(content, rel_path)
+        char_count = len(content)
+        if symbols:
+            sym_line = ", ".join(f"`{s}`" for s in symbols)
+            entry = (
+                f"### `{rel_path}` ({char_count} chars)\n"
+                f"**Implemented symbols:** {sym_line}\n"
+                f"*(PAGE_IN with `<search>SYMBOL_NAME</search>` to read any body)*\n\n"
+            )
+        else:
+            # No extractable symbols (e.g. data file) — show a short head snippet.
+            snippet = content[:300] + ("\n…" if len(content) > 300 else "")
+            ext = rel_path.rsplit(".", 1)[-1] if "." in rel_path else ""
+            lang = {"lua": "lua", "cpp": "cpp", "h": "cpp", "hpp": "cpp",
+                    "py": "python", "json": "json", "md": "markdown"}.get(ext, "")
+            entry = (
+                f"### `{rel_path}` ({char_count} chars)\n"
+                f"```{lang}\n{snippet}\n```\n\n"
+            )
+        lines.append(entry)
+        total_chars += len(entry)
+
+    lines.append("---\n")
+    return "".join(lines)
+
+
 def _build_director_scope_mandate(ctx: "PipelineContext") -> str:
     """Return scope + bridge-exclusion text for the director prompt.
 
@@ -817,12 +1039,31 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
         _scope_mode, _scope_target, _scope_refs, _ast_topology
     )
 
+    # Compute a dynamic budget for _ctx_pack so the combined blueprint_prompt
+    # fits inside the model's context window without triggering hard truncation.
+    # Reserve chars for: system prompt, bridge/scope/API rules appended later,
+    # feature request, hard constraints, directives, and tool-result headroom.
+    # Remaining budget is split: GDD 35%, state 20%, structure 15%, AST 30%.
+    from ollama_client import resolve_ctx_size as _bp_resolve_ctx
+    _BP_CTX_CHARS = int(_bp_resolve_ctx(REASONING_MODEL) * 1.5)  # tok -> chars
+    _BP_SYSTEM_EST  = 6000   # conservative upper bound for _blueprint_system
+    _BP_FIXED_EST   = 1200   # feature request + hard constraints + directives
+    _BP_TOOL_HEADROOM = 1200 # headroom for tool-result rounds
+    _BP_PACK_BUDGET = max(2000, _BP_CTX_CHARS - _BP_SYSTEM_EST - _BP_FIXED_EST - _BP_TOOL_HEADROOM)
+    _BP_GDD_LIM     = int(_BP_PACK_BUDGET * 0.35)
+    _BP_STATE_LIM   = int(_BP_PACK_BUDGET * 0.20)
+    _BP_STRUCT_LIM  = int(_BP_PACK_BUDGET * 0.15)
+    _BP_AST_LIM     = int(_BP_PACK_BUDGET * 0.30)
     _ctx_pack = build_blueprint_context_pack(
         gdd_context=ctx.gdd_context or "",
         project_state=ctx.project_state or "",
         structure=ctx.structure or "",
         project_root=ctx.project_root,
         ast_summary=_scope_ast_section or _ast_summary,
+        gdd_limit=max(800, _BP_GDD_LIM),
+        state_limit=max(400, _BP_STATE_LIM),
+        structure_limit=max(400, _BP_STRUCT_LIM),
+        ast_limit=max(600, _BP_AST_LIM),
     )
 
     # Pull bridge-contract mandate from the class-based cartridge if available.
@@ -1019,7 +1260,6 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
                 _blueprint_system, _round_prompt,
                 f"Blueprint Generation (round {_tool_round + 1})",
                 REASONING_MODEL,
-                skip_pre_summarizer=True,
             )
 
             from ollama_client import is_fatal_ollama_error as _is_fatal_bp
@@ -1315,7 +1555,12 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
     if first_match:
         raw_line = first_match.group(0)
         task_text = first_match.group(1).strip()
-        original_request = ctx.user_prompt
+        # Persist the raw original request so subsequent blueprint iterations
+        # can restore it into <macro_invariants> even after reset_state() clears
+        # ctx.user_prompt to "".  Only overwrite if not already set (first pass).
+        if not getattr(ctx, '_original_user_prompt', ''):
+            ctx._original_user_prompt = ctx.user_prompt
+        original_request = ctx._original_user_prompt or ctx.user_prompt
         ctx.user_prompt = (
             f"<execution_environment>\n"
             f"  <system_directives>\n"
@@ -1348,7 +1593,7 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## Phase 3: Director — Task Decomposition\n")
 
-    director_prompt = build_director_prompt()
+    director_prompt = build_director_prompt(user_prompt=ctx.user_prompt, project_root=ctx.project_root)
 
     # ── Inject cartridge-level Director directives (Lua-first mandate, etc.) ──
     _director_extra_fn = getattr(ctx, '_cartridge_get_director_extra', None)
@@ -1360,7 +1605,7 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
         except Exception:
             pass
 
-    gdd_snippet = TokenBudget._block_aware_collapse(ctx.gdd_context, 3500) if ctx.gdd_context else "(no GDD context)"
+    gdd_snippet = TokenBudget._block_aware_collapse(ctx.gdd_context, 2000) if ctx.gdd_context else "(no GDD context)"
     state_snippet = TokenBudget._block_aware_collapse(ctx.project_state, 2000) if ctx.project_state else "(no project state)"
 
     # ── Inject live bridge contract API surface so the Director cannot invent
@@ -1400,11 +1645,63 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
         f"## Relevant GDD Context\n{gdd_snippet}\n\n"
         f"## Current Project State\n{state_snippet}"
         f"{_bridge_api_snippet}\n\n"
+        + _build_completed_work_snapshot(ctx)
         + _build_director_scope_mandate(ctx)
+        + _build_attraction_design_block(ctx)
         + f"---\nUSER REQUEST:\n{ctx.user_prompt}"
     )
 
     task_regex = r"### Task ([a-zA-Z0-9]+):\s*\[([^\]]+)\]\s*[-—–]\s*(.+?)(?:\s*\(DependsOn:\s*(.+?)\))?\s*$"
+
+    def _parse_task_meta_field(all_lines: list, header_idx: int, field_name: str) -> list:
+        """Parse a metadata field from the lines following a Director task header.
+
+        Looks for a line matching '<Field>: <value>' within the 5 lines after
+        header_idx.  Splits the value on commas, strips whitespace, and removes
+        the sentinel value 'None' / 'none'.
+        Returns a list of strings, or [] when the field is absent or empty.
+        """
+        import re as _re_meta
+        _field_re = _re_meta.compile(
+            rf"^{re.escape(field_name)}\s*:\s*(.+)$", _re_meta.IGNORECASE
+        )
+        for offset in range(1, 6):
+            idx = header_idx + offset
+            if idx >= len(all_lines):
+                break
+            stripped = all_lines[idx].strip()
+            if not stripped:
+                continue
+            # Stop scanning if we've hit another task header
+            if stripped.startswith("###"):
+                break
+            m = _field_re.match(stripped)
+            if m:
+                raw = m.group(1).strip()
+                if raw.lower() == "none":
+                    return []
+                return [v.strip() for v in raw.split(",") if v.strip() and v.strip().lower() != "none"]
+        return []
+
+
+    # Lenient form: "### Task 1: Lua - Title" or "### Task 1: [Lua] Title" (missing dash)
+    # Normalised to the strict form before matching so parse retries are not wasted on formatting.
+    _task_norm_re = re.compile(
+        r"^(###\s*Task\s+[a-zA-Z0-9]+\s*:\s*)([a-zA-Z0-9 /+#]+?)\s*[-—–]\s*(.+)$"
+    )
+
+    def _normalise_task_header(raw_line: str) -> str:
+        """If *raw_line* is a director task header without bracket-wrapped domain,
+        rewrite it so the strict ``task_regex`` can match it."""
+        stripped = raw_line.strip()
+        # Already has brackets — nothing to do.
+        if re.search(r"\[[^\]]+\]", stripped):
+            return raw_line
+        m = _task_norm_re.match(stripped)
+        if m:
+            prefix, domain, rest = m.group(1), m.group(2).strip(), m.group(3).strip()
+            return f"{prefix}[{domain}] - {rest}"
+        return raw_line
     ctx.tasks_list = []
 
     # Derive the canonical Lua path for NEW_ATTRACTION scope so the per-task
@@ -1441,7 +1738,7 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
         ctx.tasks_list = []
         lines = ctx.director_output.splitlines()
         for line_idx, line in enumerate(lines):
-            match = re.match(task_regex, line.strip())
+            match = re.match(task_regex, _normalise_task_header(line).strip())
             if not match:
                 continue
             task_id = match.group(1)
@@ -1458,17 +1755,17 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
             # the next 3 non-empty lines (covers blank-line-separated annotations).
             is_math_heavy = bool(_math_heavy_re.search(line))
             if not is_math_heavy:
-                _lookahead_remaining = 3
+                # Only flag if the immediately following non-empty line consists
+                # solely of the [MATH_HEAVY] tag — no prose mixed in.
                 _scan_idx = line_idx + 1
-                while _lookahead_remaining > 0 and _scan_idx < len(lines):
+                while _scan_idx < len(lines):
                     _scan_line = lines[_scan_idx].strip()
                     if _scan_line:
-                        if _math_heavy_re.search(_scan_line):
+                        # Accept only a line whose entire content IS the tag
+                        if _math_heavy_re.fullmatch(_scan_line):
                             is_math_heavy = True
-                        _lookahead_remaining -= 1
+                        break  # stop at first non-empty line regardless
                     _scan_idx += 1
-                    if is_math_heavy:
-                        break
             # ── Extract target_file from task title ──────────────────────────
             # Director often emits paths in titles:
             #   "Implement ball count - attractions/skeeball.lua"
@@ -1484,6 +1781,15 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
             elif _user_file_constraint_canonical:
                 # Fallback: use the canonical slug path for NEW_ATTRACTION scope
                 _task_target_file = _user_file_constraint_canonical
+            # ── NEW_ATTRACTION hard-override: ALL tasks MUST target the single
+            # shared canonical file.  The Director is not trusted to emit the
+            # correct path (it may spell it wrong, omit the subfolder, or place
+            # it at the repo root).  Override unconditionally so every task in
+            # this wave extends the same file.
+            if _d_scope_mode == "NEW_ATTRACTION" and _user_file_constraint_canonical:
+                _task_target_file = _sanitize_attraction_path(
+                    _task_target_file or "", _user_file_constraint_canonical, task_id
+                )
             ctx.tasks_list.append({
                 "id": task_id,
                 "domain": domain,
@@ -1491,18 +1797,19 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
                 "depends_on": depends_on,
                 "math_heavy": is_math_heavy,
                 "target_file": _task_target_file,
+                # Interface-contract fields from the new Director output format.
+                # Parsed from the lines that immediately follow the task header.
+                # Safe to leave empty if the Director omitted them.
+                "inputs": _parse_task_meta_field(lines, line_idx, "Inputs"),
+                "outputs": _parse_task_meta_field(lines, line_idx, "Outputs"),
+                "hooks": _parse_task_meta_field(lines, line_idx, "Hooks"),
             })
 
-        # ── Orphan-tag pass: a bare [MATH_HEAVY] placed outside any task block
-        # (e.g. at the end of the director output) should flag ALL tasks, because
-        # the director intends the whole solution to use pro mode.
-        _director_has_global_math_heavy = bool(_math_heavy_re.search(ctx.director_output))
-        if _director_has_global_math_heavy and ctx.tasks_list:
-            _any_flagged = any(t.get("math_heavy") for t in ctx.tasks_list)
-            if not _any_flagged:
-                # No per-task tag was found, but the tag exists in the output → flag all tasks
-                for _t in ctx.tasks_list:
-                    _t["math_heavy"] = True
+        # Orphan-tag broadcast intentionally removed: a bare [MATH_HEAVY] that
+        # appears anywhere in the director output but is NOT attached to a
+        # specific task line must NOT flood all tasks with Pro Mode.  The
+        # Director is expected to place the tag on the exact task line(s) that
+        # require heavy numerical computation.
 
         # ── Pro Mode: per-task MATH_HEAVY gate ──────────────────────────────
         _math_heavy_ids = [t["id"] for t in ctx.tasks_list if t.get("math_heavy")]
@@ -1510,13 +1817,19 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
             print(f"\n{'='*50}")
             print(f"  MATH_HEAVY DETECTED — Tasks flagged: {', '.join(_math_heavy_ids)}")
             print(f"{'='*50}")
-            from _pipeline_helpers import trigger_chime as _chime
-            _chime()
-            user_input = input(
-                f"  Task(s) {', '.join(_math_heavy_ids)} require complex 3D math / physics.\n"
-                "  Enable Pro Mode (TDD guardrails, multi-draft consensus) for these tasks?\n"
-                "  [y]es / [n]o / [a]lways (auto-enable for all math-heavy tasks this session): "
-            ).strip().lower()
+            import sys as _sys
+            if not _sys.stdin.isatty():
+                # Non-interactive / headless run — auto-enable pro mode rather than hanging
+                user_input = "y"
+                print(f"  [Pro Mode] Non-interactive session detected — auto-enabling pro mode.")
+            else:
+                from _pipeline_helpers import trigger_chime as _chime
+                _chime()
+                user_input = input(
+                    f"  Task(s) {', '.join(_math_heavy_ids)} require complex 3D math / physics.\n"
+                    "  Enable Pro Mode (TDD guardrails, multi-draft consensus) for these tasks?\n"
+                    "  [y]es / [n]o / [a]lways (auto-enable for all math-heavy tasks this session): "
+                ).strip().lower()
             if user_input in ("a", "always"):
                 ctx.pro_mode_always = True
                 ctx.math_heavy_tasks.update(_math_heavy_ids)
