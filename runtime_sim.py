@@ -638,6 +638,32 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
     errors: List[str] = []
 
     _LUA_DOMAINS = {"Lua", "lua", "PHYS", "phys"}
+
+    # ── Pre-build: merged Lua content grouped by target file ─────────────────
+    # Checks 4 & 5 (modifier consumption, economy hook) must be evaluated
+    # against the *complete* merged content for each output file, not against
+    # each individual task chunk.  A task that handles physics setup need not
+    # duplicate the economy hook that a later task already adds.
+    _file_to_tasks: dict = {}
+    for _tid, _out in (ctx.all_results_dict or {}).items():
+        if not _out or not _out.strip():
+            continue
+        _task_obj = (ctx.task_map or {}).get(_tid)
+        _tgt_file = getattr(_task_obj, "target_file", None) or ""
+        _file_to_tasks.setdefault(_tgt_file, []).append((_tid, _out))
+
+    # Collect merged Lua per file and the set of task-ids that contribute to it.
+    _file_merged: dict = {}  # file -> (merged_lua_str, [task_ids])
+    for _tgt_file, _pairs in _file_to_tasks.items():
+        _parts: List[str] = []
+        _tids: List[str] = []
+        for _tid, _out in _pairs:
+            _lua_chunk = _extract_lua(_out)
+            if _lua_chunk:
+                _parts.append(_lua_chunk)
+                _tids.append(_tid)
+        if _parts:
+            _file_merged[_tgt_file] = ("\n".join(_parts), _tids)
     _ENGINE_CALL_RE = re.compile(r"\bEngine\.([A-Za-z][A-Za-z0-9_]*)\s*\(", re.MULTILINE)
     _PHYSICS_CALL_RE_FINAL = re.compile(
         r"\bMidwayPhysics\.([A-Za-z][A-Za-z0-9_]*)\s*\(", re.MULTILINE
@@ -648,71 +674,81 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
 
     try:
         for task_id, output in (ctx.all_results_dict or {}).items():
-            if not output or not output.strip():
-                continue
-
-            task_obj = (ctx.task_map or {}).get(task_id)
-            domain = getattr(task_obj, "agent", "") if task_obj else ""
-
-            # Only scan Lua/physics domain outputs, or any output that smells like Lua.
-            if domain not in _LUA_DOMAINS:
-                if not (
-                    "MidwayPhysics." in output
-                    or "function OnLoad" in output
-                    or "Engine." in output
-                    or "economy:" in output
-                ):
+                if not output or not output.strip():
                     continue
 
-            lua_code = _extract_lua(output)
-            if not lua_code:
-                continue
+                task_obj = (ctx.task_map or {}).get(task_id)
+                domain = getattr(task_obj, "agent", "") if task_obj else ""
 
-            # ── 1. MidwayPhysics.* whitelist check ─────────────────────────
-            for pm in _PHYSICS_CALL_RE_FINAL.finditer(lua_code):
-                fn = pm.group(1).lower()
-                if fn not in _MIDWAY_PHYSICS_API:
+                # Only scan Lua/physics domain outputs, or any output that smells like Lua.
+                if domain not in _LUA_DOMAINS:
+                    if not (
+                        "MidwayPhysics." in output
+                        or "function OnLoad" in output
+                        or "Engine." in output
+                        or "economy:" in output
+                    ):
+                        continue
+
+                lua_code = _extract_lua(output)
+                if not lua_code:
+                    continue
+
+                # ── 1. MidwayPhysics.* whitelist check ─────────────────────────
+                for pm in _PHYSICS_CALL_RE_FINAL.finditer(lua_code):
+                    fn = pm.group(1).lower()
+                    if fn not in _MIDWAY_PHYSICS_API:
+                        errors.append(
+                            f"[{task_id}][PhantomAPIGate] Unknown MidwayPhysics API: "
+                            f"`MidwayPhysics.{pm.group(1)}` is NOT in the approved bridge "
+                            "contract. Remove or replace before approval."
+                        )
+
+                # ── 2. Engine.* whitelist check ─────────────────────────────────
+                for em in _ENGINE_CALL_RE.finditer(lua_code):
+                    fn = em.group(1).lower()
+                    if fn not in _ECONOMY_API:
+                        errors.append(
+                            f"[{task_id}][PhantomAPIGate] Unknown Engine API: "
+                            f"`Engine.{em.group(1)}` is NOT in the approved economy bridge "
+                            "contract (§11). Remove or replace before approval."
+                        )
+
+                # ── 3. Legacy economy: colon-method check ───────────────────────
+                for cm in _COLON_ECONOMY_RE_FINAL.finditer(lua_code):
                     errors.append(
-                        f"[{task_id}][PhantomAPIGate] Unknown MidwayPhysics API: "
-                        f"`MidwayPhysics.{pm.group(1)}` is NOT in the approved bridge "
-                        "contract. Remove or replace before approval."
+                        f"[{task_id}][PhantomAPIGate] Phantom colon-method: "
+                        f"`economy:{cm.group(1)}` — use Engine.AwardTickets / "
+                        "Engine.AwardTokens (flat namespace, no colon)."
                     )
 
-            # ── 2. Engine.* whitelist check ─────────────────────────────────
-            for em in _ENGINE_CALL_RE.finditer(lua_code):
-                fn = em.group(1).lower()
-                if fn not in _ECONOMY_API:
-                    errors.append(
-                        f"[{task_id}][PhantomAPIGate] Unknown Engine API: "
-                        f"`Engine.{em.group(1)}` is NOT in the approved economy bridge "
-                        "contract (§11). Remove or replace before approval."
-                    )
+                # Checks 4 & 5 (modifier consumption, economy hook) are evaluated
+                # on the merged per-file content below — not per task.
 
-            # ── 3. Legacy economy: colon-method check ───────────────────────
-            for cm in _COLON_ECONOMY_RE_FINAL.finditer(lua_code):
-                errors.append(
-                    f"[{task_id}][PhantomAPIGate] Phantom colon-method: "
-                    f"`economy:{cm.group(1)}` — use Engine.AwardTickets / "
-                    "Engine.AwardTokens (flat namespace, no colon)."
-                )
+        # ── Checks 4 & 5: per-file merged content ─────────────────────────
+        # A single OnStep with modifier reads + a single AwardTickets call is
+        # sufficient for the entire file; we must not flag every task that
+        # doesn't individually duplicate those lines.
+        for _tgt_file, (_merged_lua, _task_ids) in _file_merged.items():
+            _repr_task = _task_ids[0] if _task_ids else "unknown"
 
             # ── 4. Modifier consumption check ───────────────────────────────
             has_modifier_access = (
-                _MODIFIER_ACCESSOR_RE.search(lua_code) is not None
-                or _DIRECT_MOD_RE.search(lua_code) is not None
+                _MODIFIER_ACCESSOR_RE.search(_merged_lua) is not None
+                or _DIRECT_MOD_RE.search(_merged_lua) is not None
             )
             if not has_modifier_access:
                 errors.append(
-                    f"[{task_id}][PhantomAPIGate] Missing modifier consumption — "
+                    f"[{_repr_task}][PhantomAPIGate] Missing modifier consumption — "
                     "attraction must read AttractionConstants.modifiers (or at least "
                     "one ENGINE_MOD_* global) inside OnStep to respect the live "
                     "modifier system (heat, luck, sleight_of_hand, etc.)."
                 )
 
             # ── 5. Economy hook check ────────────────────────────────────────
-            if not _AWARD_RE.search(lua_code):
+            if not _AWARD_RE.search(_merged_lua):
                 errors.append(
-                    f"[{task_id}][PhantomAPIGate] Missing economy hook — "
+                    f"[{_repr_task}][PhantomAPIGate] Missing economy hook — "
                     "attraction must call Engine.AwardTickets(...) or "
                     "Engine.AwardTokens(...) on win/score events."
                 )
