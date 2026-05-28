@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Midway to Nowhere â€” Offline API Documentation Acquisition Script
 =================================================================

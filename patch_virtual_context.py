@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 patch_virtual_context.py — Virtual Context Management System Patcher
 =====================================================================

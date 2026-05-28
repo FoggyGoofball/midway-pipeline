@@ -221,7 +221,7 @@ def generate_failure_report(user_prompt: str, consensus_checks: dict,
     parts.append("### 2. Engine Constraint Compliance\n")
     parts.append("This is a custom C++17 engine. You MUST adhere to:\n")
     parts.append("- **Rendering:** SDL2 + OpenGL 3.3+ only. No Unreal, Unity, Godot.\n")
-    parts.append("- **Physics:** Jolt Physics SDK for rigid bodies; Box2D for 2D colliders.\n")
+    parts.append("- **Physics:** Jolt Physics SDK for ALL rigid bodies (Unified Jolt Standard). Box2D is fully deprecated — do NOT use it. 2D planar attractions use Jolt DOF constraints.\n")
     parts.append("- **Scripting:** Lua 5.4 via sol2. Do NOT invent custom scripting languages.\n")
     parts.append("- **Networking:** NONE. There is no multiplayer/networking code.\n")
     parts.append("- **Shader:** GLSL 3.3 only. No HLSL, no Metal.\n")

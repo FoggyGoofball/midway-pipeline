@@ -8,7 +8,136 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
+
+# ── Attraction Design Document ────────────────────────────────────────────────
+
+class HandleDeclaration(BaseModel):
+    """A named physics/object handle declared in the design doc."""
+    name: str                          # e.g. "hBall"
+    lua_type: str = "userdata"         # userdata | number | boolean | table
+    owner_task: str = ""               # task ID that creates/owns this handle
+    lifecycle: str = "OnLoad"          # OnLoadStatic | OnLoad | runtime
+    description: str = ""
+
+
+class EventEdge(BaseModel):
+    """A directed event flow edge: source triggers target."""
+    trigger: str                       # e.g. "IsSensorTriggered(hGate)"
+    action: str                        # e.g. "economy:AddScore(10)"
+    owner_task: str = ""
+
+
+class AttractionDesign(BaseModel):
+    """
+    Pre-decomposition design document produced by mesh_architect.py.
+    Stored on PipelineContext and injected into every agent and Director prompt
+    so all agents share a single authoritative view of handles, lifecycle order,
+    event flow, pool requirements, and economy hooks.
+    """
+    title: str = ""
+    summary: str = ""
+    handles: List[HandleDeclaration] = Field(default_factory=list)
+    lifecycle_order: List[str] = Field(default_factory=list)   # ordered list of registration calls
+    event_flow: List[EventEdge] = Field(default_factory=list)
+    pool_requirements: Dict[str, int] = Field(default_factory=dict)  # pool_key -> min_count
+    economy_hooks: List[str] = Field(default_factory=list)     # e.g. ["AddScore", "SetMultiplier"]
+    feature_checklist: List[str] = Field(default_factory=list) # plain-English features to verify
+    raw_json: str = ""                                          # original LLM output preserved
+
+    def to_context_block(self) -> str:
+        """Render a compact, prompt-friendly summary for injection into agent context."""
+        parts = [f"## 🎯 Attraction Design: {self.title}"]
+        if self.summary:
+            parts.append(self.summary)
+        if self.handles:
+            parts.append("\n### Declared Handles")
+            for h in self.handles:
+                parts.append(f"  {h.name} ({h.lua_type}) — {h.description} [owner: {h.owner_task}, lifecycle: {h.lifecycle}]")
+        if self.lifecycle_order:
+            parts.append("\n### OnLoad Registration Order")
+            for i, step in enumerate(self.lifecycle_order, 1):
+                parts.append(f"  {i}. {step}")
+        if self.event_flow:
+            parts.append("\n### Event Flow")
+            for e in self.event_flow:
+                parts.append(f"  {e.trigger} → {e.action}")
+        if self.pool_requirements:
+            parts.append("\n### Pool Requirements")
+            for k, v in self.pool_requirements.items():
+                parts.append(f"  {k}: {v}")
+        if self.economy_hooks:
+            parts.append("\n### Economy Hooks: " + ", ".join(self.economy_hooks))
+        if self.feature_checklist:
+            parts.append("\n### Feature Checklist")
+            for f in self.feature_checklist:
+                parts.append(f"  - {f}")
+        return "\n".join(parts)
+
+
+# ── Integration Schema ────────────────────────────────────────────────────────
+
+class SchemaHandleEntry(BaseModel):
+    """A handle or shared variable declared by an agent into the live schema."""
+    name: str
+    declared_by: str     # task ID
+    lua_type: str = "userdata"
+    created_in: str = "OnLoad"   # lifecycle hook
+
+
+class SchemaConflict(BaseModel):
+    name: str
+    declared_by: List[str]
+    reason: str
+
+
+class IntegrationSchema(BaseModel):
+    """
+    Live cross-agent coordination contract built incrementally as tasks complete.
+    Agents read this before writing code so handle names, registration order, and
+    shared state are consistent across the entire merged output.
+    """
+    handles: Dict[str, SchemaHandleEntry] = Field(default_factory=dict)
+    onload_order: List[str] = Field(default_factory=list)   # task IDs in intended order
+    onstep_subscribers: List[str] = Field(default_factory=list)  # task IDs registering OnStep
+    shared_vars: Dict[str, str] = Field(default_factory=dict)    # varname -> owning task
+    conflicts: List[SchemaConflict] = Field(default_factory=list)
+
+    def declare_handle(self, entry: SchemaHandleEntry) -> Optional[SchemaConflict]:
+        """Register a handle. Returns a SchemaConflict if the name is already taken by another task."""
+        existing = self.handles.get(entry.name)
+        if existing and existing.declared_by != entry.declared_by:
+            conflict = SchemaConflict(
+                name=entry.name,
+                declared_by=[existing.declared_by, entry.declared_by],
+                reason=f"Handle '{entry.name}' declared by both {existing.declared_by} and {entry.declared_by}",
+            )
+            self.conflicts.append(conflict)
+            return conflict
+        self.handles[entry.name] = entry
+        return None
+
+    def to_context_block(self) -> str:
+        """Compact prompt-friendly rendering for agent injection."""
+        parts = ["## 🔗 Integration Schema (read before writing — do not redefine these)"]
+        if self.handles:
+            parts.append("### Declared Handles")
+            for h in self.handles.values():
+                parts.append(f"  {h.name} ({h.lua_type}) — created in {h.created_in} by task {h.declared_by}")
+        if self.onload_order:
+            parts.append("### OnLoad Registration Order: " + " → ".join(self.onload_order))
+        if self.onstep_subscribers:
+            parts.append("### OnStep Subscribers: " + ", ".join(self.onstep_subscribers))
+        if self.shared_vars:
+            parts.append("### Shared Variables")
+            for v, owner in self.shared_vars.items():
+                parts.append(f"  {v} (owned by {owner})")
+        if self.conflicts:
+            parts.append("### ⚠ CONFLICTS — must be resolved before merge")
+            for c in self.conflicts:
+                parts.append(f"  {c.name}: {c.reason}")
+        return "\n".join(parts)
 
 
 class SignalType(str, Enum):
@@ -221,10 +350,12 @@ class Task:
 
 class PipelineContext(BaseModel):
     """The single authoritative state bag passed sequentially through all experts.
-    
+
     This is how the highly interconnected MoE features communicate across file boundaries.
     No async/await — purely synchronous state threading through the entire pipeline.
     """
+    model_config = ConfigDict(extra='allow')
+
     project_root: Path
     memory_dir: Path
     session_id: str
@@ -273,6 +404,10 @@ class PipelineContext(BaseModel):
 
     all_results: List[Dict[str, Any]] = []
     all_results_dict: Dict[str, str] = {}
+
+    # ── Blueprint cross-iteration carry-forward: snapshots of approved on-disk files ──
+    completed_file_snapshots: Dict[str, str] = {}
+
     all_vetos: List[Dict[str, Any]] = []
     all_objects: List[Dict[str, Any]] = []
     all_recourses: List[Dict[str, Any]] = []
@@ -378,12 +513,44 @@ class PipelineContext(BaseModel):
     # context pruning. Excluded from character-count evictions by token_budget.py.
     core_memory_table: Dict[str, str] = {}
 
+    # ── Pre-Decomposition Architect Output ───────────────────────────────────
+    attraction_design: Optional[AttractionDesign] = None
+
+    # ── Cross-Agent Integration Schema ───────────────────────────────────────
+    integration_schema: Optional[IntegrationSchema] = None
+
+    # ── Coverage & Runtime Feedback ──────────────────────────────────────────
+    coverage_gaps: List[str] = Field(default_factory=list)
+    runtime_errors: List[str] = Field(default_factory=list)
+
     # ── Phase III: AST Patch Models (LangGraph Alignment) ───────────────────
     # Structured patch sets for state-reducing merge operations.
     pending_patches: List[dict] = []
 
     # ── Circuit Breaker Retry Counts (Day 4) ──────────────────────────────
     retry_counts: Dict[str, int] = {}
+
+    @property
+    def canonical_request(self) -> str:
+        """Return the original human feature request, stripping any auto-fed
+        ``<execution_environment>`` XML wrapper that blueprint continuation
+        replaces ``user_prompt`` with.  Always safe to embed in model prompts."""
+        raw = getattr(self, "_original_user_prompt", None) or self.user_prompt
+        if not raw:
+            return ""
+        # Strip the outer <macro_invariants>/<execution_environment> shell that
+        # mesh_fetches.py wraps around the original request during continuation.
+        import re as _re
+        stripped = _re.sub(
+            r"<execution_environment>.*?</execution_environment>",
+            "", raw, flags=_re.DOTALL,
+        )
+        stripped = _re.sub(
+            r"<macro_invariants>.*?</macro_invariants>",
+            "", stripped, flags=_re.DOTALL,
+        )
+        stripped = stripped.strip()
+        return stripped if stripped else raw.strip()
 
     def load_state(self, state: dict) -> None:
         """Restore runtime accumulators from a saved checkpoint state dict.
@@ -451,3 +618,7 @@ class PipelineContext(BaseModel):
         self.pending_patches = []
         self.retry_counts = {}
         self.math_heavy_tasks = set()
+        self.attraction_design = None
+        self.integration_schema = None
+        self.coverage_gaps = []
+        self.runtime_errors = []

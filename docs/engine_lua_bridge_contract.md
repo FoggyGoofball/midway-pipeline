@@ -259,6 +259,54 @@ Those are attraction design constants and belong in the attraction's own script 
 
 ---
 
+## 10. Input bridge — `MidwayInput.*` Lua API
+
+Registered at startup via `MidwayInput::Register(m_lua)` in `Engine::Init()`.
+Available to all attraction scripts at all times (poll from inside `MidwayPhysics.OnStep`).
+
+Reads the live SDL keyboard state snapshot maintained by the OS — no additional event
+handling is required in Lua.
+
+### Logical-action API (recommended)
+
+| Function | Returns | Description |
+|---|---|---|
+| `MidwayInput.IsActionDown("fire")` | bool | Space held |
+| `MidwayInput.IsActionDown("aim_left")` | bool | A or Left-Arrow held |
+| `MidwayInput.IsActionDown("aim_right")` | bool | D or Right-Arrow held |
+| `MidwayInput.IsActionDown("power_up")` | bool | W or Up-Arrow held |
+| `MidwayInput.IsActionDown("power_down")` | bool | S or Down-Arrow held |
+
+### Raw-key API (escape hatch)
+
+| Function | Returns | Description |
+|---|---|---|
+| `MidwayInput.IsKeyDown(name)` | bool | True while the named SDL key is held. `name` is a single letter (`"A"`) or an SDL key name (`"Space"`, `"Return"`, `"Left"`, etc.). Case-sensitive per SDL convention. |
+
+### Usage example
+```lua
+MidwayPhysics.OnStep(function(dt)
+    if MidwayInput.IsActionDown("fire") then
+        -- player is holding the fire/throw key this frame
+    end
+    if MidwayInput.IsActionDown("aim_left") then
+        -- player is aiming left
+    end
+end)
+```
+
+### Constraints
+- Returns the instantaneous held state only — there is no edge-trigger (`JustPressed`/`JustReleased`).
+  Track state between frames in your own Lua variable if you need a rising edge.
+- `SDLK_ESCAPE`, `SDLK_F1`–`SDLK_F3`, and `SDLK_SPACE` are consumed by the engine for navigation
+  and booth activation; attraction scripts should treat the `"fire"` action as advisory only
+  while the player is already inside the booth interaction view.
+- Do not attempt to call SDL functions directly from Lua — always use this bridge.
+
+---
+
+---
+
 ## 11. Economy bridge — `Engine.*` Lua API
 
 Registered at startup via `Engine::RegisterEconomyBridge()`. Available to all attraction scripts at all times (not slot-scoped).

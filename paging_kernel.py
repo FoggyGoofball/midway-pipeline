@@ -502,6 +502,13 @@ def handle_page_out(target_concept: str, offload_store=None,
                 "Received: '{}'. Use a concrete filename (e.g., 'file.cpp') "
                 "or a recognized cache entry.]"
             ).format(target_concept)
+        if _is_generic_phrase and not _is_cache_key:
+            return (
+                "\n\n[SYSTEM KERNEL ERROR: Invalid target for PAGE_OUT. "
+                "Generic phrases are not valid eviction targets. "
+                "Received: '{}'. Use the exact mounted file path "
+                "(e.g., 'file.cpp') or a recognized cache entry.]"
+            ).format(target_concept)
 
     print(f"  [Paging Kernel] PAGE_OUT: '{target_concept}' — context evicted")
 
@@ -693,6 +700,159 @@ def _extract_raw_text_from_result(result: str) -> str:
     return "\n".join(filtered).strip()
 
 
+# ── MemGPT-style HDD-backed Context Store ────────────────────────────────
+
+class MemGPTContextStore:
+    """MemGPT-style disk-backed context window manager.
+
+    Mirrors the full Ollama messages array to disk after every mutation so
+    the context is never lost on a crash or VRAM eviction.  When the active
+    window grows beyond the configured character budget, the oldest non-system
+    turns are evicted to the OffloadStore as individually addressable blocks
+    that the LLM can PAGE_IN back on demand.
+
+    Architecture
+    ------------
+    - ``checkpoint(messages)``     – write the current window snapshot to disk.
+    - ``restore()``                – reload the latest snapshot from disk.
+    - ``evict_old_turns(messages)``– overflow handler: evict oldest assistant
+                                     turns to disk, replace with PAGE_IN stubs.
+    - ``recall(block_id)``         – retrieve a single evicted turn by block_id.
+    """
+
+    # Default soft cap: evict when cumulative assistant+user chars exceed this.
+    DEFAULT_EVICT_CHARS: int = 6000
+
+    def __init__(self, session_id: str, offload_store, evict_chars: int = 0):
+        """Initialise the context store.
+
+        Args:
+            session_id:    Opaque key identifying this pipeline run / call.
+            offload_store: An :class:`OffloadStore` instance.
+            evict_chars:   Override for the eviction threshold in characters.
+                           Defaults to ``DEFAULT_EVICT_CHARS``.
+        """
+        self.session_id = session_id
+        self.store = offload_store
+        self.evict_chars = evict_chars or self.DEFAULT_EVICT_CHARS
+        self._evicted_block_ids: List[str] = []
+
+    # ── Persistence helpers ───────────────────────────────────────────────
+
+    def checkpoint(self, messages: List[Dict[str, str]]) -> bool:
+        """Persist the current messages array to disk.
+
+        Args:
+            messages: The active Ollama messages list.
+
+        Returns:
+            True on success.
+        """
+        ok = self.store.store_message_window(self.session_id, messages)
+        if ok:
+            print(f"  [MemGPT] ✓ Checkpoint: {len(messages)} messages saved "
+                  f"(session={self.session_id})")
+        return ok
+
+    def restore(self) -> Optional[List[Dict[str, str]]]:
+        """Reload the last checkpoint from disk.
+
+        Returns:
+            The messages list, or ``None`` if no checkpoint exists.
+        """
+        msgs = self.store.load_message_window(self.session_id)
+        if msgs is not None:
+            print(f"  [MemGPT] ↩ Restored {len(msgs)} messages from disk "
+                  f"(session={self.session_id})")
+        return msgs
+
+    # ── Eviction / overflow handling ──────────────────────────────────────
+
+    def evict_old_turns(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Evict oldest assistant/user turns to disk when the window is full.
+
+        Turns are evicted oldest-first until total non-system content is under
+        ``self.evict_chars``.  Each evicted message is stored as a named block
+        in the OffloadStore and replaced with a concise PAGE_IN-able stub so
+        the LLM can retrieve it on demand.
+
+        System messages (including dynamically injected paged-in blocks) are
+        **never** evicted.
+
+        Args:
+            messages: The current messages list (will be mutated in place).
+
+        Returns:
+            The (possibly trimmed) messages list.
+        """
+        # Gather non-system indices
+        evictable = [
+            i for i, m in enumerate(messages)
+            if m.get("role") in ("user", "assistant")
+        ]
+        if not evictable:
+            return messages
+
+        total_chars = sum(
+            len(messages[i].get("content", "")) for i in evictable
+        )
+        if total_chars <= self.evict_chars:
+            return messages
+
+        evicted_count = 0
+        for idx in evictable:
+            if total_chars <= self.evict_chars:
+                break
+            msg = messages[idx]
+            role = msg.get("role", "assistant")
+            content = msg.get("content", "")
+            if not content:
+                continue
+            block_id = self.store.store_evicted_turn(
+                session_id=self.session_id,
+                turn_index=idx,
+                role=role,
+                content=content,
+            )
+            self._evicted_block_ids.append(block_id)
+            stub = (
+                f"[SYSTEM KERNEL: History EVICTED to disk — {len(content)} chars. "
+                f"Block ID: {block_id}. "
+                f"Retrieve with: "
+                f"<invoke_kernel><action>PAGE_IN</action>"
+                f"<target>{block_id}</target></invoke_kernel>]"
+            )
+            messages[idx] = {"role": role, "content": stub}
+            total_chars -= len(content)
+            evicted_count += 1
+
+        if evicted_count:
+            print(f"  [MemGPT] 💾 Evicted {evicted_count} turn(s) to disk "
+                  f"({total_chars} chars remaining in window).")
+            self.checkpoint(messages)
+        return messages
+
+    # ── Recall ────────────────────────────────────────────────────────────
+
+    def recall(self, block_id: str) -> str:
+        """Retrieve a single evicted turn from the offload store.
+
+        Args:
+            block_id: The block ID embedded in the eviction stub.
+
+        Returns:
+            Formatted content string ready for context injection.
+        """
+        return self.store.retrieve_block(block_id)
+
+    # ── Cleanup ───────────────────────────────────────────────────────────
+
+    def close(self) -> None:
+        """Delete the session window file from disk (call when done)."""
+        self.store.delete_session(self.session_id)
+        print(f"  [MemGPT] 🗑 Session '{self.session_id}' window deleted from disk.")
+
+
 # ── Kernel-Level Page Controller ─────────────────────────────────────────
 
 class PagingController:
@@ -708,6 +868,7 @@ class PagingController:
 
     def __init__(self, project_root: Optional[Path] = None,
                  offload_store=None):
+        import uuid as _uuid
         self.buffer = PagingBuffer()
         self.project_root = project_root
         self.offload_store = offload_store
@@ -723,6 +884,13 @@ class PagingController:
         self.paged_in_cache: Dict[str, str] = {}
         # Flag set when the most recent execute_page call failed (file not found, etc.)
         self._last_page_failed: bool = False
+        # ── MemGPT: disk-backed context store for this controller session ──
+        _session_id = _uuid.uuid4().hex[:12]
+        self.memgpt: MemGPTContextStore = MemGPTContextStore(
+            session_id=_session_id,
+            offload_store=offload_store,
+        )
+        print(f"  [MemGPT] Context store initialised (session={_session_id})")
     def feed_token(self, token: str) -> Tuple[bool, Optional[Dict[str, str]]]:
         """Feed a streamed token into the paging detector.
 
@@ -767,17 +935,31 @@ class PagingController:
             if target.startswith("[") and target.endswith("]"):
                 print(f"  [Paging Kernel] ⛔ PAGE_IN rejected — placeholder target '{target}' "
                       f"(model copied a prompt example; no file will be fetched)")
+                self._last_page_failed = True
                 return (
                     f"\n[SYSTEM KERNEL: PAGE_IN suppressed — "
                     f"'{target}' is a placeholder, not a real file path. "
                     f"Use the exact id= attribute from a <VRAM_STUB> tag.]\n"
                 )
-            # ── Day 6: Disk Paging Routing (global_cache/) ────────────
-            global_cache_dir = (self.project_root or Path.cwd()) / "global_cache"
-            safe_target_name = target.replace("/", "_").replace("\\", "_")
-            disk_paged_file = global_cache_dir / f"chunk_{safe_target_name}.json"
-            
-            # 1. Try Memory Cache
+            # Guard: reject targets that look like function calls, contain
+            # parentheses, angle brackets, or are clearly not file paths.
+            # e.g. "OnLoadStatic(ctx)", "<some_tag>", "function(arg)"
+            _invalid_path_chars = ("(", ")", "<", ">", ";", "\n", "\r")
+            if any(ch in target for ch in _invalid_path_chars):
+                print(f"  [Paging Kernel] ⛔ PAGE_IN rejected — malformed target '{target}' "
+                      f"(looks like a function call or tag, not a file path)")
+                self._last_page_failed = True
+                return (
+                    f"\n[SYSTEM KERNEL: PAGE_IN suppressed — "
+                    f"'{target}' is not a valid file path. "
+                    f"Do NOT retry. Synthesize from the context already available.]\n"
+                )
+            # ── MemGPT lookup priority ─────────────────────────────────
+            # 1. In-memory key-value cache (fastest)
+            # 2. MemGPT OffloadStore (evicted turns + PAGE_OUT blocks)
+            # 3. Filesystem (project files)
+
+            # 1. Memory cache hit
             if target in self.paged_in_cache:
                 cached_text = self.paged_in_cache[target]
                 print(f"  [Paging Kernel] 📋 Cache HIT: '{target}' ({len(cached_text)} chars cached)")
@@ -786,23 +968,20 @@ class PagingController:
                     f"**Source:** `{target}`\n"
                     f"```\n{cached_text}\n```\n"
                 )
-            
-            # 2. Try Global Disk Paging Cache
-            if disk_paged_file.is_file():
-                try:
-                    paged_payload = json.loads(disk_paged_file.read_text(encoding="utf-8"))
-                    cached_text = paged_payload.get("content", "")
-                    self.paged_in_cache[target] = cached_text
-                    print(f"  [Paging Kernel] 💾 Disk Page HIT: '{target}' loaded from global_cache/")
-                    return (
-                        "\n\n## Paged-In File Content (Disk Paged)\n"
-                        f"**Source:** `{target}`\n"
-                        f"```\n{cached_text}\n```\n"
-                    )
-                except Exception as e:
-                    print(f"  [Paging Kernel] Failed to read disk page chunk: {e}")
 
-            # Execute the page-in operation (reads disk / offload store)
+            # 2. MemGPT offload store (evicted turns / PAGE_OUT blocks)
+            recalled = self.memgpt.recall(target)
+            if "ERROR" not in recalled:
+                self.paged_in_cache[target] = recalled
+                print(f"  [MemGPT] 🔁 PAGE_IN '{target}' recalled from disk store "
+                      f"({len(recalled)} chars)")
+                return (
+                    "\n\n## Paged-In Content (MemGPT Archival Memory)\n"
+                    f"**Block ID:** `{target}`\n"
+                    f"{recalled}\n"
+                )
+
+            # Execute the page-in operation (reads filesystem / offload store)
             # Phase 7: Forward the active model's context allocation for
             # dynamic hard cap enforcement via Context-Tiered Boundary Resolution.
             result = handle_page_in(
@@ -819,13 +998,22 @@ class PagingController:
             self._last_page_failed = "not found" in result or "blocked" in result or "failed" in result
 
             # Extract the raw text chunk from the formatted result and cache it.
-            # The formatted result has markdown wrapping; we extract the code block body.
             extracted_text = _extract_raw_text_from_result(result)
-            if extracted_text:
+            if extracted_text and not self._last_page_failed:
                 self.paged_in_cache[target] = extracted_text
+                # Also persist to MemGPT store so future PAGE_INs are instant
+                self.memgpt.store.store_block(
+                    block_id=f"pagein_{self.memgpt.session_id}_{target.replace('/', '_').replace(' ', '_')[:48]}",
+                    header=f"PAGE_IN result: {target}",
+                    body_lines=[extracted_text],
+                )
                 print(f"  [Paging Kernel] 📋 Cache STORE: +{target} "
                       f"({len(extracted_text)} chars, "
                       f"now {len(self.paged_in_cache)} files cached)")
+
+            # Checkpoint window after successful PAGE_IN
+            if not self._last_page_failed and self.active_messages:
+                self.memgpt.checkpoint(self.active_messages.messages)
 
             return result
 
@@ -850,23 +1038,23 @@ class PagingController:
                 print(f"  [Paging Kernel] 📋 Cache: '{target_concept}' "
                       f"not in cache ({len(self.paged_in_cache)} files cached)")
 
-            # ── Day 6: Aggressive Global Disk Offloading ────────────
+            # ── MemGPT: persist evicted content to disk via context store ──
             if removed_text:
-                global_cache_dir = (self.project_root or Path.cwd()) / "global_cache"
-                global_cache_dir.mkdir(parents=True, exist_ok=True)
-                safe_target_name = target_concept.replace("/", "_").replace("\\", "_")
-                disk_paged_file = global_cache_dir / f"chunk_{safe_target_name}.json"
-                try:
-                    paged_payload = {
-                        "concept": target_concept,
-                        "timestamp": datetime.now().isoformat(),
-                        "chars": len(removed_text),
-                        "content": removed_text
-                    }
-                    disk_paged_file.write_text(json.dumps(paged_payload, indent=2), encoding="utf-8")
-                    print(f"  [Paging Kernel] 💾 Aggressive Disk Offload: '{target_concept}' written to global_cache/")
-                except Exception as e:
-                    print(f"  [Paging Kernel] Failed to write disk page chunk: {e}")
+                import uuid as _uuid2
+                block_id = (
+                    f"pageout_{self.memgpt.session_id}_"
+                    f"{target_concept.replace('/', '_').replace(' ', '_')[:48]}"
+                )
+                self.memgpt.store.store_block(
+                    block_id=block_id,
+                    header=f"PAGE_OUT: {target_concept}",
+                    body_lines=[removed_text],
+                )
+                self.memgpt._evicted_block_ids.append(block_id)
+                print(f"  [MemGPT] 💾 PAGE_OUT '{target_concept}' persisted as block '{block_id}'")
+            # Also checkpoint the current active window to disk
+            if self.active_messages:
+                self.memgpt.checkpoint(self.active_messages.messages)
 
             return handle_page_out(
                 target_concept=target_concept,
@@ -971,13 +1159,11 @@ class PagingController:
                     continue
                 messages.append(msg)
 
-        # ── Directive C: Hard truncation before PAGE_OUT resume ────────────
-        # If the messages array is bloated with assistant history from prior
-        # conversation turns, aggressively drop the oldest assistant messages
-        # before building the resume payload. This prevents the local LLM
-        # backend from hanging when trying to dynamically prune massive
-        # unstructured chat history.
-        messages = self._aggressive_history_truncation(messages, max_assistant_chars=6000)
+        # ── MemGPT: evict overflow turns to disk instead of silently dropping ──
+        # Oldest non-system turns are persisted as individually addressable
+        # blocks; each replaced with a PAGE_IN-able stub so the model can
+        # recall them on demand.  Also checkpoints the trimmed window.
+        messages = self.memgpt.evict_old_turns(messages)
 
         # ── Directive A: Ghost Buffer — inject partial generation as assistant message ──
         # This forces the LLM to seamlessly finish its thought on resume rather than
@@ -1033,8 +1219,9 @@ class PagingController:
             messages.append({"role": "user", "content": continuation_text})
 
         # Phase 7: Use the active model's context allocation for the resume
-        # payload. Max ctx is 16384 (phi3.5, 9000-char page cap) for 12GB VRAM.
-        # Aux nodes (8192 ctx) are constrained appropriately with 5000-char page cap.
+        # payload. 7B/8B models: 32768 ctx (24000-char page cap); phi3.5/14B: 16384
+        # ctx (9000-char page cap); legacy 8K: 4800-char cap. allocated_ctx is set
+        # by call_ollama_streamed from resolve_ctx_size() before the first stream.
 
         _resume_ctx = self.allocated_ctx
         payload = {

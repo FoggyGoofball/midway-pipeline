@@ -287,9 +287,16 @@ def execute_task(task, user_prompt: str, director_output: str,
                 _tf_ec = getattr(task, "target_file", None) or ""
                 _attr_ec = _os_ec.path.splitext(_os_ec.path.basename(_tf_ec))[0] if _tf_ec else ""
                 _attr_ec = _re_ec.sub(r'[^\w]+', ' ', _attr_ec).strip()
-                # Derive scope_mode: if task has a target_file it is always a
-                # NEW_ATTRACTION or MODIFY_ATTRACTION context; default GENERAL.
-                _scope_ec = "NEW_ATTRACTION" if _attr_ec else "GENERAL"
+                # Derive scope_mode from the live pipeline context so that
+                # MODIFY_ATTRACTION tasks are not mis-classified as NEW_ATTRACTION.
+                # Fallback: NEW_ATTRACTION when a target file exists, GENERAL otherwise.
+                try:
+                    from pipeline import _CTX as _exec_ctx_ec
+                    _scope_ec = getattr(_exec_ctx_ec, '_scope_mode', None) or (
+                        "NEW_ATTRACTION" if _attr_ec else "GENERAL"
+                    )
+                except Exception:
+                    _scope_ec = "NEW_ATTRACTION" if _attr_ec else "GENERAL"
                 _task_gdd = _epc(_task_spec_query,
                                  scope_mode=_scope_ec,
                                  attraction_name=_attr_ec)
@@ -331,47 +338,33 @@ def execute_task(task, user_prompt: str, director_output: str,
 
     # ── Compact Bridge Contract Cheatsheet ────────────────────────────────
     # Injected into EVERY scripter call so the approved API names survive
-    # even when context collapses under VRAM pressure.  Hard-capped at 700
-    # chars so it cannot itself become a VRAM hazard.
-    # Reads directly from the live cartridge on _CTX; degrades gracefully
-    # if the cartridge is not mounted (returns empty string, no crash).
-    # Edge cases handled:
-    #   - _CTX not yet populated (import-time / unit-test context)
-    #   - cartridge missing a section key (skips that section)
-    #   - bridge contract callable raises (caught, cheatsheet omitted)
-    #   - domain is not Lua (cheatsheet injected regardless — never harmful)
+    # even when context collapses under VRAM pressure.
+    # Consolidated: delegate to the shared builder in _finalize_review so the
+    # three former inline copies are replaced by a single maintained renderer.
+    # Falls back gracefully if _CTX is not yet populated or cartridge is absent.
     try:
         from pipeline import _CTX as _exec_ctx
-        _bc_fn = getattr(_exec_ctx, '_cartridge_build_bridge_contract', None) if _exec_ctx else None
-        if callable(_bc_fn):
-            _bc = _bc_fn()
-            _api_names  = list((_bc.get("midwayphysics_spawn_api") or {}).keys())
-            _pool_names  = list((_bc.get("object_pools") or {}).keys())
-            _econ_names  = list((_bc.get("economy_api") or {}).keys())
-            _subst_guide = (
-                "Substitution quick-ref (common wrong → correct):\n"
-                "  SpawnDynamicBall → SpawnDynamicSphere(lx,ly,lz,radius[,mass])\n"
-                "  RemoveBody/ReleaseHandle/DestroyEntity → DestroyBody(handle)\n"
-                "  CheckCollision → IsSensorTriggered(handle) → bool\n"
-                "  GetLinearVelocity → GetVelocity(handle) → vx,vy,vz\n"
-                "  SetPosition/Teleport → no approved equivalent; use MoveKinematic(h,lx,ly,lz,dt)\n"
-                "  ApplyForce/AddForce → ApplyImpulse(handle,ix,iy,iz)\n"
-                "  table.clear(t) → for k in pairs(t) do t[k]=nil end  (Lua 5.1 compat)\n"
-                "Lifecycle: OnLoadStatic() / OnLoad() / OnUnload() — bare globals, no return.\n"
-                "Step: MidwayPhysics.OnStep(function(dt) ... end) — call inside OnLoad.\n"
-            )
-            if _api_names:
+        if _exec_ctx is not None:
+            from _finalize_review import build_fix_bridge_snippet as _bfbs_exec
+            _base = _bfbs_exec(_exec_ctx)
+            if _base:
+                _subst_guide = (
+                    "Substitution quick-ref (common wrong → correct):\n"
+                    "  SpawnDynamicBall → SpawnDynamicSphere(lx,ly,lz,radius[,mass])\n"
+                    "  RemoveBody/ReleaseHandle/DestroyEntity → DestroyBody(handle)\n"
+                    "  CheckCollision → IsSensorTriggered(handle) → bool\n"
+                    "  GetLinearVelocity → GetVelocity(handle) → vx,vy,vz\n"
+                    "  SetPosition/Teleport → no approved equivalent; use MoveKinematic(h,lx,ly,lz,dt)\n"
+                    "  ApplyForce/AddForce → ApplyImpulse(handle,ix,iy,iz)\n"
+                    "  table.clear(t) → for k in pairs(t) do t[k]=nil end  (Lua 5.1 compat)\n"
+                    "Lifecycle: OnLoadStatic() / OnLoad() / OnUnload() — bare globals, no return.\n"
+                    "Step: MidwayPhysics.OnStep(function(dt) ... end) — call inside OnLoad.\n"
+                )
                 _cheatsheet = (
                     "## ⚡ Bridge API Cheatsheet (exhaustive — use ONLY these names)\n"
-                    + ("Physics: " + ", ".join(_api_names) + "\n" if _api_names else "")
-                    + ("Pools:   " + ", ".join(_pool_names) + "\n" if _pool_names else "")
-                    + ("Economy: " + ", ".join(_econ_names) + "\n" if _econ_names else "")
+                    + _base
                     + _subst_guide
                 )
-                # Hard cap: truncate to 700 chars from the end so the
-                # function names at the top are always preserved.
-                if len(_cheatsheet) > 700:
-                    _cheatsheet = _cheatsheet[:700]
                 context_parts.append(_cheatsheet)
     except Exception:
         pass
@@ -407,17 +400,22 @@ def execute_task(task, user_prompt: str, director_output: str,
             from _prompts import SELF_CORRECT_SYSTEM
             system = SELF_CORRECT_SYSTEM
 
-    # ── Fix D: History truncation guard — cap task.context ────────────
+    # ── Fix D: Model-aware task.context cap ───────────────────────────
     # task.context grows from query results, pro-test injection, and
-    # iteration output. Without a hard cap, it can bloat to 50K+ chars
-    # across 3 iterations, directly causing VRAM OOM at <1 tok/s.
-    # Uses block-aware collapse so structural blocks (function bodies,
-    # markdown sections) are summarised rather than hard-cut.
-    _CONTEXT_CHAR_LIMIT: int = 4000
+    # iteration output. Without a cap it can bloat to 50K+ chars across
+    # 3 iterations and cause VRAM OOM at <1 tok/s.
+    # Cap is now model-aware: 30% of the total message budget so that
+    # 7B/8B models (32768 ctx → ~54K-char budget) get ~16K chars of
+    # context while small aux models stay conservatively bounded.
+    # Uses block-aware collapse so structural blocks are preserved.
+    from ollama_client import resolve_ctx_size
+    _MODEL_CTX = resolve_ctx_size(preferred_model)
+    _TOTAL_MSG_CHAR_LIMIT: int = int(_MODEL_CTX * 3 * 0.55)
+    _CONTEXT_CHAR_LIMIT: int = max(4000, int(_TOTAL_MSG_CHAR_LIMIT * 0.30))
     if task.context:
         if len(task.context) > _CONTEXT_CHAR_LIMIT:
             print(f"  [Context Truncation] task.context was {len(task.context)} chars, "
-                  f"collapsing to {_CONTEXT_CHAR_LIMIT} via block-aware paging")
+                  f"collapsing to {_CONTEXT_CHAR_LIMIT} (model ctx={_MODEL_CTX} tok, 30% share)")
             task.context = TokenBudget._block_aware_collapse(
                 task.context, _CONTEXT_CHAR_LIMIT
             )
@@ -429,21 +427,10 @@ def execute_task(task, user_prompt: str, director_output: str,
     user_message = "\n\n".join(context_parts)
 
     # ── Fix D: Model-Aware Total user_message char ceiling ──────────
-    # Replaced the old 20K-char hard ceiling with a model-aware dynamic
-    # limit computed from the model's context window. Uses 65% of the
-    # context budget for user content (remaining 35% reserved for system
-    # prompt, output tokens, and KV cache overhead).
-    #
-    # When truncation occurs, the overflow text is preserved in the
-    # OffloadStore with a <PAGE_OUT> marker so the LLM can retrieve it
-    # on demand. The offload block_id is task_id-specific for retrieval.
-    from ollama_client import resolve_ctx_size
-    _MODEL_CTX = resolve_ctx_size(preferred_model)
-    # 55% of context budget at 3 chars/token (code heuristic, matches estimate_tokens).
-    # Using 3 chars/token (not 1.5) prevents the ceiling from being 2× higher than the real
-    # token cost, which was the root cause of repeated VRAM overruns.
-    # 55% (not 65%) reserves 45% for system prompt, output tokens, and KV cache overhead.
-    _TOTAL_MSG_CHAR_LIMIT: int = int(_MODEL_CTX * 3 * 0.55)
+    # _MODEL_CTX and _TOTAL_MSG_CHAR_LIMIT are already resolved above.
+    # 55% of context budget at 3 chars/token (code heuristic).
+    # 55% (not 65%) reserves 45% for system prompt, output tokens,
+    # and KV cache overhead.
     if len(user_message) > _TOTAL_MSG_CHAR_LIMIT:
         print(f"  [Context Truncation] user_message was {len(user_message)} chars, "
               f"truncating to {_TOTAL_MSG_CHAR_LIMIT} chars "
@@ -665,11 +652,11 @@ def compile_project(project_root: Path = None, timeout: int = 30) -> tuple[bool,
 
 # ── Director Prompt ──────────────────────────────────────────────────────
 
-def build_director_prompt(all_domains: dict = None) -> str:
+def build_director_prompt(all_domains: dict = None, user_prompt: str = "", project_root: Path = None) -> str:
     domains = all_domains or _ALL_DOMAINS
     available = get_available_domains_text(domains)
     unavailable = get_unavailable_domains_text(domains)
-    return (
+    prompt = (
         "Decompose this feature request into 1-5 tasks. "
         "Each task must have a domain tag and a short title.\n\n"
         "IMPORTANT: You may assign as FEW as 1 task or as MANY as 5. "
@@ -695,3 +682,34 @@ def build_director_prompt(all_domains: dict = None) -> str:
         "or complex physics algorithms, you MUST append the exact string [MATH_HEAVY] "
         "to the very end of your output."
     )
+
+    # ── Live File State: inject current contents of referenced files ─────
+    if user_prompt and project_root:
+        _file_state_blocks: list[str] = []
+        _extracted_paths = re.findall(r'[\w/\\.-]+\.\w+', user_prompt)
+        for _path_str in _extracted_paths:
+            _candidate = (project_root / _path_str).resolve()
+            if _candidate.is_file():
+                try:
+                    _content = _candidate.read_text(encoding="utf-8", errors="replace")
+                    if len(_content) > 4000:
+                        _content = _content[:4000] + "\n... [truncated to 4000 chars]"
+                    _file_state_blocks.append(f"### {_path_str}\n```\n{_content}\n```")
+                except Exception:
+                    pass
+        if _file_state_blocks:
+            prompt += "\n\n### Current State of Target Files (Do NOT write tasks to regenerate existing structures):\n"
+            prompt += "\n\n".join(_file_state_blocks)
+
+    # ── Global Task Ledger: show previously completed tasks ─────────────
+    if project_root:
+        _ledger_path = project_root / "docs" / "memory" / "task_progress.md"
+        if _ledger_path.exists():
+            try:
+                _ledger_content = _ledger_path.read_text(encoding="utf-8", errors="replace").strip()
+                if _ledger_content:
+                    prompt += f"\n\n### Previously Completed Tasks (DO NOT REPEAT THESE):\n{_ledger_content}"
+            except Exception:
+                pass
+
+    return prompt

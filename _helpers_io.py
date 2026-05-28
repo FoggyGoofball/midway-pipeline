@@ -566,6 +566,7 @@ def build_blueprint_context_pack(
     gdd_limit: int = 4000,
     state_limit: int = 2500,
     structure_limit: int = 2000,
+    ast_limit: int = 0,
 ) -> str:
     """Assemble a structured context pack for the blueprint (Lead Producer) agent.
 
@@ -583,6 +584,7 @@ def build_blueprint_context_pack(
         gdd_limit:      Max chars to include from the GDD context.
         state_limit:    Max chars to include from the project state.
         structure_limit: Max chars to include from the directory structure.
+        ast_limit:      Max chars to include from the AST summary (0 = no cap).
 
     Returns:
         A markdown-formatted context pack string.
@@ -608,7 +610,12 @@ def build_blueprint_context_pack(
         parts.append(f"## Project Directory Structure\n{snip}")
 
     if ast_summary:
-        parts.append(ast_summary)
+        if ast_limit and len(ast_summary) > ast_limit:
+            ast_snip = ast_summary[:ast_limit]
+            ast_snip += f"\n[... AST index truncated at {ast_limit} chars. Use FILE_READ or PAGE_IN for remaining entries ...]"
+            parts.append(ast_snip)
+        else:
+            parts.append(ast_summary)
 
     return "\n\n".join(parts) if parts else "(no project context available)"
 

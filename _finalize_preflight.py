@@ -229,6 +229,9 @@ def _inject_empty_output_errors(ctx: PipelineContext) -> None:
                             re.compile(r'\bBUTTON\s*\.', re.MULTILINE),
                             re.compile(r'\bSLOT_[XYZ]\b', re.MULTILINE),
                             re.compile(r'\bSharedBooth\s*\.', re.MULTILINE),
+                            re.compile(r'\b(?:Mouse|Input)\s*\.', re.MULTILINE),
+                            re.compile(r'\bAttractionConstants\.(?:initialize|get)\w+\s*\(', re.IGNORECASE),
+                            re.compile(r'\bMidwayPhysics\.OnLoadStatic\s*\(', re.IGNORECASE),
                             re.compile(r'\bsol\s*\.\s*(?:set_function|new_usertype|state)\s*\(', re.IGNORECASE),
                         ]
                         _sr_guard_hit = next(
@@ -452,10 +455,101 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             re.compile(r'\b(?:BUTTON|SLOT_[XYZ]|SharedBooth)\b', re.MULTILINE),
             "undefined booth global (BUTTON / SLOT_X/Y/Z / SharedBooth)",
             "BUTTON, SLOT_X, SLOT_Y, SLOT_Z, and SharedBooth are NOT defined in the "
-            "Midway runtime. Do not reference them. Use literal numeric coordinates "
-            "from the attraction spec instead.",
+            "Midway runtime and will crash at load time. "
+            "Remove every reference to these names. "
+            "Replace them with plain numeric literals (e.g. 0, 1.0) declared as "
+            "module-level local constants at the top of the file. "
+            "Do NOT call SharedBooth.ButtonZ() or access BOOTH.width_x/height_y/depth_z — "
+            "those table fields do not exist in the runtime either.",
+        ),
+        # G2: Undefined input globals — Mouse.Position() / Input.Pressed().
+        # These namespaces are not in the engine bridge contract and will error at runtime.
+        (
+            "Lua",
+            re.compile(r'\b(?:Mouse|Input)\s*\.', re.MULTILINE),
+            "undefined input global (Mouse.* / Input.*)",
+            "Mouse and Input are NOT in the Midway engine bridge contract. "
+            "Remove all calls to Mouse.Position(), Input.Pressed(), and similar. "
+            "Player input is delivered through the OnStep dt callback and "
+            "AttractionConstants.modifiers — do not poll a Mouse or Input namespace.",
         ),
     ]
+
+    # ── Pre-pass: deterministically strip known phantom AttractionConstants / MidwayPhysics
+    # calls that the model repeatedly hallucinates.  These are stripped before the guard
+    # loop so the guards see clean content and do not fire on already-removed phantoms.
+    # Each entry: (regex_to_match_full_statement, replacement_string, description)
+    _PHANTOM_STRIP_PATTERNS = [
+        # AttractionConstants.initializeSkeeballMachine() — no such method in contract
+        (
+            re.compile(
+                r'\bAttractionConstants\.initialize\w+\(\s*\)[^\n]*\n?',
+                re.MULTILINE,
+            ),
+            "",
+            "phantom AttractionConstants.initialize*()",
+        ),
+        # AttractionConstants.getSkeeballMachinePos() — no such method in contract
+        (
+            re.compile(
+                r'\bAttractionConstants\.get\w+\([^)]*\)[^\n]*\n?',
+                re.MULTILINE,
+            ),
+            "",
+            "phantom AttractionConstants.get*()",
+        ),
+        # MidwayPhysics.OnLoadStatic() — not a real bridge function
+        (
+            re.compile(
+                r'\bMidwayPhysics\.OnLoadStatic\(\s*\)[^\n]*\n?',
+                re.MULTILINE,
+            ),
+            "",
+            "phantom MidwayPhysics.OnLoadStatic()",
+        ),
+        # AttractionConstants.booth / BOOTH table — these fields don't exist
+        (
+            re.compile(
+                r'^[\t ]*local\s+BOOTH\s*=\s*AttractionConstants\.booth[^\n]*\n',
+                re.MULTILINE,
+            ),
+            "",
+            "phantom AttractionConstants.booth table",
+        ),
+        # local SLOT_X/Y/Z = BOOTH.* — depends on the stripped BOOTH line
+        (
+            re.compile(
+                r'^[\t ]*local\s+SLOT_[XYZ]\s*=\s*BOOTH\.\w+[^\n]*\n',
+                re.MULTILINE,
+            ),
+            "",
+            "phantom BOOTH.* slot dimension",
+        ),
+        # SharedBooth.ButtonZ() call sites
+        (
+            re.compile(
+                r'SharedBooth\.ButtonZ\(\s*\)',
+                re.MULTILINE,
+            ),
+            "0",
+            "phantom SharedBooth.ButtonZ()",
+        ),
+    ]
+    for tid, content in list(ctx.all_results_dict.items()):
+        if not content:
+            continue
+        task_obj = ctx.task_map.get(tid) if ctx.task_map else None
+        domain = getattr(task_obj, "agent", None) if task_obj else None
+        if domain == "Lua":
+            _stripped = False
+            for (_pat, _repl, _desc) in _PHANTOM_STRIP_PATTERNS:
+                _new_content = _pat.sub(_repl, content)
+                if _new_content != content:
+                    content = _new_content
+                    _stripped = True
+                    print(f"  [Phantom Strip] ✂ Task {tid}: removed {_desc}")
+            if _stripped:
+                ctx.all_results_dict[tid] = content
 
     for tid, content in list(ctx.all_results_dict.items()):
         if not content:

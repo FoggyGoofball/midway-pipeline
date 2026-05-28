@@ -706,14 +706,22 @@ def _handle_approved(ctx: PipelineContext) -> None:
     print("  │ Answering NO skips the save — nothing is lost from your project,  │")
     print("  │ the pipeline just will not remember this run next time.           │")
     print("  └───────────────────────────────────────────────────────────────────┘")
-    save_to_memory = input(
-        "  Save architecture to memory? (y/N): "
-    ).strip().lower()
+    from pipeline import AUTO_APPROVE_GATES as _auto_mem
+    if _auto_mem:
+        save_to_memory = "y"
+        semantic_tag = f"auto_{ctx.run_id[:8]}"
+        print(f"  [Memory Archive] Auto-saving with tag [{semantic_tag}] (AUTO_APPROVE_GATES=True).")
+    else:
+        save_to_memory = input(
+            "  Save architecture to memory? (y/N): "
+        ).strip().lower()
+        semantic_tag = ""
     if save_to_memory in ("y", "yes"):
-        semantic_tag = input(
-            "  Enter semantic tag for this entry "
-            "(e.g., 'Plinko jackpot feature'): "
-        ).strip()
+        if not semantic_tag:
+            semantic_tag = input(
+                "  Enter semantic tag for this entry "
+                "(e.g., 'Plinko jackpot feature'): "
+            ).strip()
         if not semantic_tag:
             semantic_tag = f"auto_{ctx.run_id[:8]}"
         ledger_entry = (

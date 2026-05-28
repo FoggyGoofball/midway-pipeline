@@ -5,17 +5,31 @@ Tracks cumulative model consumption across the 12GB unified memory budget
 for telemetry and diagnostics. NEVER blocks model loads — that is handled
 by Ollama's keep_alive=0 eviction (one model at a time).
 
-All values carefully tuned for 12GB unified memory (Steam Deck).
-Context windows are now capped per-model in working_commit_ollama.py
-at 8192 for all heavy models; phi3.5 (3.8B) is the only exception at 16384.
+Hardware: 16GB unified memory (Steam Deck OLED).
+  - 4 GB reserved for OS and system processes  → VRAM_HEADROOM_GB = 4.0
+  - 12 GB available to Ollama                  → VRAM_SAFE_BUDGET  = 12.0
+Models run ONE AT A TIME; _evict_previous_model fires before every load.
 
-Calculation basis (q4_K_M weights + q8_0 KV cache at 8192 ctx):
+ACTIVE CONTEXT WINDOWS (enforced in ollama_client._MODEL_CTX_PRECEDENCE):
+  7B/8B models (qwen2.5-coder:7b, llama3.1:8b):   8192 ctx  → 5.5 / 6.0 GB
+  14B models (phi3:14b):                            8192 ctx  → 9.0 GB
+  phi3.5 3.8B (pre-summarizer only):               16384 ctx  → 3.1 GB
+
+Headroom at current settings (peak model: phi3:14b):
+  12.0 GB budget − 9.0 GB (phi3:14b at 8192 ctx) = 3.0 GB free
+
+Context upgrade potential:
+  phi3:14b at 16384 ctx  → ~10.2 GB  (1.8 GB free — tight but viable)
+  llama3.1:8b at 32768 ctx → ~9.6 GB  (2.4 GB free — viable)
+  !! Profile on device before raising ctx beyond these values !!
+
+Calculation basis (q4_K_M weights + q8_0 KV cache):
    1B model:  ~1-2GB at 8192 ctx   → budget cost: 1.5
-   7B model:  ~5.5GB at 8192 ctx   → budget cost: 5.5   (was 7.4 at 32K)
-   8B model:  ~6.0GB at 8192 ctx   → budget cost: 6.0   (was ~7.5 at 32K)
+   7B model:  ~5.5GB at 8192 ctx   → budget cost: 5.5   (~7.9 GB at 32768)
+   8B model:  ~6.0GB at 8192 ctx   → budget cost: 6.0   (~9.6 GB at 32768)
    9B model:  ~6.5GB at 8192 ctx   → budget cost: 6.5
-  14B model:  ~9.0GB at 8192 ctx   → budget cost: 9.0   (was 10.2 at 16K)
-  phi3.5 3.8B:~2.5GB at 16384 ctx  → budget cost: 2.5
+  14B model:  ~9.0GB at 8192 ctx   → budget cost: 9.0   (~10.2 GB at 16384)
+  phi3.5 3.8B:~3.1GB at 16384 ctx  → budget cost: 3.1
 """
 
 from __future__ import annotations
@@ -23,26 +37,40 @@ from __future__ import annotations
 from typing import Dict, Optional, Set
 
 # ── VRAM Budget Configuration ──────────────────────────────────────────────
-# 12GB total VRAM, with 1.5GB headroom for OS/Ollama overhead
-VRAM_TOTAL_GB: float = 12.0
-VRAM_HEADROOM_GB: float = 1.5
-VRAM_SAFE_BUDGET: float = VRAM_TOTAL_GB - VRAM_HEADROOM_GB  # 10.5 GB
+# 16GB total unified memory; 4GB reserved for OS/system processes
+VRAM_TOTAL_GB: float = 16.0
+VRAM_HEADROOM_GB: float = 4.0
+VRAM_SAFE_BUDGET: float = VRAM_TOTAL_GB - VRAM_HEADROOM_GB  # 12.0 GB
 
 # Model VRAM cost table (GB at specified context windows)
-# Mapping: model tag → (base_cost_GB_at_8K, cost_per_K_of_context)
-# Context beyond 8K adds ~0.12 GB per 1K tokens (q8_0 KV cache)
+# Mapping: model tag → (base_cost_GB_at_8K, cost_per_K_of_context_above_8K)
+#
+# KV cache type: Ollama sends kv_cache_type="q8_0" in every payload.
+# cost_per_K values below are calibrated for q8_0 (0.5× f16 KV cost).
+# Weights are q4_K_M throughout.
+#
+#                     base@8K  per_K   notes
+# qwen2.5:7b          5.06w + 0.22kv  = 5.28 GB @ 8K  q8_0
+#                     5.06w + 0.44kv  = 5.50 GB @ 8K  f16  ← old default
+# llama3.1:8b         5.00w + 0.50kv  = 5.50 GB @ 8K  q8_0
+#                     5.00w + 1.00kv  = 6.00 GB @ 8K  f16  ← old default
+# phi3:14b            7.44w + 0.78kv  = 8.22 GB @ 8K  q8_0
+#                     7.44w + 1.56kv  = 9.00 GB @ 8K  f16  ← old default
+# phi3.5:3.8b         2.36w + 0.75kv  = 3.11 GB @16K  q8_0
+#                     2.36w + 1.50kv  = 3.86 GB @16K  f16  ← old default
 _MODEL_COST_TABLE: Dict[str, tuple] = {
-    "qwen2.5-coder:1.5b": (1.5, 0.05),
-    "qwen2.5-coder:7b":   (5.5, 0.10),   # 5.5 GB at 8K (was 5.0 — more accurate at 8K)
-    "qwen3.5:9b":         (6.5, 0.12),
-    "phi3:14b":           (9.0, 0.15),   # 9.0 GB at 8K (was 10.5 at 16K)
-    "phi3.5":             (2.5, 0.08),   # 3.8B mini — pre-summarizer only (16K ctx)
-    "llama3.1:8b":        (6.0, 0.12),
-    "llama3.2:1b":        (1.5, 0.05),
-    "qwen3.5:14b":        (9.0, 0.12),
+    "qwen2.5-coder:1.5b": (1.3,  0.025),
+    "qwen2.5-coder:7b":   (5.28, 0.055),  # q8_0: 5.28 GB@8K → 6.76 GB@32K
+    "qwen3.5:9b":         (6.1,  0.075),
+    "phi3:14b":           (8.22, 0.095),  # q8_0: 8.22 GB@8K → 9.56 GB@16K
+    "phi3.5":             (2.36, 0.047),  # q8_0: 3.11 GB@16K (base is @8K)
+    "llama3.1:8b":        (5.50, 0.063),  # q8_0: 5.50 GB@8K → 7.50 GB@32K
+    "llama3.2:1b":        (1.2,  0.025),
+    "qwen3.5:14b":        (8.5,  0.075),
     # Fallback catch-all for unknown models
-    "_default":           (4.0, 0.10),
+    "_default":           (4.0,  0.063),
 }
+
 
 # ── Active Model Registry ─────────────────────────────────────────────────
 # Tracks currently loaded models and their context windows

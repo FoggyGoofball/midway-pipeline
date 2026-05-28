@@ -19,30 +19,31 @@ MAX_TOKENS: int = 12000
 VRAM_CRITICAL_RATIO: float = 0.80
 # ── Phase 7: VRAM-Guarded Model Token Limits ─────────────────────────────
 # Synchronized with ollama_client.py OLLAMA_NUM_CTX/*_LARGE/*_MASSIVE values
-# after downscaling from 32768/16384 to 16384/8192 for 12GB VRAM safety.
+# after unlocking VRAM context limits.
 #
 # Threshold = 80% of context window (VRAM_CRITICAL_RATIO = 0.80), giving
 # headroom for output tokens and KV cache overhead.
 # 
 # Model VRAM budgets at these ctx sizes (q4_K_M + q8_0 KV cache):
-#   7B at 8192:  ~5-6GB  (safe)
-#   9B at 8192:  ~6-7GB  (safe — was exceeding at 16384)
-#   14B at 8192: ~9-10GB (safe — was exceeding at 16384)
+#   7B at 32768: ~8-9GB (unlocked from 8192)
+#   8B at 32768: ~8-9GB (unlocked from 8192)
+#   14B at 16384: ~10-11GB (was 9-10GB at 8192)
 #   phi3.5 at 16384: ~11-12GB (tight — was exceeding at 32768)
 MODEL_TOKEN_LIMITS: dict = {
-    # Thresholds = 80% of context window, matched to _model_ctx() in working_commit_ollama.py
+    # Thresholds = 80% of context window
     "qwen3.5:9b":          (6553, 8192),   # 80% of 8K
-    "qwen2.5-coder:7b":    (6553, 8192),   # 80% of 8K
+    "qwen2.5-coder:7b":    (26214, 32768), # 80% of 32K — unlocked
     "qwen2.5-coder:1.5b":  (6553, 8192),
     # Pre-summarizer: 3.8B mini — larger window is fine; it's ~2.5 GB
     "phi3.5":              (13107, 16384),  # 80% of 16K
     "phi-3.5":             (13107, 16384),  # format alias
-    # phi3:14b reduced from 16K to 8K: was 10.2 GB (97%), now 9.0 GB (86%)
-    "phi3:14b":            (6553, 8192),   # 80% of 8K
-    "llama3.1:8b":         (6553, 8192),   # 80% of 8K
+    # phi3:14b bumped from 8K to 16K
+    "phi3:14b":            (13107, 16384),  # 80% of 16K — was 8192
+    "llama3.1:8b":         (26214, 32768),  # 80% of 32K — unlocked
     "llama3.2:1b":         (6553, 8192),
     "qwen3.5:14b":         (6553, 8192),
 }
+
 
 
 
@@ -246,6 +247,23 @@ class TokenBudget:
                     if len(stripped) > 1 or (i > 0 and lines[i-1].strip().endswith(")")):
                         is_header = True
 
+                # Lua function declarations (all three common forms):
+                #   function Name(...)
+                #   local function Name(...)
+                #   Name = function(...)   /   Name.method = function(...)
+                if not is_header:
+                    lua_match = re.match(
+                        r'^(?:local\s+)?function\s+[\w:.]+\s*\('
+                        r'|^[\w.]+\s*=\s*function\s*\(',
+                        stripped,
+                    )
+                    is_header = is_header or bool(lua_match)
+
+                # Python def / class
+                if not is_header:
+                    py_match = re.match(r'^(?:async\s+)?def\s+\w+\s*\(|^class\s+\w+', stripped)
+                    is_header = is_header or bool(py_match)
+
             # Markdown headers
             if stripped.startswith("##") or stripped.startswith("###") or stripped.startswith("# "):
                 is_header = True
@@ -268,15 +286,34 @@ class TokenBudget:
         if current_block is not None:
             blocks.append(current_block)
 
+        # Phase 1.5: Build a pinned Context Index (TOC) from all block headers.
+        # This tiny block is inserted at position-0 in the final output and is
+        # NEVER evicted, so the agent always has a complete symbol map even after
+        # severe context collapse.  Cap at 500 chars to guarantee survival.
+        _toc_lines: list[str] = []
+        for _b in blocks:
+            _h = _b["header"].strip()
+            if _h and not _b.get("is_fence_block"):
+                _toc_lines.append(f"  • {_h}")
+        _toc_block = ""
+        if _toc_lines:
+            _toc_body = "\n".join(_toc_lines)
+            if len(_toc_body) > 480:
+                _toc_body = _toc_body[:480] + "\n  … (truncated)"
+            _toc_block = f"## Context Index\n{_toc_body}\n"
+
         # Phase 2: Prune oldest blocks first (bottom of stack) —
         # but preserve the first header block (director's task breakdown)
         preserved_first = None
         if blocks and not blocks[0].get("is_fence_block"):
             preserved_first = blocks.pop(0)
 
-        # Phase 3: Collapse from the end
+        # Phase 3: Collapse from the end, offloading bodies to OffloadStore
+        import hashlib
         budget = available_chars
         output_lines: list[str] = []
+        offload_count = 0
+        _evicted_symbols: list[str] = []
         for block in reversed(blocks):
             block_text = block["header"] + "\n" + "".join(block["body_lines"])
             block_is_collapsible = (
@@ -284,10 +321,45 @@ class TokenBudget:
                 and len(block["body_lines"]) > 3
             )
             if block_is_collapsible:
-                collapsed_len = len(block["header"]) + 40
+                collapsed_len = len(block["header"]) + 120  # room for VRAM_STUB tag
                 if len(output_lines) + collapsed_len <= budget:
-                    output_lines.insert(0, block["header"])
-                    output_lines.insert(1, "[... body collapsed ...]")
+                    # Offload the full body to OffloadStore before collapsing
+                    body_full = "".join(block["body_lines"])
+                    body_hash = hashlib.sha256(body_full.encode("utf-8")).hexdigest()[:12]
+                    block_id = f"collapsed_{body_hash}"
+                    # Extract a human-readable symbol name from the header for the stub tag.
+                    _raw_header = block["header"].strip()
+                    _sym_match = re.search(
+                        r'(?:function\s+|def\s+|class\s+)([\w:.]+)'
+                        r'|^([\w:.]+)\s*[=(]',
+                        _raw_header,
+                    )
+                    _symbol_name = (
+                        (_sym_match.group(1) or _sym_match.group(2)).strip()
+                        if _sym_match else _raw_header[:40].replace('"', "'")
+                    )
+                    try:
+                        from offload_store import get_offload_store
+                        _store = get_offload_store()
+                        _store.store_block(
+                            block_id=block_id,
+                            header=block["header"][:120],
+                            body_lines=[body_full],
+                        )
+                        offload_count += 1
+                        _evicted_symbols.append(_symbol_name)
+                        output_lines.insert(0, block["header"])
+                        _summary = _raw_header[:80].replace('"', "'")
+                        output_lines.insert(1, (
+                            f'<VRAM_STUB id="{block_id}" '
+                            f'symbol="{_symbol_name}" '
+                            f'summary="{_summary}" '
+                            f'total_chars="{len(body_full)}" />'
+                        ))
+                    except Exception:
+                        # Fallback: collapse without offload
+                        output_lines.insert(0, block["header"])
+                        output_lines.insert(1, "[... body collapsed ...]")
                 else:
                     break
             else:
@@ -300,6 +372,24 @@ class TokenBudget:
         if preserved_first:
             first_text = preserved_first["header"] + "\n" + "".join(preserved_first["body_lines"])
             output_lines.insert(0, first_text)
+
+        # Pin the Context Index at the very top so it is never evicted.
+        if _toc_block:
+            output_lines.insert(0, _toc_block)
+
+        # Append offload inventory notice if any blocks were offloaded
+        if offload_count > 0:
+            _sym_list = ", ".join(_evicted_symbols[:8])
+            if len(_evicted_symbols) > 8:
+                _sym_list += f" … (+{len(_evicted_symbols) - 8} more)"
+            output_lines.append(
+                f"\n\n[SYSTEM: {offload_count} block(s) offloaded to VRAM — "
+                f"evicted symbols: {_sym_list}. "
+                f"To restore a body, use: "
+                f'<invoke_kernel><action>PAGE_IN</action>'
+                f'<target>FILE_PATH</target><search>SYMBOL_NAME</search></invoke_kernel>. '
+                f"The ## Context Index above lists all symbol names.]"
+            )
 
         result = "".join(output_lines)
         if len(result) > available_chars:

@@ -1,4 +1,4 @@
-﻿"""
+"""
 midway_ecosystem.py â€” MidwayAgentCartridge
 ==========================================
 Thin orchestrating wrapper.  All large pure-data builders live in

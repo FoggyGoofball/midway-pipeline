@@ -140,10 +140,15 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                 print("  │ Answering NO carries on as-is — the affected domain will simply   │")
                 print("  │ be skipped or produce an incomplete result.                       │")
                 print("  └───────────────────────────────────────────────────────────────────┘")
-                wireframe_choice = input(
-                    "  You asked for a feature relying on an unavailable domain. "
-                    "Implement a functional wireframe/debug placeholder instead? [y/N]: "
-                ).strip().lower()
+                from pipeline import AUTO_APPROVE_GATES as _auto_wf
+                if _auto_wf:
+                    wireframe_choice = "n"
+                    print(f"  [Domain Consultant] Gate auto-skipped (AUTO_APPROVE_GATES=True) — continuing as-is.")
+                else:
+                    wireframe_choice = input(
+                        "  You asked for a feature relying on an unavailable domain. "
+                        "Implement a functional wireframe/debug placeholder instead? [y/N]: "
+                    ).strip().lower()
                 if wireframe_choice in ("y", "yes"):
                     ctx.user_prompt += (
                         "\n\n[ARCHITECT'S NOTE: The following feature relies on an unavailable domain. "
@@ -1542,6 +1547,12 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
         print("  │  Y  — plan looks good, start generating code.                    │")
         print("  │  n  — something is wrong; you will be asked what to fix.         │")
         print("  └───────────────────────────────────────────────────────────────────┘")
+
+        from pipeline import AUTO_APPROVE_GATES as _auto_bp_gates
+        if _auto_bp_gates:
+            print(f"  [Blueprint Gate] Blueprint auto-approved (AUTO_APPROVE_GATES=True).\n")
+            break
+
         trigger_chime()
         approval = input("  Do you approve this architectural blueprint? [Y/n]: ").strip().lower()
 
@@ -1918,10 +1929,12 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
             print(f"  MATH_HEAVY DETECTED — Tasks flagged: {', '.join(_math_heavy_ids)}")
             print(f"{'='*50}")
             import sys as _sys
-            if not _sys.stdin.isatty():
-                # Non-interactive / headless run — auto-enable pro mode rather than hanging
+            from pipeline import AUTO_APPROVE_GATES as _auto_pro
+            if not _sys.stdin.isatty() or _auto_pro:
+                # Non-interactive / headless run OR auto-approve — enable pro mode automatically
                 user_input = "y"
-                print(f"  [Pro Mode] Non-interactive session detected — auto-enabling pro mode.")
+                _reason = "AUTO_APPROVE_GATES=True" if _auto_pro else "non-interactive session"
+                print(f"  [Pro Mode] Auto-enabling pro mode ({_reason}).")
             else:
                 from _pipeline_helpers import trigger_chime as _chime
                 _chime()

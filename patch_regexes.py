@@ -8,6 +8,7 @@ Applies exact string replacements using standard .replace(old, new).
 
 import os
 import sys
+import re
 
 # ── Target files (relative to this script's directory) ────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -57,6 +58,10 @@ files_to_patch[entries_path].append((
 
 
 # ── Apply all replacements ─────────────────────────────────────────────
+# ── SEARCH/REPLACE conflict-marker regex (for Architect agent output) ──
+SEARCH_REPLACE_PATTERN = re.compile(r"<<<<<<<\s*SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>>\s*(?:REPLACE)?", re.DOTALL)
+
+
 def apply_patches():
     patched_count = 0
     error_count = 0

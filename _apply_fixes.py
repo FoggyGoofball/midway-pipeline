@@ -73,7 +73,7 @@ old_section = '''    # -- Phase 0.5: Lead Producer (Scope Gate & Auto-Feeder) --
     if is_auto_feed_request:
         if blueprint_path.is_file():
             content = blueprint_path.read_text(encoding="utf-8")
-            match = re.search(r"- \[ \] (Task \d+: .+)", content)
+            match = re.search(r"- [[] []] (Task [0-9]+: .+)", content)
             if match:
                 ctx.user_prompt = match.group(1)
                 print(f"  [Lead Producer] Auto-feeding next task: {ctx.user_prompt}")
@@ -235,7 +235,7 @@ new_section = '''    blueprint_path = ctx.project_root / "docs" / "project_bluep
         if blueprint_path.is_file():
             content = blueprint_path.read_text(encoding="utf-8")
             match = re.search(
-                r"^[-\*]?\s*\[ \]\s*(?:Task \d+:\s*)?(.+)",
+                r"^[-*]?[ \t]*[[] []][ \t]*(?:Task [0-9]+:[ \t]*)?(.+)",
                 content, re.MULTILINE
             )
             if match:
@@ -271,7 +271,7 @@ new_section = '''    blueprint_path = ctx.project_root / "docs" / "project_bluep
             scope_eval = call_ollama(
                 "You are a Lead Producer.", scope_prompt, "Scope Gate", REASONING_MODEL
             )
-            verdict_match = re.search(r"\[VERDICT:\s*TOO_BROAD\]", scope_eval, re.IGNORECASE)
+            verdict_match = re.search(r"[[]VERDICT:[ \t]*TOO_BROAD[]]", scope_eval, re.IGNORECASE)
             if verdict_match:
                 print(f"\n  [Lead Producer] Scope is TOO_BROAD. Generating blueprint...")
                 unavailable_text = get_unavailable_domains_text()
@@ -313,7 +313,7 @@ new_section = '''    blueprint_path = ctx.project_root / "docs" / "project_bluep
                 # -- Continuous Execution: extract first task & fall through --
                 content = blueprint_path.read_text(encoding="utf-8")
                 first_match = re.search(
-                    r"^[-\*]?\s*\[ \]\s*(?:Task \d+:\s*)?(.+)",
+                    r"^[-*]?[ \t]*[[] []][ \t]*(?:Task [0-9]+:[ \t]*)?(.+)",
                     content, re.MULTILINE
                 )
                 if first_match:
@@ -406,7 +406,7 @@ else:
 
 # Check for relaxed regex
 for line in t.splitlines():
-    if 'r"' in line and '[-\*]' in line and '\\[ \\]' in line:
+    if 'r"' in line and '[-*]' in line and '[[] []]' in line:
         print("[PASS 5] Auto-feed regex is relaxed (no trailing $)")
         break
 

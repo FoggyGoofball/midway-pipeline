@@ -124,7 +124,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
         if blueprint_path.is_file():
             content = blueprint_path.read_text(encoding="utf-8")
             match = re.search(
-                r"^[-\*]?\s*\[ \]\s*(?:Task \d+:\s*)?(.+)",
+                r"^[-*]?[ \t]*[[] []][ \t]*(?:Task [0-9]+:[ \t]*)?(.+)",
                 content, re.MULTILINE
             )
             if match:
@@ -161,7 +161,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
                 "You are a Lead Producer.", scope_prompt, "Scope Gate", REASONING_MODEL
             )
 
-            verdict_match = re.search(r"\[VERDICT:\s*TOO_BROAD\]", scope_eval, re.IGNORECASE)
+            verdict_match = re.search(r"[[]VERDICT:[ \t]*TOO_BROAD[]]", scope_eval, re.IGNORECASE)
             if verdict_match:
                 print(f"\\n  [Lead Producer] Scope is TOO_BROAD. Generating blueprint...")
                 unavailable_text = get_unavailable_domains_text()
@@ -203,7 +203,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
                 # ── Continuous Execution: extract first task & fall through ──
                 content = blueprint_path.read_text(encoding="utf-8")
                 first_match = re.search(
-                    r"^[-\*]?\s*\[ \]\s*(?:Task \d+:\s*)?(.+)",
+                    r"^[-*]?[ \t]*[[] []][ \t]*(?:Task [0-9]+:[ \t]*)?(.+)",
                     content, re.MULTILINE
                 )
                 if first_match:

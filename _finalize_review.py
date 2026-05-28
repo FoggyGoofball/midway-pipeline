@@ -1059,7 +1059,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         # forever or raise an EOFError and crash the worker thread.  Detect this
         # and fall through to a clean FAIL result instead of raising an exception.
         _has_tty = hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
-        if _has_tty:
+        from pipeline import AUTO_APPROVE_GATES as _auto_recon
+        if _has_tty and not _auto_recon:
             trigger_chime()
             try:
                 _audit_choice = input(

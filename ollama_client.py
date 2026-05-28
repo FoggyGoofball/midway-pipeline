@@ -170,6 +170,7 @@ def _stream_messages_payload(
             "num_ctx": ctx_size,
             "num_predict": MAX_TOKENS,   # Full generation window — no premature cutoffs
             "use_mmap": True,
+            "kv_cache_type": "q8_0",    # Halves KV memory vs f16 default
         },
         "messages": messages,
 
@@ -319,26 +320,30 @@ OLLAMA_TIMEOUT: int = 600
 #           Medium models (9B) get an in-between window for breathing room.
 # Context windows tuned for 12 GB unified memory (Steam Deck).
 # phi3:14b was 10.2 GB at 16K (97% budget) → now 8K → ~9.0 GB (86%).
-# qwen2.5-coder:7b was 7.4 GB at 32K → now 8K → ~5.5 GB.
-# phi3.5 (3.8B) is the only model permitted 16K — it costs ~2.5 GB total.
-OLLAMA_NUM_CTX: int = 8192          # Safe default for 7B/8B/1B on 12 GB unified RAM
-OLLAMA_NUM_CTX_LARGE: int = 8192    # 14B models: weights alone ~8 GB; keep ctx tight
-OLLAMA_NUM_CTX_UPPER_MID: int = 8192 # 9B models: same budget constraint
-OLLAMA_NUM_CTX_MASSIVE: int = 16384  # phi3.5 3.8B pre-summarizer only — fits at 2.5 GB
+# Context window budgets — calibrated for q8_0 KV cache on 12 GB unified memory.
+# Verified VRAM headroom (weights + KV q8_0):
+#   7b  @32768: ~6.6 GB  (55%)   llama3.1:8b @32768: ~7.0 GB (58%)
+#   14b @16384: ~9.0 GB  (75%)   phi3.5      @16384: ~2.7 GB (23%)
+# The previous values (all 8192) caused the collapse guard to fire before
+# the model could emit PAGE_OUT, defeating the entire paging subsystem.
+OLLAMA_NUM_CTX: int = 32768         # Default: 7B/8B models — safe at q8_0 KV
+OLLAMA_NUM_CTX_LARGE: int = 16384   # 14B models — 9.0 GB at 16K, 75% of 12 GB budget
+OLLAMA_NUM_CTX_UPPER_MID: int = 16384  # 9B models — headroom confirmed
+OLLAMA_NUM_CTX_MASSIVE: int = 16384  # phi3.5 3.8B pre-summarizer — fits at 2.7 GB
 
 # ── Centralized Model-to-Context Resolution ──────────────────────────────
 # Single source of truth for all routing call sites. Eliminates 3 duplicate
 # if/elif/else blocks that can drift apart during refactoring.
 _MODEL_CTX_PRECEDENCE: list[tuple[str, int]] = [
     # Ordered: most-specific match first, fallback last
-    ("phi3.5",     OLLAMA_NUM_CTX_MASSIVE),  # 16384 — 3.8B mini, ~2.5 GB total
+    ("phi3.5",     OLLAMA_NUM_CTX_MASSIVE),  # 16384 — 3.8B mini, ~2.7 GB total
     ("phi-3.5",    OLLAMA_NUM_CTX_MASSIVE),  # 16384
     ("phi-mini",   OLLAMA_NUM_CTX_MASSIVE),  # 16384
-    ("phi3:14b",   OLLAMA_NUM_CTX_LARGE),    # 8192 — was 16384, cut to prevent 97% budget
-    ("14b",        OLLAMA_NUM_CTX_LARGE),    # 8192
-    ("9b",         OLLAMA_NUM_CTX_UPPER_MID), # 8192
-    ("7b",         OLLAMA_NUM_CTX),          # 8192
-    ("8b",         OLLAMA_NUM_CTX),          # 8192
+    ("phi3:14b",   OLLAMA_NUM_CTX_LARGE),    # 16384 — ~9.0 GB at 16K (75% budget)
+    ("14b",        OLLAMA_NUM_CTX_LARGE),    # 16384
+    ("9b",         OLLAMA_NUM_CTX_UPPER_MID), # 16384
+    ("7b",         OLLAMA_NUM_CTX),          # 32768 — ~6.6 GB at 32K (55% budget)
+    ("8b",         OLLAMA_NUM_CTX),          # 32768 — ~7.0 GB at 32K (58% budget)
     ("3b",         OLLAMA_NUM_CTX_MASSIVE),  # 16384 — phi-mini / small models
 ]
 
@@ -556,7 +561,7 @@ def call_ollama_streamed(
 
     Payload features:
     - keep_alive: "0" — model unloads instantly after each call to free VRAM.
-    - KV Cache q8_0 quantization: halves context memory footprint.
+    - kv_cache_type: "q8_0" — halves KV cache memory vs the f16 Ollama default.
 
     Args:
         system: System prompt text.
@@ -573,6 +578,24 @@ def call_ollama_streamed(
     use_model = model or MODEL
     _evict_previous_model(use_model)
     ctx_size = resolve_ctx_size(use_model)
+
+    # ── Adaptive num_ctx: size KV cache to actual input, not always max ──
+    # Allocating the full 32K KV cache for a 3K-token prompt wastes VRAM
+    # and adds seconds to the prefill phase on unified-memory hardware.
+    # Strategy: estimate input tokens at 3 chars/token (code-heavy heuristic),
+    # add the full output budget, round up to the next power-of-two-friendly
+    # multiple of 2048, then clamp to the model ceiling.
+    # Minimum floor: 8192 so small prompts still have room for paging tokens.
+    _input_chars = len(system) + len(user)
+    _input_tokens_est = max(512, int(_input_chars / 3))
+    _adaptive_ctx = min(
+        ctx_size,
+        max(8192, ((_input_tokens_est + MAX_TOKENS + 2047) // 2048) * 2048)
+    )
+    if _adaptive_ctx < ctx_size:
+        print(f"  [Adaptive ctx] Input ~{_input_tokens_est} tok → num_ctx={_adaptive_ctx} "
+              f"(model max={ctx_size})")
+    ctx_size = _adaptive_ctx
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*60}")
@@ -587,6 +610,7 @@ def call_ollama_streamed(
     from paging_kernel import PagingController
     from offload_store import get_offload_store
     paging = PagingController(offload_store=get_offload_store())
+    _page_resume_depth: int = 0  # Hard cap on recursive paging resumes
     # ── Phase 7: Forward the active model's context allocation ──────────
     # Ensures the PagingController uses the correct context ceiling for
     # dynamic hard cap enforcement (handle_page_in) and resume payload
@@ -608,6 +632,7 @@ def call_ollama_streamed(
             "num_ctx": ctx_size,
             "num_predict": MAX_TOKENS,   # Full generation window — no premature cutoffs
             "use_mmap": True,
+            "kv_cache_type": "q8_0",    # Halves KV memory vs f16 default
         },
         "messages": [
             {"role": "system", "content": system},
@@ -617,6 +642,12 @@ def call_ollama_streamed(
     }
 
     if params:
+        # Hoist `keep_alive` to the top-level payload if the caller supplied it
+        # in params. Ollama ignores keep_alive when it appears inside options{},
+        # so it MUST be a sibling key of "model", "stream", etc.
+        _ka = params.pop("keep_alive", None)
+        if _ka is not None:
+            payload["keep_alive"] = str(_ka)
         payload["options"].update(params)
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -714,21 +745,20 @@ def call_ollama_streamed(
 
                                     if page_info["type"] == "PAGE_IN":
                                         if page_failed:
-                                            # Replace the generic continuation prompt with
-                                            # an explicit failure notice so the LLM does not
-                                            # re-emit the paging protocol instructions.
+                                            # Hard stop: a failed PAGE_IN must NOT trigger an
+                                            # auto-resume. Resuming after a failed lookup lets
+                                            # the model re-emit the same invalid PAGE_IN token,
+                                            # causing an infinite hang. Instead, reset paging
+                                            # state and let the current stream finish normally.
                                             _target = page_info.get("target", "unknown")
-                                            for _msg in reversed(resume_payload["messages"]):
-                                                if _msg.get("role") == "user":
-                                                    _msg["content"] = (
-                                                        f"[SYSTEM KERNEL: PAGE_IN failed — "
-                                                        f"'{_target}' does not exist on disk. "
-                                                        f"Do NOT retry this page request. "
-                                                        f"Continue your task using only "
-                                                        f"the context already available to you. "
-                                                        f"Synthesize from what you know.]"
-                                                    )
-                                                    break
+                                            print(
+                                                f"  [Paging Kernel] ⛔ PAGE_IN failed for "
+                                                f"'{_target}' — skipping auto-resume to prevent "
+                                                f"infinite continuation loop."
+                                            )
+                                            sys.stdout.flush()
+                                            paging.reset_cycle()
+                                            return
                                         elif paged_content:
                                             # Inject the loaded content as a system message
                                             # before the continuation prompt
@@ -739,6 +769,21 @@ def call_ollama_streamed(
 
                                     # If PAGE_OUT, the kernel message is already
                                     # in the continuation prompt
+
+                                    # Hard cap: never recurse deeper than MAX_PAGE_RECURSION
+                                    # resume cycles regardless of page type.
+                                    from paging_kernel import MAX_PAGE_RECURSION as _MAX_RESUME
+                                    nonlocal _page_resume_depth
+                                    _page_resume_depth += 1
+                                    if _page_resume_depth > _MAX_RESUME:
+                                        print(
+                                            f"  [Paging Kernel] ⛔ Resume depth cap reached "
+                                            f"({_page_resume_depth}/{_MAX_RESUME}) — "
+                                            f"aborting further paging resumes."
+                                        )
+                                        sys.stdout.flush()
+                                        paging.reset_cycle()
+                                        return
 
                                     print(f"  [Paging Kernel] 🔄 Auto-resuming stream with continuation prompt...")
                                     sys.stdout.flush()
@@ -893,18 +938,43 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
     """
     use_model = model or MODEL
 
-    # ── Pre-Summarizer: compress large context before phi3:14b ──────
-    # Fire when targeting phi3:14b and payload exceeds 80% of its 16384 ctx.
+    # ── Pre-Summarizer: compress large context before slow-prefill models ──
+    # Fires when the user payload alone would force a slow prefill pass that
+    # causes a multi-minute TTFT on unified-memory hardware.
+    # Threshold is model-aware:
+    #   phi3:14b  — 60% of its 16384 ctx → 14745 chars
+    #   llama3.1/qwen 7B/8B — hard cap at 24000 chars (~8000 tok at 3 ch/tok)
+    #     because prefill beyond ~8K tokens takes >2 min at 1 tok/s on iGPU.
     # Skipped for review/fix loops, conflict resolution, tribunal, and final
-    # approval — those must see the full unmodified context to avoid dropping
-    # relevant code or critique data (caller passes skip_pre_summarizer=True).
-    # Threshold: fire when user alone would consume >60% of phi3:14b's ctx
-    # (leaving headroom for the system prompt in the remaining 40%).
-    _presumm_char_threshold = int(OLLAMA_NUM_CTX_LARGE * 1.5 * 0.60)
-    if not skip_pre_summarizer and "phi3:14b" in use_model and len(user) > _presumm_char_threshold:
+    # approval (skip_pre_summarizer=True) — those must see the full context.
+    _model_ctx_for_presumm = resolve_ctx_size(use_model)
+    if "phi3:14b" in use_model:
+        _presumm_char_threshold = int(OLLAMA_NUM_CTX_LARGE * 1.5 * 0.60)  # 14745 chars
+    else:
+        # For 7B/8B models on iGPU: prefill > 8K tokens = visible hang.
+        # 24000 chars @ 3 ch/tok ≈ 8000 tokens — safe prefill boundary.
+        _presumm_char_threshold = 24000
+    if not skip_pre_summarizer and len(user) > _presumm_char_threshold and (
+        "phi3:14b" in use_model
+        or "llama3.1" in use_model
+        or "qwen2.5" in use_model
+    ):
         print(f"  [Pre-Summarizer] Context too large for {use_model} ({len(user)} chars > {_presumm_char_threshold}). "
               f"Compressing with {PRE_SUMMARIZER_MODEL} first...")
         _presumm_ctx = resolve_ctx_size(PRE_SUMMARIZER_MODEL)
+        # Adaptive num_ctx for the pre-summarizer: no need to allocate the full
+        # 16K KV cache when the input is large — size to input + output budget.
+        # _presumm_system is ~300 chars; approximate as 100 tokens for the budget calc.
+        _presumm_system_tok_est = 100
+        _presumm_input_est = max(512, int(len(user) / 3) + _presumm_system_tok_est)
+        _presumm_adaptive_ctx = min(
+            _presumm_ctx,
+            max(8192, ((_presumm_input_est + MAX_TOKENS + 2047) // 2048) * 2048)
+        )
+        if _presumm_adaptive_ctx < _presumm_ctx:
+            print(f"  [Adaptive ctx] Pre-summarizer input ~{_presumm_input_est} tok → "
+                  f"num_ctx={_presumm_adaptive_ctx} (model max={_presumm_ctx})")
+        _presumm_ctx = _presumm_adaptive_ctx
         _presumm_system = (
             "You are an expert context compressor. "
             "You will be given a large context payload destined for a deep-reasoning model. "
@@ -919,9 +989,10 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
         _evict_previous_model(PRE_SUMMARIZER_MODEL)
         from datetime import datetime as _dt
         _ts = _dt.now().strftime('%H:%M:%S')
+        _presumm_input_len = len(user)
         print(f"\n{'='*60}")
         print(f"  [{_ts}] [START] [Pre-Summarizer ({label})] Calling Ollama ({PRE_SUMMARIZER_MODEL})...")
-        print(f"  [VRAM Guard] num_ctx={_presumm_ctx}, user={len(user)} chars")
+        print(f"  [VRAM Guard] num_ctx={_presumm_ctx}, user={_presumm_input_len} chars")
         print(f"{'='*60}")
         sys.stdout.flush()
         _summary_tokens: list[str] = []
@@ -929,7 +1000,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
             _summary_tokens.append(_tok)
         user = "".join(_summary_tokens)
         _ts_end = _dt.now().strftime('%H:%M:%S')
-        print(f"  [{_ts_end}] [END] [Pre-Summarizer ({label})] Compressed {len(''.join(_summary_tokens))} → {len(user)} chars.")
+        print(f"  [{_ts_end}] [END] [Pre-Summarizer ({label})] Compressed {_presumm_input_len} → {len(user)} chars.")
         sys.stdout.flush()
 
     # ── Fix E: Context collapse guard on combined system+user payload ──
@@ -949,12 +1020,13 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
               f"(system={len(system)} chars reserved)")
         # Preserve overflow in OffloadStore so the LLM can PAGE_IN if needed.
         _e_overflow_note = ""
+        _e_oid = ""  # initialise before try so the VRAM_STUB f-string is always valid
         if _e_overflow.strip():
             try:
                 from offload_store import get_offload_store as _get_os
                 _e_store = _get_os()
-                import hashlib as _hl
-                _e_oid = "ctx_overflow_" + _hl.md5((_e_overflow[:64]).encode()).hexdigest()[:8]
+                import uuid as _uuid
+                _e_oid = "ctx_overflow_" + _uuid.uuid4().hex[:12]
                 _e_store.store_block(
                     block_id=_e_oid,
                     header=f"Overflow context ({len(_e_overflow)} chars) from call_ollama [{label}]",
@@ -968,18 +1040,30 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
             except Exception:
                 pass
         user = user[:_e_max_user_chars] + (
-            f"\n[... context collapsed at {int(_e_max_user_chars/1.5)} tk ...]"
+            f"\n<VRAM_STUB id=\"{_e_oid}\" "
+            f"summary=\"Context overflow ({len(_e_overflow)} chars) from [{label}]\" "
+            f"total_chars=\"{len(_e_overflow)}\" />"
         ) + _e_overflow_note
 
+    # ── Adaptive num_ctx for call_ollama (mirrors streamed path) ──────
+    _e_input_chars = len(system) + len(user)
+    _e_input_tokens_est = max(512, int(_e_input_chars / 3))
+    _e_adaptive_ctx = min(
+        _e_model_ctx,
+        max(8192, ((_e_input_tokens_est + MAX_TOKENS + 2047) // 2048) * 2048)
+    )
+    if _e_adaptive_ctx < _e_model_ctx:
+        print(f"  [Adaptive ctx] Input ~{_e_input_tokens_est} tok → num_ctx={_e_adaptive_ctx} "
+              f"(model max={_e_model_ctx})")
     _e_params = dict(params or {})
-    _e_params.setdefault("num_ctx", _e_model_ctx)
+    _e_params.setdefault("num_ctx", _e_adaptive_ctx)
 
     _evict_previous_model(use_model)
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*60}")
     print(f"  [{ts}] [START] [{label}] Calling Ollama ({use_model})...")
-    print(f"  [VRAM Guard] num_ctx={_e_model_ctx}, user={len(user)} chars")
+    print(f"  [VRAM Guard] num_ctx={_e_adaptive_ctx}, user={len(user)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
     full: list[str] = []
@@ -1057,12 +1141,37 @@ def call_ollama_with_messages(
     # Estimate token ceiling: use 1.5 char/token (conservative for code)
     _max_user_chars = int(_model_ctx * 1.5 * 0.75)  # 75% of context for user content
     if len(user_text) > _max_user_chars:
+        _b_overflow = user_text[_max_user_chars:]
         print(f"  [Context Collapse] user_text was {len(user_text)} chars "
               f"({int(len(user_text)/1.5)} tok estimated), "
               f"model ctx={_model_ctx} tok — truncating to {_max_user_chars} chars "
               f"({int(_model_ctx*0.75)} tok)")
+        # Preserve overflow in OffloadStore so the LLM can PAGE_IN if needed.
+        _b_overflow_note = ""
+        _b_oid = ""  # initialise before try so the VRAM_STUB f-string is always valid
+        if _b_overflow.strip():
+            try:
+                from offload_store import get_offload_store as _b_get_os
+                _b_store = _b_get_os()
+                import uuid as _b_uuid
+                _b_oid = "ctx_overflow_" + _b_uuid.uuid4().hex[:12]
+                _b_store.store_block(
+                    block_id=_b_oid,
+                    header=f"Overflow context ({len(_b_overflow)} chars) from call_ollama_with_messages [{label}]",
+                    body_lines=[_b_overflow],
+                )
+                _b_overflow_note = (
+                    f"\n[📄 Context overflow preserved — {len(_b_overflow)} chars offloaded. "
+                    f"Use `<invoke_kernel><action>PAGE_IN</action>"
+                    f"<target>{_b_oid}</target></invoke_kernel>` to retrieve.]\n"
+                )
+            except Exception:
+                pass
         user_text = user_text[:_max_user_chars] + (
-            f"\n[... context collapsed at {int(_model_ctx*0.75)} tk ...]")
+            f"\n<VRAM_STUB id=\"{_b_oid}\" "
+            f"summary=\"Context overflow ({len(_b_overflow)} chars) from [{label}]\" "
+            f"total_chars=\"{len(_b_overflow)}\" />"
+        ) + _b_overflow_note
 
     # Inject num_ctx into params if not already present
     _b_params = dict(params or {})

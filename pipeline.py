@@ -164,9 +164,18 @@ MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
 MAX_SUBTASKS_PER_AGENT = 5
 REVIEW_MAX_ITERATIONS = 4
+# Max review-fix failures per task before the circuit breaker trips the loop.
+CIRCUIT_BREAKER_MAX_FAILURES = 3
+# Max times the final-approval stage re-enters the review-fix loop when the
+# Director emits REVISION REQUIRED.
+FA_MAX_RETRY = 2
 SCOPE_FILE_LIMIT = 5
 SCOPE_LINE_LIMIT = 400
 OLLAMA_TIMEOUT = 420
+# Set True to skip all intermediate human-in-the-loop gates (blueprint, architect,
+# wireframe, reconciliation, memory archive).  The final merge/integrate gate in
+# mesh_finalize.py is intentionally excluded and always requires explicit authorisation.
+AUTO_APPROVE_GATES = False
 # Hardened global context ceiling aligned to 16GB host RAM / 12GB dedicated safety margin
 OLLAMA_NUM_CTX = 16384
 MAX_TOKENS = 12000
@@ -567,37 +576,217 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         ctx.final_output = response
         return response
 
-    # ── Phase 0.5–3: Fetches ──
-    ctx = run_fetches(ctx)
-    if ctx.final_output:
-        return ctx.final_output
+    # ── Blueprint Execution Loop ──────────────────────────────────────────
+    # Runs fetches → tasks → merge in a loop, auto-feeding the next blueprint
+    # task after each approved cycle, until the blueprint is complete.
+    # The integration gate is only shown once all blueprint tasks are done.
+    _blueprint_iteration = 0
+    while True:
+        _blueprint_iteration += 1
+        if _blueprint_iteration > 1:
+            # Subsequent iterations: reset per-run accumulators but keep
+            # the cartridge, project_root, session_mgr, and blueprint-session
+            # scope fields mounted.
+            _saved_root = ctx.project_root
+            _saved_session = ctx.session_mgr
+            _saved_cartridge = getattr(ctx, '_mounted_cartridge', None)
+            # Scope fields set by run_fetches() on iteration 1 — must survive reset
+            # so the auto-feeder's <macro_invariants> wrapper and scope-inheritance
+            # logic see the correct values on all subsequent iterations.
+            _saved_scope_mode   = getattr(ctx, '_scope_mode',   'GENERAL')
+            _saved_scope_target = getattr(ctx, '_scope_target',  '')
+            _saved_scope_refs   = getattr(ctx, '_scope_refs',    [])
+            _saved_orig_prompt  = getattr(ctx, '_original_user_prompt', '')
 
-    # ── Phase 4: Task Execution ──
-    ctx = run_tasks(ctx)
+            # ── Blueprint cross-iteration memory: snapshot approved files ────
+            # Collect every file path that was written during this iteration so
+            # the Director on the NEXT iteration sees the current on-disk state
+            # and does not re-implement work that already exists.
+            _saved_snapshots: dict = dict(getattr(ctx, 'completed_file_snapshots', {}))
+            _candidate_paths: set = set()
+            # Primary scope target (e.g. attractions/skeeball/skeeball.lua)
+            if _saved_scope_target:
+                _candidate_paths.add(_saved_scope_target)
+            # Per-task target_file fields captured by the Director
+            for _t in getattr(ctx, 'tasks_list', []):
+                _tf = _t.get('target_file') or ''
+                if _tf:
+                    _candidate_paths.add(_tf)
+            # all_results entries also carry target_file
+            for _r in getattr(ctx, 'all_results', []):
+                _tf = _r.get('target_file') or ''
+                if _tf:
+                    _candidate_paths.add(_tf)
+            # Read each path from disk (they were just written by the approval step)
+            # For NEW_ATTRACTION scope, only accept the canonical path so stale
+            # root-level or mis-spelled artifacts never pollute the snapshot store.
+            _canonical_constraint: str = ""
+            if _saved_scope_mode == "NEW_ATTRACTION" and _saved_scope_target:
+                import re as _re_pipe
+                _slug = _re_pipe.sub(r'[^\w]+', '_', _saved_scope_target.strip().lower()).strip('_')
+                if _slug:
+                    _canonical_constraint = f"attractions/{_slug}/{_slug}.lua"
 
-    # ── VRAM Abort Guard: Skip Phases 5–8 if TPS watchdog fired ──
-    # If the VRAM Circuit Breaker in run_tasks detected token speed below
-    # 2.0 tok/s, ctx.final_verdict is set to "VRAM_OVERRUN" and all
-    # remaining waves are aborted. We must NOT proceed to Phases 5–8
-    # because that will immediately load models and trigger another
-    # cascade of VRAM overruns (as seen in the Architect Syntax Fix loop).
-    if getattr(ctx, 'final_verdict', None) == "VRAM_OVERRUN":
-        print(f"\n  [VRAM Abort Guard] ⛔ Pipeline aborted during task execution "
-              f"(VRAM overrun). Skipping Phases 5–8.\n")
-        output_path = PROJECT_ROOT / f"pipeline_abort_{datetime.now():%Y%m%d_%H%M%S}.md"
+            for _rel_path in _candidate_paths:
+                if _canonical_constraint and _rel_path != _canonical_constraint:
+                    print(
+                        f"  [Blueprint Loop] 🚫 Skipping snapshot for non-canonical path: "
+                        f"'{_rel_path}' (expected '{_canonical_constraint}')"
+                    )
+                    continue
+                _abs = ctx.project_root / _rel_path
+                if _abs.is_file():
+                    try:
+                        _saved_snapshots[_rel_path] = _abs.read_text(encoding='utf-8', errors='replace')
+                        print(f"  [Blueprint Loop] 📸 Snapshot: {_rel_path} ({len(_saved_snapshots[_rel_path])} chars)")
+                    except OSError:
+                        pass
+
+            ctx.reset_state()
+            ctx.project_root = _saved_root
+            ctx.session_mgr = _saved_session
+            if _saved_cartridge is not None:
+                ctx._mounted_cartridge = _saved_cartridge
+            # Restore scope + original prompt so all continuation iterations
+            # inherit the correct blueprint session context.
+            ctx._scope_mode            = _saved_scope_mode
+            ctx._scope_target          = _saved_scope_target
+            ctx._scope_refs            = _saved_scope_refs
+            ctx._original_user_prompt  = _saved_orig_prompt
+            # Restore accumulated cross-iteration file snapshots
+            ctx.completed_file_snapshots = _saved_snapshots
+            # Empty prompt triggers the auto-feeder to pick the next blueprint task
+            ctx.user_prompt = ""
+            _ts_iter = datetime.now().strftime('%H:%M:%S')
+            print(f"\n{'='*70}")
+            print(f"  [{_ts_iter}] [Blueprint Loop] Starting iteration {_blueprint_iteration}...")
+            print(f"{'='*70}")
+
+        # ── Phase 0.5–3: Fetches ──
+        # On the very first iteration, remove any stale root-level attraction
+        # files that a prior bad run may have written.  Attractions must live at
+        # attractions/<slug>/<slug>.lua; a root-level <slug>.lua is always wrong.
+        if _blueprint_iteration == 1 and ctx.project_root:
+            import re as _re_cleanup
+            _cl_prompt = getattr(ctx, 'user_prompt', '') or ''
+            _cl_slug_raw = ""
+            # Try to extract a slug from the prompt (same heuristic as scope classifier)
+            _cl_m = _re_cleanup.search(r'\b([a-z][a-z0-9_]{2,}(?:\s+[a-z][a-z0-9_]{2,})?)\b', _cl_prompt.lower())
+            if _cl_m:
+                _cl_slug_raw = _cl_m.group(1).strip()
+            if _cl_slug_raw:
+                _cl_slug = _re_cleanup.sub(r'[^\w]+', '_', _cl_slug_raw).strip('_')
+                if _cl_slug:
+                    for _bad_name in (f"{_cl_slug}.lua", f"{_cl_slug.replace('_', '')}.lua"):
+                        _bad_path = ctx.project_root / _bad_name
+                        if _bad_path.is_file():
+                            try:
+                                _bad_path.unlink()
+                                print(
+                                    f"  [Blueprint Loop] 🗑️  Removed stale root-level artifact: "
+                                    f"{_bad_name} (attractions belong in attractions/{_cl_slug}/{_cl_slug}.lua)"
+                                )
+                            except OSError as _e:
+                                print(f"  [Blueprint Loop] ⚠️  Could not remove {_bad_name}: {_e}")
+
+        ctx = run_fetches(ctx)
+        if ctx.final_output:
+            return ctx.final_output
+
+        # ── Phase 0.9: Pre-Decomposition Architect Pass ───────────────────────
+        # Runs AFTER run_fetches so scope/GDD context is available, but BEFORE
+        # run_tasks so every agent benefits from the shared design document.
+        # Skipped on blueprint continuation iterations (design already present).
+        _design_was_fresh = False
+        try:
+            from mesh_architect import run_architect_pass
+            _design_before = getattr(ctx, 'attraction_design', None)
+            ctx = run_architect_pass(ctx)
+            _design_after = getattr(ctx, 'attraction_design', None)
+            _design_was_fresh = (_design_before is None and _design_after is not None)
+        except Exception as _arch_err:
+            print(f"  [Kernel] ⚠ Architect pass skipped (import/runtime error): {_arch_err}")
+
+        # ── Phase 0.95: Blueprint Approval Gate ──────────────────────────────
+        # When the architect pass produced a brand-new design document this
+        # iteration, pause and show it to the human before task decomposition
+        # begins.  The human can approve (continue), reject (abort), or skip
+        # (proceed without a design doc so the Director has full freedom).
+        if _design_was_fresh and getattr(ctx, 'attraction_design', None) is not None:
+            _design = ctx.attraction_design
+            print(f"\n{'='*70}")
+            print(f"  🎨 BLUEPRINT APPROVAL — Review the Architect's design document")
+            print(f"{'='*70}")
+            try:
+                print(_design.to_context_block())
+            except Exception:
+                print(str(_design))
+            print(f"\n{'─'*70}")
+            print("  This design will guide every task agent in this run.")
+            print("  a — Approve and continue (recommended)")
+            print("  r — Reject and abort pipeline")
+            print("  s — Skip design (run without a design document)")
+            print(f"{'─'*70}")
+            from pipeline import AUTO_APPROVE_GATES as _auto_gates
+            if _auto_gates:
+                print("  [Blueprint Gate] ✓ Design auto-approved (AUTO_APPROVE_GATES=True).")
+            else:
+                while True:
+                    try:
+                        _bp_choice = input("\nBlueprint approval [a/r/s]: ").strip().lower()
+                    except (KeyboardInterrupt, EOFError):
+                        _bp_choice = 'r'
+                    if _bp_choice in ('a', 'approve', 'yes', 'y'):
+                        print("  [Blueprint Gate] ✓ Design approved — proceeding to task decomposition.")
+                        break
+                    elif _bp_choice in ('r', 'reject', 'no', 'n'):
+                        print("  [Blueprint Gate] ⛔ Design rejected — aborting pipeline.")
+                        ctx.final_output = "Pipeline aborted: blueprint rejected by user."
+                        return ctx.final_output
+                    elif _bp_choice in ('s', 'skip'):
+                        print("  [Blueprint Gate] ⏭ Design skipped — pipeline will run without a design document.")
+                        ctx.attraction_design = None
+                        break
+                    else:
+                        print("  Invalid input. Enter 'a' to approve, 'r' to reject, or 's' to skip.")
+
+        # ── Phase 4: Task Execution ──
+        ctx = run_tasks(ctx)
+
+        # ── VRAM Abort Guard: Skip Phases 5–8 if TPS watchdog fired ──
+        # If the VRAM Circuit Breaker in run_tasks detected token speed below
+        # 2.0 tok/s, ctx.final_verdict is set to "VRAM_OVERRUN" and all
+        # remaining waves are aborted. We must NOT proceed to Phases 5–8
+        # because that will immediately load models and trigger another
+        # cascade of VRAM overruns (as seen in the Architect Syntax Fix loop).
+        if getattr(ctx, 'final_verdict', None) == "VRAM_OVERRUN":
+            print(f"\n  [VRAM Abort Guard] ⛔ Pipeline aborted during task execution "
+                  f"(VRAM overrun). Skipping Phases 5–8.\n")
+            output_path = PROJECT_ROOT / f"pipeline_abort_{datetime.now():%Y%m%d_%H%M%S}.md"
+            atomic_write_text(output_path, ctx.final_output)
+            print(f"  Abort report saved to {output_path.name}")
+            return ctx.final_output
+
+        # ── Phases 5–8: Code Merge, Review, Consensus, Final Approval ──
+        # run_code_merge handles revision-required retry internally (inside
+        # _handle_approved in mesh_finalize.py) before returning to this loop.
+        ctx = run_code_merge(ctx)
+
+        # Write per-iteration output file atomically
+        output_path = PROJECT_ROOT / f"pipeline_output_{datetime.now():%Y%m%d_%H%M%S}.md"
         atomic_write_text(output_path, ctx.final_output)
-        print(f"  Abort report saved to {output_path.name}")
-        return ctx.final_output
+        print(f"\n{'='*60}")
+        print(f"  Output saved to {output_path.name}")
+        print(f"{'='*60}")
 
-    # ── Phases 5–8: Code Merge, Review, Consensus, Final Approval ──
-    ctx = run_code_merge(ctx)
+        # If the finalize phase signalled that the blueprint has more tasks,
+        # loop back and process the next one automatically.
+        if getattr(ctx, '_blueprint_continue', False):
+            ctx._blueprint_continue = False
+            continue
 
-    # Write output file atomically
-    output_path = PROJECT_ROOT / f"pipeline_output_{datetime.now():%Y%m%d_%H%M%S}.md"
-    atomic_write_text(output_path, ctx.final_output)
-    print(f"\n{'='*60}")
-    print(f"  Output saved to {output_path.name}")
-    print(f"{'='*60}")
+        # Blueprint complete (or no blueprint) — exit the loop.
+        break
 
     return ctx.final_output
 

@@ -5,7 +5,7 @@ with the fresh line numbers from docs/pipeline_anchor_index.md.
 
 Strategy:
   1. Load the fresh anchor index as a {name: line_number} lookup
-  2. For each doc, find every L\d+ and L\d+-\d+ reference
+  2. For each doc, find every L<N> and L<N>-<N> reference
   3. Map the surrounding context to a name in the anchor lookup
   4. Replace stale line numbers with fresh ones
   5. Also update the "4489 lines" count in the header
@@ -409,12 +409,12 @@ manual_refs = [
 
 
 def resolve_line_for_ref(ref_text, line_num):
-    """Given a L\d+ pattern, try to resolve its context to determine what it refers to."""
+    """Given a L<N> pattern, try to resolve its context to determine what it refers to."""
     return None
 
 
 def replace_line_refs(text, doc_name):
-    """Replace L\d+ and L\d+-\d+ patterns with fresh line numbers using the anchor lookup."""
+    """Replace L<N> and L<N>-<N> patterns with fresh line numbers using the anchor lookup."""
     
     # Pattern for L\d+-\d+ and L\d+
     range_pattern = re.compile(r'L(\d+)-(\d+)')

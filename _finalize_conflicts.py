@@ -33,7 +33,27 @@ def _run_conflict_resolution(ctx: PipelineContext) -> PipelineContext:
     _conf_system = _conf_domain.get('system_prompt', 'You are a conflict resolution mediator.')
 
     ctx.conflict_resolutions = []
-    for veto in ctx.all_vetos:
+
+    # ── De-duplicate vetos by (from, target, reason) ────────────────────────
+    # A single task output that loops delegation signals can inject dozens of
+    # identical VETO entries.  Resolve each unique (from, target, reason) once.
+    _MAX_CONFLICT_CALLS = 6
+    seen_veto_keys: set = set()
+    deduped_vetos: list = []
+    for v in ctx.all_vetos:
+        _key = (v.get('from', ''), v.get('target', ''), v.get('reason', ''))
+        if _key not in seen_veto_keys:
+            seen_veto_keys.add(_key)
+            deduped_vetos.append(v)
+    if len(deduped_vetos) < len(ctx.all_vetos):
+        print(f"  [Conflict] Deduplicated {len(ctx.all_vetos)} veto(s) → "
+              f"{len(deduped_vetos)} unique conflict(s).")
+    if len(deduped_vetos) > _MAX_CONFLICT_CALLS:
+        print(f"  [Conflict] ⚠ Capping conflict calls at {_MAX_CONFLICT_CALLS} "
+              f"(was {len(deduped_vetos)} after dedup).")
+        deduped_vetos = deduped_vetos[:_MAX_CONFLICT_CALLS]
+
+    for veto in deduped_vetos:
         target = resolve_agent_name(veto["target"])
         from_agent = resolve_agent_name(veto["from"])
 
@@ -42,7 +62,7 @@ def _run_conflict_resolution(ctx: PipelineContext) -> PipelineContext:
             f"**From:** {ALL_DOMAINS.get(from_agent, {}).get('name', from_agent)}\n"
             f"**Target:** {ALL_DOMAINS.get(target, {}).get('name', target)}\n"
             f"**Reason:** {veto['reason']}\n\n"
-            f"## Original Feature Request\n{ctx.user_prompt}\n\n"
+            f"## Original Feature Request\n{ctx.canonical_request}\n\n"
             f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
         )
 
@@ -73,7 +93,7 @@ def _run_conflict_resolution(ctx: PipelineContext) -> PipelineContext:
             f"**From:** {ALL_DOMAINS.get(from_agent, {}).get('name', from_agent)}\n"
             f"**Target:** {ALL_DOMAINS.get(target, {}).get('name', target)}\n"
             f"**Concern:** {obj['concern']}\n\n"
-            f"## Original Feature Request\n{ctx.user_prompt}\n\n"
+            f"## Original Feature Request\n{ctx.canonical_request}\n\n"
         )
 
         if obj["task_id"] in ctx.all_results_dict:

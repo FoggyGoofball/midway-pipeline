@@ -261,6 +261,101 @@ class OffloadStore:
                   f"({current // 1024} KB -> {self.store_size() // 1024} KB)")
         return evicted
 
+    # ── MemGPT-style session window persistence ───────────────────────────────
+
+    def _session_path(self, session_id: str) -> "Path":
+        return self.store_dir / f"session_{session_id}.json"
+
+    def store_message_window(self, session_id: str,
+                             messages: "List[Dict[str, Any]]") -> bool:
+        """Persist a full Ollama messages array to disk for a session.
+
+        The entire list is written atomically as a single JSON file.  Callers
+        may checkpoint as often as needed; each call overwrites the previous
+        snapshot for the same session_id.
+
+        Args:
+            session_id: Opaque string key (e.g. ``uuid4().hex[:12]``).
+            messages:   List of ``{role, content}`` dicts.
+
+        Returns:
+            True on success, False on I/O error.
+        """
+        path = self._session_path(session_id)
+        try:
+            payload = {
+                "session_id": session_id,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "message_count": len(messages),
+                "messages": messages,
+            }
+            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            return True
+        except OSError as exc:
+            print(f"  [OffloadStore] !! store_message_window failed for '{session_id}': {exc}")
+            return False
+
+    def load_message_window(self, session_id: str) -> "Optional[List[Dict[str, Any]]]":
+        """Load a persisted messages array from disk.
+
+        Args:
+            session_id: The same key used in ``store_message_window``.
+
+        Returns:
+            The messages list, or ``None`` if not found / corrupt.
+        """
+        path = self._session_path(session_id)
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data.get("messages")
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"  [OffloadStore] !! load_message_window failed for '{session_id}': {exc}")
+            return None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Remove a persisted session window from disk.
+
+        Args:
+            session_id: The session key to delete.
+
+        Returns:
+            True if removed or not present, False on error.
+        """
+        path = self._session_path(session_id)
+        try:
+            if path.is_file():
+                path.unlink()
+            return True
+        except OSError as exc:
+            print(f"  [OffloadStore] !! delete_session failed for '{session_id}': {exc}")
+            return False
+
+    def store_evicted_turn(self, session_id: str, turn_index: int,
+                           role: str, content: str) -> str:
+        """Persist a single evicted message turn to the offload store.
+
+        Returns the block_id so the caller can embed a PAGE_IN hint stub.
+
+        Args:
+            session_id:  The owning session.
+            turn_index:  Original position in the messages array (for ordering).
+            role:        ``'user'`` or ``'assistant'``.
+            content:     The original message content.
+
+        Returns:
+            The block_id string for the stored turn.
+        """
+        block_id = f"turn_{session_id}_{turn_index:04d}"
+        header = f"Evicted turn [{turn_index}] ({role}) from session {session_id}"
+        self.store_block(
+            block_id=block_id,
+            header=header,
+            body_lines=[content],
+        )
+        return block_id
+
 
 # Singleton instance
 _OFFLOAD_STORE = OffloadStore()
