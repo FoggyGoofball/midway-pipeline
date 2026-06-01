@@ -409,9 +409,41 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         _task_code_budget = max(400, _code_budget_total // max(1, len(_task_items)))
 
         inline_code_blocks: list[str] = []
+        # -- Check if we have any merged file artifacts to show instead of fragments --
+        _merged_registry = getattr(ctx, 'merged_file_registry', {})
+        # Build reverse map: task_id -> merged_key (so we can skip individual fragments)
+        _tid_to_merged: Dict[str, str] = {}
+        for _rel_path, _mkey in _merged_registry.items():
+            for _t in ctx.task_map.values():
+                if getattr(_t, 'target_file', None) == _rel_path and _t.task_id in ctx.all_results_dict:
+                    _tid_to_merged[_t.task_id] = _mkey
+
+        # Track which merged keys have already been emitted so we show each once
+        _emitted_merged: set = set()
+
         for _tid, _out in _task_items:
             _task_obj = ctx.task_map.get(_tid)
             _domain = (_task_obj.agent if _task_obj and getattr(_task_obj, 'agent', None) else "?")
+
+            # If this task has a merged counterpart, show the merged version instead
+            _mkey = _tid_to_merged.get(_tid)
+            if _mkey and _mkey not in _emitted_merged:
+                _merged_out = ctx.all_results_dict.get(_mkey, _out)
+                _rel_p = _mkey.removeprefix("merged:")
+                # Show merged file once, labelled clearly
+                _snippet = _merged_out[:_task_code_budget * 2]
+                if len(_merged_out) > _task_code_budget * 2:
+                    _snippet += "\n…[merged output truncated]"
+                inline_code_blocks.append(
+                    f"### [MERGED FILE: {_rel_p}] (combines: {[t for t, m in _tid_to_merged.items() if m == _mkey]})\n{_snippet}"
+                )
+                _emitted_merged.add(_mkey)
+                continue
+            elif _mkey and _mkey in _emitted_merged:
+                # This task's output is already represented by the merged block — skip
+                continue
+
+            # No merge — show individual task output as before
             if len(_out) > _task_code_budget:
                 _snippet_overflow = _out[_task_code_budget:]
                 _snippet = _out[:_task_code_budget]
@@ -1032,6 +1064,27 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             except Exception as _pf_refresh_err:
                 print(f"  [Post-Fix Preflight] ⚠ Guard refresh failed ({_pf_refresh_err}) — "
                       f"retaining previous pre_flight_errors state.")
+
+            # ── Post-Fix Re-Merge: propagate fix-cycle corrections into merged artifacts ──
+            # If any fixed task contributes to a shared-file merge, regenerate the
+            # merged artifact so the next review cycle sees updated unified code.
+            _merged_reg = getattr(ctx, 'merged_file_registry', {})
+            if _merged_reg:
+                _fixed_tids = set(domain_fix_outputs.keys())
+                _needs_remerge = {
+                    rel_p for rel_p, _mkey in _merged_reg.items()
+                    if any(
+                        getattr(ctx.task_map.get(t), 'target_file', None) == rel_p
+                        for t in _fixed_tids
+                    )
+                }
+                if _needs_remerge:
+                    print(f"  [Post-Fix Re-Merge] Re-merging {len(_needs_remerge)} shared file(s) after fix cycle {ctx.review_cycle}...")
+                    from _finalize_conflicts import merge_shared_file_outputs as _remerge
+                    # Temporarily narrow task_map to only shared-file tasks so _remerge
+                    # does not re-process unrelated tasks.
+                    ctx = _remerge(ctx)
+                    print(f"  [Post-Fix Re-Merge] ✅ Re-merge complete.")
 
             # ── Insanity Detector (similarity-based) ──────────────
             normalized = _normalize_fix_fingerprint(issues_text + ctx.conflicts_str)

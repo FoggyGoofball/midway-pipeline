@@ -552,14 +552,35 @@ def _handle_approved(ctx: PipelineContext) -> None:
     # Inline the actual generated code (up to 2000 chars/task) so the final
     # approval model can see real code rather than the PAGE_IN TOC, which
     # it cannot execute and which previously caused guaranteed REVISION REQUIRED.
+    # Prefer merged file artifacts when available, so the approval model sees
+    # the cohesive final file rather than individual task fragments.
     _FA_CODE_BUDGET = 2000
     _FA_MAX_TASKS = 10
     _fa_code_blocks: list[str] = []
-    for _tid, _out in list(ctx.all_results_dict.items())[:_FA_MAX_TASKS]:
+    _merged_reg_fa = getattr(ctx, 'merged_file_registry', {})
+    # Emit merged files first
+    for _rel_p, _mkey in list(_merged_reg_fa.items()):
+        _merged_content = ctx.all_results_dict.get(_mkey, "")
+        if _merged_content:
+            _snip = _merged_content[:_FA_CODE_BUDGET] + ("…[truncated]" if len(_merged_content) > _FA_CODE_BUDGET else "")
+            _fa_code_blocks.append(f"### [MERGED FILE: {_rel_p}]\n{_snip}")
+    # Then non-merged tasks (skip task_ids that have a merged counterpart)
+    _merged_tids: set = set()
+    for _rel_p in _merged_reg_fa:
+        for _t in ctx.task_map.values():
+            if getattr(_t, 'target_file', None) == _rel_p:
+                _merged_tids.add(_t.task_id)
+    _remaining_slots = max(0, _FA_MAX_TASKS - len(_fa_code_blocks))
+    for _tid, _out in list(ctx.all_results_dict.items())[:_FA_MAX_TASKS + len(_merged_tids)]:
+        if _tid in _merged_tids or _tid.startswith("merged:"):
+            continue
+        if _remaining_slots <= 0:
+            break
         _tobj = ctx.task_map.get(_tid)
         _dom = (_tobj.agent if _tobj and getattr(_tobj, 'agent', None) else "?")
         _snip = _out[:_FA_CODE_BUDGET] + ("…[truncated]" if len(_out) > _FA_CODE_BUDGET else "")
         _fa_code_blocks.append(f"### [{_tid}] [{_dom}]\n{_snip}")
+        _remaining_slots -= 1
     _fa_inline_code = "\n\n".join(_fa_code_blocks)
 
     # If pre-flight violations were still unresolved when the review cycle
