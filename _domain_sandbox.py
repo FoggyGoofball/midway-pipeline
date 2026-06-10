@@ -1,5 +1,5 @@
 """
-_domain_sandbox.py — Directive A: Absolute File-Level Sandboxing (Domain Enforcement)
+_domain_sandbox.py  Directive A: Absolute File-Level Sandboxing (Domain Enforcement)
 =====================================================================================
 Provides file-extension sandboxing validation for all agent outputs.
 
@@ -28,25 +28,25 @@ __all__ = [
 ]
 
 
-# ── Canonical File Extension Mapping ──────────────────────────────────────
+# -- Canonical File Extension Mapping --------------------------------------
 # Maps domain keys to the set of file extensions they are ALLOWED to modify.
 # Read-only domains (DOC, CONF, TRIBUNAL, LIBRARIAN, REVIEWER) have empty sets
-# — any SEARCH/REPLACE block from them is a violation.
+#  any SEARCH/REPLACE block from them is a violation.
 
 DOMAIN_ALLOWED_EXTENSIONS: dict = {
     "C++": {".cpp", ".h", ".hpp", ".c", ".hxx", ".cxx"},
     "PHYS": {".cpp", ".h", ".hpp", ".c", ".hxx", ".cxx"},
     "Lua": {".lua"},
     "SHADER": {".glsl", ".vert", ".frag", ".geom"},
-    "DOC": set(),       # read-only — no file writes allowed
-    "CONF": set(),      # read-only — no file writes allowed
-    "TRIBUNAL": set(),  # read-only — no file writes allowed
-    "LIBRARIAN": set(), # read-only — no file writes allowed
-    "REVIEWER": set(),  # read-only — no file writes allowed
-    "DIRECTOR": set(),  # read-only — no file writes allowed
-    "SYNTAX_GATE": set(),  # read-only — no file writes allowed
-    "INTENT_CLASSIFIER": set(),  # read-only — no file writes allowed
-    "DIAGNOSTIC": set(),  # read-only — no file writes allowed
+    "DOC": set(),       # read-only  no file writes allowed
+    "CONF": set(),      # read-only  no file writes allowed
+    "TRIBUNAL": set(),  # read-only  no file writes allowed
+    "LIBRARIAN": set(), # read-only  no file writes allowed
+    "REVIEWER": set(),  # read-only  no file writes allowed
+    "DIRECTOR": set(),  # read-only  no file writes allowed
+    "SYNTAX_GATE": set(),  # read-only  no file writes allowed
+    "INTENT_CLASSIFIER": set(),  # read-only  no file writes allowed
+    "DIAGNOSTIC": set(),  # read-only  no file writes allowed
 }
 
 
@@ -55,7 +55,7 @@ def get_allowed_extensions(domain_key: str) -> set:
     return DOMAIN_ALLOWED_EXTENSIONS.get(domain_key, set())
 
 
-# ── Regex Patterns for Detecting File Paths ──────────────────────────────
+# -- Regex Patterns for Detecting File Paths ------------------------------
 
 _FILE_PATH_HEADING = re.compile(
     r'###\s*File:\s*([^\s\n]+)', re.IGNORECASE
@@ -120,7 +120,7 @@ def validate_domain_file_write(
     """
     allowed_exts = get_allowed_extensions(domain_key)
 
-    # Read-only domain — any file write attempt is a violation
+    # Read-only domain  any file write attempt is a violation
     if not allowed_exts:
         referenced = extract_file_paths_from_output(output_text)
         if referenced:
@@ -195,8 +195,8 @@ def reject_cross_domain_output(
 
     Returns:
         Tuple of (is_clean: bool, safe_output: str)
-            is_clean — True if no cross-domain violations found.
-            safe_output — Original output if clean, or truncated safe message.
+            is_clean  True if no cross-domain violations found.
+            safe_output  Original output if clean, or truncated safe message.
     """
     is_valid, violations = validate_domain_file_write(domain_key, output_text)
     if is_valid:
@@ -207,7 +207,7 @@ def reject_cross_domain_output(
     for v in violations:
         print(f"  [SANDBOX] DOMAIN VIOLATION: {v}")
 
-    # Truncate — return a safe stub that won't poison the next cycle
+    # Truncate  return a safe stub that won't poison the next cycle
     ext_list = list(get_allowed_extensions(domain_key))
     violations_str = "\n".join(f"- {v}" for v in violations)
     safe_stub = (

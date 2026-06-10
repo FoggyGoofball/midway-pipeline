@@ -1,8 +1,8 @@
 """
-File reference cache — parse explicit file references from prompts,
+File reference cache  parse explicit file references from prompts,
 fetch referenced file content, and maintain an LRU cache.
 
-No async/await — purely synchronous file I/O.
+No async/await  purely synchronous file I/O.
 
 Directive A: VRAM Stub Support
 When a referenced file exceeds VRAM_STUB_CHAR_THRESHOLD characters, it is
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
-# ── Directive A: VRAM Stub Threshold ──────────────────────────────────────
+# -- Directive A: VRAM Stub Threshold --------------------------------------
 # Files exceeding this char count will be replaced with <VRAM_STUB> pointers.
 VRAM_STUB_CHAR_THRESHOLD: int = 2000
 
@@ -144,7 +144,7 @@ def fetch_referenced_files(refs: List[Dict[str, str]]) -> str:
         }
         lang = lang_map.get(ext, "")
 
-        # ── Directive A: VRAM Stub injection ──────────────────────────
+        # -- Directive A: VRAM Stub injection --------------------------
         # If the selected content exceeds the threshold, inject a
         # <VRAM_STUB> pointer instead of the full text.
         # The agent can later <invoke_kernel><action>PAGE_IN</action>

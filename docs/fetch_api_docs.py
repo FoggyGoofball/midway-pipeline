@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Midway to Nowhere â€” Offline API Documentation Acquisition Script
+Midway to Nowhere  Offline API Documentation Acquisition Script
 =================================================================
 Downloads, strips, and compresses API documentation for the project's
 tech stack into context-token-efficient markdown files with anchors.
 
-Dependencies: Python 3.8+ (stdlib only â€” no pip installs needed)
+Dependencies: Python 3.8+ (stdlib only  no pip installs needed)
 
 Usage:
     python fetch_api_docs.py                    # Fetch all docs from web
@@ -22,8 +22,8 @@ Output:
     docs/api_index.md
 
 Implementation is split for readability:
-    docs/_doc_parsers.py    â€” HTML/C++ parsers and fetch helpers
-    docs/_doc_generators.py â€” per-library markdown generators
+    docs/_doc_parsers.py     HTML/C++ parsers and fetch helpers
+    docs/_doc_generators.py  per-library markdown generators
 """
 import sys
 from pathlib import Path
@@ -36,7 +36,7 @@ TOKEN_BUDGET = 8000  # Max tokens per file before splitting
 if str(DOCS_DIR) not in sys.path:
     sys.path.insert(0, str(DOCS_DIR))
 
-# â”€â”€ Source configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Source configuration ──────────────────────────────────────────────────────
 
 SOURCES = {
     "jolt": {
@@ -141,7 +141,7 @@ SOURCES = {
     },
 }
 
-# â”€â”€ Delegated helpers â€” imported here so callers only need this one file â”€â”€â”€â”€â”€
+# ── Delegated helpers  imported here so callers only need this one file ─────
 
 from _doc_parsers import fetch_url, save_raw, estimate_tokens
 from _doc_generators import (
@@ -154,7 +154,7 @@ from _doc_generators import (
 )
 
 
-# â”€â”€ Orchestration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Orchestration ─────────────────────────────────────────────────────────────
 
 def fetch_all() -> None:
     """Fetch all raw sources from the web."""

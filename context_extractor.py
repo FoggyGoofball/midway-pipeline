@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-# ── Directive A: VRAM Stub Threshold ────────────────────────────────────────
+# -- Directive A: VRAM Stub Threshold ----------------------------------------
 # Files/sections exceeding this char count will be replaced with <VRAM_STUB>
 # instead of being injected as raw text into the LLM context window.
 VRAM_STUB_CHAR_THRESHOLD: int = 2000
@@ -85,12 +85,12 @@ def extract_project_context(prompt_text: str,
     if not header_matches:
         return content[:4000] # Fallback if no headers exist
 
-    # ── Scope-aware deterministic fast path ──────────────────────────────
+    # -- Scope-aware deterministic fast path ------------------------------
     # For NEW_ATTRACTION and MODIFY_ATTRACTION we know exactly what to pull:
     #   1. The attraction's own GDD section (by name), if it exists.
     #   2. The Economy/Dual-Currency cross-cutting section.
     #   3. The Lifecycle/Script-Lifecycle cross-cutting section.
-    # The keyword pass is skipped entirely — it cannot distinguish skeeball
+    # The keyword pass is skipped entirely  it cannot distinguish skeeball
     # from Plinko because words like "player", "balls", "scoring" appear
     # everywhere in a game-design document.
     _CROSS_CUTTING_PATTERNS = [
@@ -103,7 +103,7 @@ def extract_project_context(prompt_text: str,
         Returns None only if no headers were matched at all (signals caller to fall through)."""
         _chosen: list[int] = []
 
-        # 1. Named attraction section — two-pass search:
+        # 1. Named attraction section  two-pass search:
         #    Pass A: case-insensitive substring match on markdown header text.
         #    Pass B: if no header matched, find the bold/inline mention in the
         #            body (e.g. "**Skeeball:**") and walk back to the nearest
@@ -119,7 +119,7 @@ def extract_project_context(prompt_text: str,
                     break
 
             if not _header_hit:
-                # Pass B — look for **Name:** or *Name* or bare Name as a
+                # Pass B  look for **Name:** or *Name* or bare Name as a
                 # prominent in-body label anywhere in the document.
                 _inline_pat = re.compile(
                     r'\*{1,2}' + re.escape(target_name) + r'[^*\n]{0,10}\*{1,2}|'
@@ -164,7 +164,7 @@ def extract_project_context(prompt_text: str,
                         _chosen.append(-1)  # sentinel: use raw paragraph, not full section
                         _inline_raw_slice = _inline_para
                     else:
-                        # No preceding header — return the raw surrounding text directly.
+                        # No preceding header  return the raw surrounding text directly.
                         _start_c = max(0, _inline_m.start() - 200)
                         _end_c = min(len(content), _inline_m.end() + 1500)
                         print(f"  [Context Extractor] Deterministic attraction match (raw inline): "
@@ -172,7 +172,7 @@ def extract_project_context(prompt_text: str,
                         _chosen.append(-1)  # sentinel handled below
                         _inline_raw_slice = content[_start_c:_end_c].strip()
 
-        # 2. Cross-cutting sections — scan every header for each pattern.
+        # 2. Cross-cutting sections  scan every header for each pattern.
         for _pat in _CROSS_CUTTING_PATTERNS:
             for _i, _m in enumerate(header_matches):
                 if _pat.search(_m.group(2)):
@@ -208,8 +208,8 @@ def extract_project_context(prompt_text: str,
         _result = _deterministic_extract(attraction_name)
         if _result is not None:
             return _result
-        # attraction_name was empty or nothing matched — fall through to keyword pass
-        print(f"  [Context Extractor] Deterministic pass found nothing for '{attraction_name}' — falling back to keyword pass")
+        # attraction_name was empty or nothing matched  fall through to keyword pass
+        print(f"  [Context Extractor] Deterministic pass found nothing for '{attraction_name}'  falling back to keyword pass")
 
 
     parts = re.split(r'\[block\]', prompt_text, maxsplit=1, flags=re.IGNORECASE)
@@ -237,7 +237,7 @@ def extract_project_context(prompt_text: str,
     if blocked_intent:
         blocked_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', blocked_intent.lower())) - stop_words
 
-    # ── Brand-word suppression ────────────────────────────────────────────
+    # -- Brand-word suppression --------------------------------------------
     # Words derived from the document title (e.g. "midway", "nowhere") appear
     # in almost every section header and inflate match scores for unrelated
     # sections.  Collect them from the first H1 header and treat single-word
@@ -248,7 +248,7 @@ def extract_project_context(prompt_text: str,
         _brand_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', _h1.lower())) - stop_words
     # Also treat generic structural tokens as brand-like for scoring purposes
     _brand_words.update({"gdd", "todo", "doc", "docs", "spec", "notes"})
-    # Also derive high-frequency domain vocabulary by scanning all H1–H2 header
+    # Also derive high-frequency domain vocabulary by scanning all H1H2 header
     # words: if a word appears in many top-level headers it is structural rather
     # than specific and should not trigger body-content matches.
     _header_word_freq: dict = {}
@@ -261,7 +261,7 @@ def extract_project_context(prompt_text: str,
         if _c >= _hdr_brand_threshold:
             _brand_words.add(_w)
 
-    # ── Structural-noise suppression ──────────────────────────────────────
+    # -- Structural-noise suppression --------------------------------------
     # These section types are navigation/metadata aids and never contain
     # useful mechanics detail.  Skip them regardless of keyword matches.
     _STRUCTURAL_HEADER_RE = re.compile(
@@ -269,9 +269,9 @@ def extract_project_context(prompt_text: str,
         re.IGNORECASE,
     )
 
-    # ── Pre-build per-section body lookup for body-content scoring ────────
+    # -- Pre-build per-section body lookup for body-content scoring --------
     # Sections whose headers don't mention skeeball/etc. may still contain
-    # the target noun in their body text — we want those too.
+    # the target noun in their body text  we want those too.
     # We strip leading list/ToC lines (lines starting with whitespace+dash/number
     # and containing a section reference) so a ToC listing "skeeball" does not
     # cause every section in the document to match via body-content scoring.
@@ -305,7 +305,7 @@ def extract_project_context(prompt_text: str,
         if not header_match_tokens:
             continue
 
-        # ── Quality gate: suppress brand-only matches ─────────────────────
+        # -- Quality gate: suppress brand-only matches ---------------------
         # If the entire intersection consists solely of brand/title words,
         # require that the section body also contains at least one non-brand
         # prompt word before including it.  This prevents "9. Midway Expansion
@@ -322,9 +322,9 @@ def extract_project_context(prompt_text: str,
 
         selected_indices.append(i)
 
-    # ── Body-content scoring: include sections whose body contains prompt nouns
+    # -- Body-content scoring: include sections whose body contains prompt nouns
     # even if the header didn't match (catches new attractions not yet in headers)
-    # Only fire on words that are not also high-frequency document terms — a word
+    # Only fire on words that are not also high-frequency document terms  a word
     # that appears in the body of more than half the sections is too generic to
     # use as a discriminating signal (e.g. "attraction" in a game-design doc).
     _non_brand_prompt = prompt_words - _brand_words
@@ -358,7 +358,7 @@ def extract_project_context(prompt_text: str,
 
     selected_indices = sorted(set(selected_indices))
 
-    # ── Parent-section expansion ──────────────────────────────────────────
+    # -- Parent-section expansion ------------------------------------------
     # When a matched section is a very short intro header (< 500 chars),
     # automatically include its immediate child sections so that mechanic
     # detail nested underneath isn't orphaned.
@@ -381,10 +381,10 @@ def extract_project_context(prompt_text: str,
 
     selected_indices = sorted(set(expanded_indices))
 
-    # ── phi3.5 Semantic Pruning Gate (GENERAL scope only) ─────────────────
+    # -- phi3.5 Semantic Pruning Gate (GENERAL scope only) -----------------
     # When the keyword pass produced more than 4 candidates the list is
     # likely polluted with tangential sections.  Call phi3.5 with only the
-    # candidate *titles* (not their bodies — keeping the payload tiny) and
+    # candidate *titles* (not their bodies  keeping the payload tiny) and
     # ask it to return the subset that is genuinely needed.
     _SEMANTIC_PRUNE_THRESHOLD = 4
     if len(selected_indices) > _SEMANTIC_PRUNE_THRESHOLD:
@@ -400,7 +400,7 @@ def extract_project_context(prompt_text: str,
                 "You are a relevance filter for a game-design document. "
                 "You will receive a user request and a numbered list of GDD section titles. "
                 "Return ONLY the numbers of sections that are directly necessary to implement "
-                "the request — omit any section about a different named attraction or mini-game, "
+                "the request  omit any section about a different named attraction or mini-game, "
                 "narrative lore, onboarding, or meta-progression systems that are not yet implemented. "
                 "ALWAYS keep sections about Economy, Dual-Currency, Streak Protocol, or Script Lifecycle "
                 "because every attraction depends on them. "
@@ -439,7 +439,7 @@ def extract_project_context(prompt_text: str,
         end_pos = header_matches[1].start() if len(header_matches) > 1 else len(content)
         return content[start_pos:end_pos].strip()
 
-    # ── Directive A: VRAM Stub Injection ──────────────────────────────────
+    # -- Directive A: VRAM Stub Injection ----------------------------------
     # If any matched section exceeds VRAM_STUB_CHAR_THRESHOLD, replace it
     # with a <VRAM_STUB> pointer so agents can PAGE_IN on demand. This
     # prevents context window saturation from large GDD sections.

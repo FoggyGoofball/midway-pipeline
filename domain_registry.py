@@ -1,18 +1,18 @@
 """
-Domain registry — agent name resolution, alias maps, system prompt assembly.
+Domain registry  agent name resolution, alias maps, system prompt assembly.
 Provides the canonical SHAPE of domain configurations (keys, model routing,
 file extensions, ledger paths, ready flags).  All project-specific content
 (system_prompt strings, technology names, rule references) lives exclusively
 in the active cartridge.  The kernel never reads project names from here.
 
-No async/await — purely synchronous dict lookups and string formatting.
+No async/await  purely synchronous dict lookups and string formatting.
 """
 
 from __future__ import annotations
 from typing import Dict, Optional, Any
 from _domain_sandbox import build_sandbox_constraint
 
-# ── Directive B: Virtual Memory Protocol (imported from _prompts) ──────────
+# -- Directive B: Virtual Memory Protocol (imported from _prompts) ----------
 # Injected into every agent's system prompt so they are aware of VRAM Stubs
 # and the <PAGE_IN>/<PAGE_OUT> paging syntax.
 try:
@@ -22,16 +22,16 @@ except ImportError:
     _CODING_MANDATES = ""
 
 
-# ── Constants (shared from pipeline.py top section) ─────────────────────────
+# -- Constants (shared from pipeline.py top section) -------------------------
 # These constants are referenced by domain configurations below.
-# Qwen Coder 3.5 profile (9B) — uncomment when backend hardware supports it
+# Qwen Coder 3.5 profile (9B)  uncomment when backend hardware supports it
 # EXECUTION_MODEL = "qwen3.5:9b"
 # CODER_MODEL = "qwen3.5:9b"
 EXECUTION_MODEL = "qwen2.5-coder:7b"
 CODER_MODEL = "qwen2.5-coder:7b"
 REVIEWER_MODEL = "phi3:14b"
 REASONING_MODEL = REVIEWER_MODEL
-PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini — compresses large context before phi3:14b review
+PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
 LIBRARIAN_MODEL = EXECUTION_MODEL
 
 # Ledger protocol injected into every agent system prompt (memory/oracle usage)
@@ -45,12 +45,12 @@ LEDGER_PROTOCOL_RULE = (
     "The orchestrator automatically writes these blocks to your ledger file.\n"
     "Use the MEMORY ORACLE signal [QUERY:DOC:<query>] to retrieve past decisions "
     "that have fallen out of your active context window. "
-    "Do NOT use <invoke_kernel> tags for memory retrieval — those are only for VRAM paging.\n"
+    "Do NOT use <invoke_kernel> tags for memory retrieval  those are only for VRAM paging.\n"
 )
 # Backward-compat alias so any older caller that referenced the old name still works.
 LEDGER_MEMORY_RULE = LEDGER_PROTOCOL_RULE
 
-# ── Universal Orchestration Role Registry ────────────────────────────────
+# -- Universal Orchestration Role Registry --------------------------------
 # KERNEL CONTRACT: This registry contains ONLY language-agnostic orchestration
 # roles that exist regardless of which project or technology stack is loaded.
 # No language names, no framework names, no technology references of any kind.
@@ -78,7 +78,7 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
             "1. Read the original task specification.\n"
             "2. Read the implementing agent's output in full.\n"
             "3. Check every SEARCH/REPLACE block for correct format (no diff/unified diffs).\n"
-            "4. Check that the implementation addresses the task — no missing steps, no scope creep.\n"
+            "4. Check that the implementation addresses the task  no missing steps, no scope creep.\n"
             "5. Check that the output does not violate any architectural rule in the project ledgers.\n"
             "6. Check that no hallucinated APIs, non-existent files, or undefined symbols are referenced.\n\n"
             "OUTPUT FORMAT:\n"
@@ -99,7 +99,7 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "system_prompt": (
             "You are the Code Documentarian and Memory Oracle. "
             "You are the ultimate arbiter of API truth for this project.\n\n"
-            "MODE A — API DOCUMENTATION ORACLE:\n"
+            "MODE A  API DOCUMENTATION ORACLE:\n"
             "When an agent sends an ambiguous or hallucinated API call:\n"
             "1. Locate the relevant section in the project's documentation files.\n"
             "2. Extract the EXACT function signature, struct definition, or enum value.\n"
@@ -109,7 +109,7 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
             "  <corrected signature>\n"
             "  ## Source\n"
             "  <file>#L<start>-L<end>: <exact lines>\n\n"
-            "MODE B — MEMORY ORACLE (FETCH resolution):\n"
+            "MODE B  MEMORY ORACLE (FETCH resolution):\n"
             "When you receive [FETCH:docs/memory/<ledger>.md#<Header>]:\n"
             "1. Verify the header exists in the ledger file.\n"
             "2. Evaluate whether it is the best section for the requesting agent's task.\n"
@@ -130,7 +130,7 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "ready": True,
         "model": EXECUTION_MODEL,
         "allowed_extensions": [],
-        "description": "Instrumentation pass — injects logging without altering business logic",
+        "description": "Instrumentation pass  injects logging without altering business logic",
         "ledger": "docs/memory/qa_ledger.md",
         "name": "Observability Auditor",
         "system_prompt": (
@@ -138,9 +138,9 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
             "Your EXCLUSIVE directive is to instrument existing code with mandatory "
             "log statements using ONLY native Lua print(). "
             "You are FORBIDDEN from altering business logic.\n\n"
-            "LOGGING RULE — ABSOLUTE:\n"
+            "LOGGING RULE  ABSOLUTE:\n"
             "The ONLY permitted logging primitive is the native Lua built-in: print(...)\n"
-            "You are STRICTLY FORBIDDEN from calling any of the following — they do NOT "
+            "You are STRICTLY FORBIDDEN from calling any of the following  they do NOT "
             "exist in the engine bridge and will cause a phantom API rejection:\n"
             "  - sol.log_message(...)\n"
             "  - MidwayPhysics.log_message(...)\n"
@@ -164,7 +164,7 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "ready": True,
         "model": REASONING_MODEL,
         "allowed_extensions": [],
-        "description": "Conflict resolution mediator — resolves VETO/OBJECT disputes between agents",
+        "description": "Conflict resolution mediator  resolves VETO/OBJECT disputes between agents",
         "ledger": "docs/memory/conf_ledger.md",
         "name": "Conflict Resolution",
         "system_prompt": (
@@ -193,11 +193,11 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
         "ready": True,
         "model": REASONING_MODEL,
         "allowed_extensions": [],
-        "description": "Appellate Court — blind-reviews APPEAL signals between agents",
+        "description": "Appellate Court  blind-reviews APPEAL signals between agents",
         "ledger": "docs/memory/tribunal_ledger.md",
         "name": "Tribunal",
         "system_prompt": (
-            "You are the Tribunal Agent — a neutral appellate arbiter. "
+            "You are the Tribunal Agent  a neutral appellate arbiter. "
             "You do NOT write code. You do NOT implement features.\n\n"
             "When you receive an appeal:\n"
             "1. Read the implementing agent's output\n"
@@ -231,8 +231,8 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
             "## Past Session Search\n"
             "Use the Session Timeline (docs/memory/session_timeline.md) to search "
             "for previous decisions when a question references recent pipeline activity.\n"
-            "1. [SEARCH_MEMORY:<query>] — Search session_timeline.md and all ledgers.\n"
-            "2. [LEARN:<query>] — Consult architecture_ledger.md for long-term memory.\n\n"
+            "1. [SEARCH_MEMORY:<query>]  Search session_timeline.md and all ledgers.\n"
+            "2. [LEARN:<query>]  Consult architecture_ledger.md for long-term memory.\n\n"
             "## READ-ONLY POLICY\n"
             "You MUST NOT modify any files. You are a read-only retrieval agent.\n\n"
             "## [AUDIT] MODE\n"
@@ -247,7 +247,7 @@ ALL_DOMAINS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# ── Universal Orchestration Role Alias Map ───────────────────────────────
+# -- Universal Orchestration Role Alias Map -------------------------------
 # Maps common conversational names to canonical domain keys for the
 # language-agnostic orchestration roles only.
 # Technology/language-specific aliases (e.g. "jolt physics", "lua scripter",
@@ -342,7 +342,7 @@ def resolve_agent_name(name: str) -> str:
     """
     name_lower = name.lower().strip()
 
-    # ── Dynamic Cartridge Resolution (Highest Priority) ──
+    # -- Dynamic Cartridge Resolution (Highest Priority) --
     try:
         from pipeline import _CTX
         if _CTX:
@@ -382,7 +382,7 @@ def resolve_agent_name(name: str) -> str:
     except ImportError:
         pass
 
-    # ── Legacy Static Fallback ──
+    # -- Legacy Static Fallback --
     if name_lower in AGENT_ALIAS_MAP:
         return AGENT_ALIAS_MAP[name_lower]
     for key in ALL_DOMAINS:
@@ -408,7 +408,7 @@ def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
 
     Args:
         agent_key: Canonical domain key (e.g., "C++", "Lua").
-        pro_mode: Reserved — no longer injects TDD instructions.
+        pro_mode: Reserved  no longer injects TDD instructions.
 
     Returns:
         Full system prompt string complete with universal OS protocols.
@@ -417,7 +417,7 @@ def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
     ledger_path = ""
     allowed_exts = set()
     
-    # ── Dynamic Cartridge Interception ──
+    # -- Dynamic Cartridge Interception --
     try:
         from pipeline import _CTX
         if _CTX:
@@ -440,7 +440,7 @@ def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
     except ImportError:
         pass
 
-    # ── Legacy Static Fallback ──
+    # -- Legacy Static Fallback --
     if not base_prompt:
         domain = ALL_DOMAINS.get(agent_key)
         if not domain:
@@ -458,7 +458,7 @@ def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
 
 
 
-# ── Mesh Agent System Extension ─────────────────────────────────────────────
+# -- Mesh Agent System Extension ---------------------------------------------
 # Extension appended to every agent's system prompt to enable inter-agent
 # mesh communication protocol signals (VETO, OBJECT, RECOURSE, CONSULT, etc.).
 MESH_AGENT_SYSTEM_EXTENSION: str = (

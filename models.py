@@ -1,6 +1,6 @@
 """
-Pydantic models & typed enums — the shared data contract for the entire pipeline.
-All state flows through these models. No async/await — purely synchronous.
+Pydantic models & typed enums  the shared data contract for the entire pipeline.
+All state flows through these models. No async/await  purely synchronous.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from pydantic import BaseModel, Field, ConfigDict
 
 
-# ── Attraction Design Document ────────────────────────────────────────────────
+# -- Attraction Design Document ------------------------------------------------
 
 class HandleDeclaration(BaseModel):
     """A named physics/object handle declared in the design doc."""
@@ -44,6 +44,7 @@ class AttractionDesign(BaseModel):
     pool_requirements: Dict[str, int] = Field(default_factory=dict)  # pool_key -> min_count
     economy_hooks: List[str] = Field(default_factory=list)     # e.g. ["AddScore", "SetMultiplier"]
     feature_checklist: List[str] = Field(default_factory=list) # plain-English features to verify
+    task_anchors: List[Dict[str, str]] = Field(default_factory=list)  # [{task_id, hook, location}] for anchor-based patching
     raw_json: str = ""                                          # original LLM output preserved
 
     def to_context_block(self) -> str:
@@ -54,7 +55,7 @@ class AttractionDesign(BaseModel):
         if self.handles:
             parts.append("\n### Declared Handles")
             for h in self.handles:
-                parts.append(f"  {h.name} ({h.lua_type}) — {h.description} [owner: {h.owner_task}, lifecycle: {h.lifecycle}]")
+                parts.append(f"  {h.name} ({h.lua_type})  {h.description} [owner: {h.owner_task}, lifecycle: {h.lifecycle}]")
         if self.lifecycle_order:
             parts.append("\n### OnLoad Registration Order")
             for i, step in enumerate(self.lifecycle_order, 1):
@@ -76,7 +77,7 @@ class AttractionDesign(BaseModel):
         return "\n".join(parts)
 
 
-# ── Integration Schema ────────────────────────────────────────────────────────
+# -- Integration Schema --------------------------------------------------------
 
 class SchemaHandleEntry(BaseModel):
     """A handle or shared variable declared by an agent into the live schema."""
@@ -120,11 +121,11 @@ class IntegrationSchema(BaseModel):
 
     def to_context_block(self) -> str:
         """Compact prompt-friendly rendering for agent injection."""
-        parts = ["## 🔗 Integration Schema (read before writing — do not redefine these)"]
+        parts = ["## 🔗 Integration Schema (read before writing  do not redefine these)"]
         if self.handles:
             parts.append("### Declared Handles")
             for h in self.handles.values():
-                parts.append(f"  {h.name} ({h.lua_type}) — created in {h.created_in} by task {h.declared_by}")
+                parts.append(f"  {h.name} ({h.lua_type})  created in {h.created_in} by task {h.declared_by}")
         if self.onload_order:
             parts.append("### OnLoad Registration Order: " + " → ".join(self.onload_order))
         if self.onstep_subscribers:
@@ -134,7 +135,7 @@ class IntegrationSchema(BaseModel):
             for v, owner in self.shared_vars.items():
                 parts.append(f"  {v} (owned by {owner})")
         if self.conflicts:
-            parts.append("### ⚠ CONFLICTS — must be resolved before merge")
+            parts.append("### ⚠ CONFLICTS  must be resolved before merge")
             for c in self.conflicts:
                 parts.append(f"  {c.name}: {c.reason}")
         return "\n".join(parts)
@@ -164,13 +165,13 @@ class SignalType(str, Enum):
 class OrchestrationConfig(BaseModel):
     """Decoupled boundary parameters dynamically injected via Cartridge layer."""
     ollama_host: str = "http://192.168.0.16:11434"
-    # Qwen Coder 3.5 profile (9B) — uncomment when backend hardware supports it
+    # Qwen Coder 3.5 profile (9B)  uncomment when backend hardware supports it
     # coder_model: str = "qwen3.5:9b",
     coder_model: str = "qwen2.5-coder:7b"
     reviewer_model: str = "phi3:14b"
     analyst_model: str = "phi3:14b"
     fallback_reviewer_model: str = "llama3.1:8b-instruct-q4_K_M"
-    pre_summarizer_model: str = "phi3.5:latest"  # 3.8B mini — compresses large context before phi3:14b review
+    pre_summarizer_model: str = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
     librarian_model: str = "llama3.1:8b-instruct-q4_K_M"
     syntax_gate_model: str = "qwen2.5-coder:1.5b"
     intent_classifier_model: str = "llama3.2:1b"
@@ -290,12 +291,12 @@ class EcosystemCartridgeContract(BaseModel):
     procedural_stopwords: Set[str] = Field(default_factory=set)
     unavailable_domains: List[str] = Field(default_factory=list)
 
-    # ── Kernel agnosticism: project-specific rule injection ──────────────────
+    # -- Kernel agnosticism: project-specific rule injection ------------------
     # These fields let the cartridge supply content that was previously
     # hardcoded inside the kernel prompt layer (_prompts.py).
 
     # Set of domain keys whose outputs should pass through the Reasoning Gate.
-    # Kernel default is an empty set — the cartridge decides which domains qualify.
+    # Kernel default is an empty set  the cartridge decides which domains qualify.
     reasoning_gate_domains: Set[str] = Field(default_factory=set)
 
     # Review checklist injected into REVIEW_PROMPT at assembly time.
@@ -323,7 +324,8 @@ class Task:
                  task_id: str = None, is_query: bool = False,
                  iteration: int = 0, context: str = "",
                  depends_on: Optional[List[str]] = None,
-                 target_file: Optional[str] = None):
+                 target_file: Optional[str] = None,
+                 anchor_marker: Optional[str] = None):
         self.agent = agent
         self.spec = spec
         self.parent = parent
@@ -341,7 +343,13 @@ class Task:
         # to write agent output to disk before compilation. When None the flush is skipped
         # for that task (content is still carried in all_results_dict).
         self.target_file: Optional[str] = target_file
-        # ── Directive B: Pro-Mode Inheritance — tracks paged-in content cache ──
+        # anchor_marker: deterministic string marker in the on-disk scaffold file
+        # that this task's SEARCH/REPLACE block must target.
+        # e.g. "-- [TASK_4_INSERT_HOOK]  -- Create ball pool...".  When set,
+        # the agent prompt is modified to say "SEARCH for THIS EXACT line and
+        # REPLACE with your implementation + re-inserted anchor."
+        self.anchor_marker: Optional[str] = anchor_marker
+        # -- Directive B: Pro-Mode Inheritance — tracks paged-in content cache --
         self.paged_files_cache: Dict[str, str] = {}
 
     def __repr__(self):
@@ -352,7 +360,7 @@ class PipelineContext(BaseModel):
     """The single authoritative state bag passed sequentially through all experts.
 
     This is how the highly interconnected MoE features communicate across file boundaries.
-    No async/await — purely synchronous state threading through the entire pipeline.
+    No async/await  purely synchronous state threading through the entire pipeline.
     """
     model_config = ConfigDict(extra='allow')
 
@@ -366,46 +374,46 @@ class PipelineContext(BaseModel):
     ollama_endpoint: str = "http://192.168.0.16:11434"
 
 
-    # ── Offload Store ────────────────────────────────────────────────────────
+    # -- Offload Store --------------------------------------------------------
     offload_store: Optional[Any] = None
 
-    # ── LRU Doc Cache ────────────────────────────────────────────────────────
+    # -- LRU Doc Cache --------------------------------------------------------
     doc_cache: Dict[str, Tuple[str, float]] = {}
     doc_cache_ttl: int = 300
     doc_cache_max: int = 8
 
-    # ── Session Timeline ─────────────────────────────────────────────────────
+    # -- Session Timeline -----------------------------------------------------
     session_timeline_path: Optional[Path] = None
     max_output_chars: int = 4000
 
-    # ── Referenced Files Cache ───────────────────────────────────────────────
+    # -- Referenced Files Cache -----------------------------------------------
     referenced_files_cache: str = ""
 
-    # ── Mesh Work Queue API ──────────────────────────────────────────────────
+    # -- Mesh Work Queue API --------------------------------------------------
     mesh_task_registry: Dict[str, dict] = {}
     mesh_results: Dict[str, str] = {}
     mesh_work_queue: List[str] = []
     mesh_registry_lock: bool = False
 
-    # ── Progress Listeners ───────────────────────────────────────────────────
+    # -- Progress Listeners ---------------------------------------------------
     progress_listeners: List[Callable] = []
 
-    # ── Insanity Detector ────────────────────────────────────────────────────
+    # -- Insanity Detector ----------------------------------------------------
     seen_code_hashes: Set[str] = set()
 
-    # ── File Hash Dictionary for Pre-Merge Hash Locking (Task 2) ─────────────
+    # -- File Hash Dictionary for Pre-Merge Hash Locking (Task 2) -------------
     file_hashes: Dict[str, str] = {}
 
-    # ── Tribunal / Appellate Court state (Tasks 3-4) ─────────────────────────
+    # -- Tribunal / Appellate Court state (Tasks 3-4) -------------------------
     pending_appeals: List[Dict[str, Any]] = []
     tribunal_verdicts: Dict[str, str] = {}
 
-    # ── Runtime accumulators (populated during pipeline execution) ───────────
+    # -- Runtime accumulators (populated during pipeline execution) -----------
 
     all_results: List[Dict[str, Any]] = []
     all_results_dict: Dict[str, str] = {}
 
-    # ── Blueprint cross-iteration carry-forward: snapshots of approved on-disk files ──
+    # -- Blueprint cross-iteration carry-forward: snapshots of approved on-disk files --
     completed_file_snapshots: Dict[str, str] = {}
 
     all_vetos: List[Dict[str, Any]] = []
@@ -420,14 +428,14 @@ class PipelineContext(BaseModel):
     final_output: str = ""
     user_prompt: str = ""
 
-    # ── Pro Mode ──────────────────────────────────────────────────────────────
+    # -- Pro Mode --------------------------------------------------------------
     # pro_mode is kept for legacy read compatibility; authoritative state is
     # math_heavy_tasks (per-task set) and pro_mode_always (global override).
     pro_mode: bool = False
     math_heavy_tasks: Set[str] = Field(default_factory=set)
     pro_mode_always: bool = False  # set when user answers "always" at the prompt
 
-    # ── Run-time accumulators (mesh_loops.py) ─────────────────────────────────
+    # -- Run-time accumulators (mesh_loops.py) ---------------------------------
     director_output: str = ""
 
     gdd_context: str = ""
@@ -435,7 +443,7 @@ class PipelineContext(BaseModel):
     interface_manifest: str = ""
     structure: str = ""
     
-    # ── Cartridge Ecosystem Topologies ────────────────────────────────────────
+    # -- Cartridge Ecosystem Topologies ----------------------------------------
     domain_registry: dict = {}
     alias_map: dict = {}
     domain_metadata_registry: dict = {}
@@ -479,6 +487,8 @@ class PipelineContext(BaseModel):
             self._cartridge_build_bridge_contract = cartridge_class.get_bridge_contract
         if hasattr(cartridge_class, "get_director_extra"):
             self._cartridge_get_director_extra = cartridge_class.get_director_extra
+        if hasattr(cartridge_class, "get_schema_patterns"):
+            self._cartridge_schema_patterns = cartridge_class.get_schema_patterns()
 
     def mount_ecosystem(self, cartridge: EcosystemCartridgeContract) -> None:
         """Binds a validated ecosystem cartridge directly into the kernel runtime."""
@@ -508,26 +518,26 @@ class PipelineContext(BaseModel):
     is_chat: bool = False
     session_mgr: Optional[Any] = None
 
-    # ── Phase I: Core Memory Table (MemGPT Alignment) ──────────────────────
+    # -- Phase I: Core Memory Table (MemGPT Alignment) ----------------------
     # Immutable table anchoring core project constants that must survive
     # context pruning. Excluded from character-count evictions by token_budget.py.
     core_memory_table: Dict[str, str] = {}
 
-    # ── Pre-Decomposition Architect Output ───────────────────────────────────
+    # -- Pre-Decomposition Architect Output -----------------------------------
     attraction_design: Optional[AttractionDesign] = None
 
-    # ── Cross-Agent Integration Schema ───────────────────────────────────────
+    # -- Cross-Agent Integration Schema ---------------------------------------
     integration_schema: Optional[IntegrationSchema] = None
 
-    # ── Coverage & Runtime Feedback ──────────────────────────────────────────
+    # -- Coverage & Runtime Feedback ------------------------------------------
     coverage_gaps: List[str] = Field(default_factory=list)
     runtime_errors: List[str] = Field(default_factory=list)
 
-    # ── Phase III: AST Patch Models (LangGraph Alignment) ───────────────────
+    # -- Phase III: AST Patch Models (LangGraph Alignment) -------------------
     # Structured patch sets for state-reducing merge operations.
     pending_patches: List[dict] = []
 
-    # ── Circuit Breaker Retry Counts (Day 4) ──────────────────────────────
+    # -- Circuit Breaker Retry Counts (Day 4) ------------------------------
     retry_counts: Dict[str, int] = {}
 
     @property

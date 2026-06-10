@@ -1,9 +1,9 @@
 """
-_doc_parsers.py — HTML/C++ header parsers and fetch helpers for fetch_api_docs.py
+_doc_parsers.py  HTML/C++ header parsers and fetch helpers for fetch_api_docs.py
 ==================================================================================
 Extracted from fetch_api_docs.py to keep that file under 1 000 lines.
 
-No circular imports — this module only uses stdlib.
+No circular imports  this module only uses stdlib.
 """
 import html.parser
 import re
@@ -15,7 +15,7 @@ from pathlib import Path
 RAW_DIR = Path(__file__).parent / "_raw"
 
 
-# ── HTML Stripper ─────────────────────────────────────────────────────────────
+# -- HTML Stripper -------------------------------------------------------------
 
 class DocStripper(html.parser.HTMLParser):
     """Strips HTML to plain text, removing nav/footer/aside/script/style."""
@@ -106,7 +106,7 @@ class DocStripper(html.parser.HTMLParser):
         return '\n'.join(lines)
 
 
-# ── C++ Header Parser ─────────────────────────────────────────────────────────
+# -- C++ Header Parser ---------------------------------------------------------
 
 def parse_cpp_header(content: str, section_name: str) -> str:
     """Extract and format a C++ header section into condensed markdown."""
@@ -259,7 +259,7 @@ def parse_cpp_header(content: str, section_name: str) -> str:
     return '\n'.join(output)
 
 
-# ── Box2D C API Parser ────────────────────────────────────────────────────────
+# -- Box2D C API Parser --------------------------------------------------------
 
 def parse_box2d_api(content: str) -> str:
     """Parse Box2D C API header into markdown sections grouped by namespace."""
@@ -316,14 +316,14 @@ def parse_box2d_api(content: str) -> str:
     return '\n'.join(parts)
 
 
-# ── Token Counter ─────────────────────────────────────────────────────────────
+# -- Token Counter -------------------------------------------------------------
 
 def estimate_tokens(text: str) -> int:
     """Rough token estimate (4 chars per token for code)."""
     return len(text) // 4
 
 
-# ── Fetch Helpers ─────────────────────────────────────────────────────────────
+# -- Fetch Helpers -------------------------------------------------------------
 
 def fetch_url(url: str, timeout: int = 30) -> str:
     """Download a URL and return its text content."""

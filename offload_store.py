@@ -1,9 +1,9 @@
 """
-Offload store — disk-backed overflow buffer for pruned context blocks.
+Offload store  disk-backed overflow buffer for pruned context blocks.
 Stores and retrieves context blocks that have been paged out of the
 active token budget to free space for new content.
 
-No async/await — purely synchronous JSON file I/O.
+No async/await  purely synchronous JSON file I/O.
 """
 
 from __future__ import annotations
@@ -261,7 +261,7 @@ class OffloadStore:
                   f"({current // 1024} KB -> {self.store_size() // 1024} KB)")
         return evicted
 
-    # ── MemGPT-style session window persistence ───────────────────────────────
+    # -- MemGPT-style session window persistence -------------------------------
 
     def _session_path(self, session_id: str) -> "Path":
         return self.store_dir / f"session_{session_id}.json"

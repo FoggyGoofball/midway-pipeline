@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midway Pipeline — Profile Wizard (CLI Scaffold)
+Midway Pipeline  Profile Wizard (CLI Scaffold)
 =================================================
 A profile-driven architecture CLI for project initialization
 and API documentation ingestion.
@@ -46,7 +46,7 @@ def cmd_init(project_name: str, profiles_dir: Path) -> None:
 def cmd_ingest(url: str, cache_dir: Path) -> None:
     """Placeholder for API documentation ingestion (future)."""
     print(f"  [Wizard] 🔄 Ingest API docs from: {url}")
-    print(f"  [Wizard] ⚠️  Ingestion not yet implemented — cache_dir={cache_dir}")
+    print(f"  [Wizard] ⚠️  Ingestion not yet implemented  cache_dir={cache_dir}")
 
 
 def main() -> None:

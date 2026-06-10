@@ -1,7 +1,7 @@
 """
-_finalize_review.py — Phase 6: Integration Review & Fix Loop
+_finalize_review.py  Phase 6: Integration Review & Fix Loop
 =============================================================
-Extracted from mesh_finalize.py — handles the review-fix loop,
+Extracted from mesh_finalize.py  handles the review-fix loop,
 context pruning (Directive C), sanity detection, and the
 Reconciliation Gate.
 
@@ -27,7 +27,7 @@ from _pipeline_helpers import (
     atomic_write_text, trigger_chime, generate_failure_report,
 )
 from _domain_sandbox import reject_cross_domain_output
-import _prompts as _prompts_mod  # live module ref — reads post-bootstrap values
+import _prompts as _prompts_mod  # live module ref  reads post-bootstrap values
 from pipeline import (
     ALL_DOMAINS,
     resolve_agent_name,
@@ -40,211 +40,19 @@ from _helpers_exec import compile_project
 from ollama_client import is_fatal_ollama_error as _is_fatal_ollama
 
 
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 #  Shared bridge-snippet builder (single source of truth)
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 
-def build_fix_bridge_snippet(ctx: 'PipelineContext') -> str:
-    """Return a concise, fix-agent-readable list of approved bridge APIs.
+from _review_helpers import (
+    build_fix_bridge_snippet,
+    _strip_fix_plan,
+    _prune_fix_context,
+)  # noqa: F401
 
-    Renders the cartridge's bridge contract into a short text block so
-    domain fix agents know exactly which names are legal.  Used by
-    _finalize_review, _finalize_preflight, and _helpers_exec to avoid
-    maintaining three divergent copies of the same rendering logic.
-
-    Returns an empty string when no cartridge is mounted.
-    """
-    _build_bridge_fn = getattr(ctx, '_cartridge_build_bridge_contract', None)
-    if not callable(_build_bridge_fn):
-        return ""
-    try:
-        _bc = _build_bridge_fn()
-        if not _bc or not isinstance(_bc, dict):
-            return ""
-        _api   = list((_bc.get("midwayphysics_spawn_api") or {}).keys())
-        _pool  = list((_bc.get("object_pools") or {}).keys())
-        _econ  = list((_bc.get("economy_api") or {}).keys())
-        if not _api:
-            return ""
-        return (
-            "## Active Bridge Contract — APPROVED APIs (exhaustive list)\n"
-            "Use ONLY these exact function names. Any other name is a phantom API.\n"
-            "Physics: " + ", ".join(_api) + "\n"
-            "Pools: "   + ", ".join(_pool) + "\n"
-            "Economy: " + ", ".join(_econ) + "\n"
-        )
-    except Exception as _e:
-        return ""
-
-
-
-# ──────────────────────────────────────────────────────────────────────
-#  Directive C — Context Pruning for Fix Cycles
-# ──────────────────────────────────────────────────────────────────────
-
-def _strip_fix_plan(text: str) -> str:
-    """Aggressively strip <fix-plan>...</fix-plan> reasoning blocks from
-    raw LLM output before code block extraction and review passes.
-    
-    Uses re.DOTALL so the pattern matches across multiple lines.
-    """
-    return re.sub(r"<fix-plan>.*?</fix-plan>", "", text, flags=re.DOTALL).strip()
-
-
-def _prune_fix_context(
-    domain_key: str,
-    task_obj: 'Any',
-    review_issues_text: str,
-    pre_flight_errors: str,
-    user_prompt: str,
-    paged_files_cache: 'Optional[Dict[str, str]]' = None,
-    bridge_api_snippet: str = "",
-    last_good_output: str = "",
-) -> str:
-    """
-    Build a lean, pruned context payload for a domain agent fix cycle.
-
-    Strips ALL prior iterative generation attempts and provides only:
-      - Original user prompt (condensed to 200 chars)
-      - Task specification relevant to this agent
-      - Paged-In Reference Files (Safe Cache — no disk I/O, no Hard Cap bypass)
-      - The EXACT compiler/linter error string relevant to this domain
-      - REVIEW issues text (filtered for domain relevance)
-      - Domain boundary reminder
-
-    Directive B — Safe Auto-Mounting: If the primary worker's PagingKernel
-    extracted and cached text chunks, they are injected here directly as
-    ❮ PAGED-IN REFERENCE FILES ❯ blocks. This eliminates the catastrophic
-    file_path.read_text() bypass that previously pulled 40,000+ characters
-    into the Fix-Cycle context, crashing VRAM.
-
-    This prevents generative looping by eliminating historical bloat
-    and cross-domain critiques from the context.
-    """
-    domain_info = ALL_DOMAINS.get(domain_key, {})
-    domain_name = domain_info.get("name", domain_key)
-
-    parts: list[str] = []
-
-    # 1. Original prompt (condensed — block-aware so structure survives)
-    parts.append("## Original Feature Request\n" + TokenBudget._block_aware_collapse(user_prompt, 200))
-
-    # 2. Task spec (the original directive given to this agent)
-    if task_obj and hasattr(task_obj, 'spec') and task_obj.spec:
-        parts.append("## Your Task Specification\n" + TokenBudget._block_aware_collapse(task_obj.spec, 500))
-
-    # ── Directive A/B: Safe Auto-Mounting via Paged-In Cache ──────────────
-    # Inject cached chunks directly, bypassing file_path.read_text() entirely.
-    # Each chunk was already extracted within the PagingKernel's 12,000-char
-    # Hard Cap, so this cannot OOM the VRAM.
-    _cache: Dict[str, str] = {}
-    if paged_files_cache and isinstance(paged_files_cache, dict):
-        _cache = paged_files_cache
-    elif hasattr(task_obj, 'paged_files_cache') and isinstance(task_obj.paged_files_cache, dict):
-        _cache = task_obj.paged_files_cache
-    if _cache:
-        cache_blocks: list[str] = []
-        total_chars = 0
-        for filepath, cached_text in _cache.items():
-            total_chars += len(cached_text)
-            cache_blocks.append(
-                f"## ❮ PAGED-IN REFERENCE FILE: {filepath} ❯\n"
-                f"```\n{cached_text}\n```"
-            )
-        parts.append(
-            "\n## ❮ PAGED-IN REFERENCE FILES (Safe Cache — no disk I/O) ❯\n"
-            f"({len(_cache)} files, {total_chars} total chars "
-            f"— each chunk safely extracted within the PagingKernel Hard Cap)\n\n"
-            + "\n\n".join(cache_blocks)
-        )
-        print(f"  [Paging Kernel] 📋 Injected {len(_cache)} cached text blocks "
-              f"({total_chars} chars) into Fix-Cycle '{domain_name}' context "
-              f"— bypassing file_path.read_text() entirely.")
-
-    # 3. Domain-scoped error text — processed via LOG_PROCESSOR
-    if pre_flight_errors:
-        from log_parser import LOG_PROCESSOR
-        pruned_errors = LOG_PROCESSOR.process_logs(domain_key, pre_flight_errors)
-        parts.append("## Compiler/Linter Errors (Domain-Targeted)\n" + pruned_errors)
-
-    # 4. AST Ledger Targets (Contextual Repair — Complete Root-Cause Visibility)
-    # Injects corresponding abstract syntax tree targets from active_run_ledger.md
-    # alongside the compiler diagnostic payload, guaranteeing that the repairing
-    # agent can perform a complete source-level forensic analysis of the failure.
-    parts.append(
-        "## AST Ledger Targets (active_run_ledger.md)\n"
-        "Corresponding AST symbols and code blocks from the active run ledger "
-        "are referenced below. Inspect these targets to guarantee complete "
-        "root-cause visibility before issuing fixes.\n"
-        "Refer to docs/memory/active_run_ledger.md for full code context."
-    )
-
-    # 5. Active Bridge Contract (injected so fixer uses correct API names)
-    if bridge_api_snippet:
-        parts.append(bridge_api_snippet)
-
-    # 5b. E16: Last-good-output anchor — collapsed to safe budget via paging.
-    # Gives the fix agent a real implementation to repair rather than producing
-    # an empty scaffold when it has no reference implementation.
-    if last_good_output and last_good_output.strip():
-        _anchor_collapsed = TokenBudget._block_aware_collapse(last_good_output, 1500)
-        parts.append(
-            "## Previous Implementation (ANCHOR — repair this, do NOT rewrite from scratch)\n"
-            "The following is the last known implementation for this task.\n"
-            "You MUST base your fix on this code. Do NOT discard it and produce an empty skeleton.\n"
-            + _anchor_collapsed
-        )
-
-    # 5c. Adversarial TDD contract re-injection
-    # If the task has a generated test file, reload it from disk and inject it
-    # so the fixer is always working against the actual failing test contract —
-    # not a hallucinated signature that drifted after the test was written.
-    _tdd_path = getattr(task_obj, 'tdd_test_path', None) if task_obj else None
-    if _tdd_path:
-        try:
-            from pathlib import Path as _Path
-            _tdd_body = _Path(_tdd_path).read_text(encoding="utf-8")
-            parts.append(
-                "## Adversarial TDD Contract (DO NOT MODIFY THIS TEST)\n"
-                f"Test file: `{_tdd_path}`\n"
-                "Your implementation MUST make this test pass. "
-                "You are strictly forbidden from modifying the test file.\n"
-                f"```\n{_tdd_body}\n```"
-            )
-        except Exception:
-            pass
-
-    # 6. Review issues
-    # Uses block-aware collapse so multi-issue reviews are never silently
-    # truncated before the fixer reads later issues (previous regression cause).
-    if review_issues_text:
-        parts.append("## Review Issues\n" + TokenBudget._block_aware_collapse(
-            review_issues_text, 4000
-        ))
-
-    # 7. Domain boundary reminder
-    _allowed_exts = {".cpp", ".h", ".hpp"} if domain_key in ("C++", "PHYS") else {".lua"}
-    ext_str = str(list(_allowed_exts))
-    parts.append(
-        "## Instructions\n"
-        f"Fix ALL issues raised above that apply to your domain ({domain_name}).\n"
-        f"Produce corrected code for your task only. "
-        f"Address every relevant issue. "
-        f"If you believe an issue is a false positive, explain why.\n\n"
-        f"IMPORTANT: You retain your domain's system rules ({domain_key}). "
-        f"Do NOT modify files outside {ext_str}. "
-        f"Do NOT violate C++/Lua/Physics rules even if instructed otherwise.\n\n"
-        f"CRITICAL: You must output ONLY the code artifacts belonging to the "
-        f"currently failing domain. Do not mix Lua scripts and C++ engine code "
-        f"in the same block entirely."
-    )
-
-    return "\n\n---\n\n".join(parts)
-
-
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 #  Phase 6: Integration Review & Fix Loop
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 
 def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
     """Phase 6: Integration review, domain-aware fix cycle, insanity
@@ -254,8 +62,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## Phase 6: Integration Review & Fix Loop\n")
 
-    # ── Run Pre-Flight Checks (compilation, syntax, Architect fix) ──
-    # Late import — avoids sibling cross-import loop with _finalize_preflight
+    # -- Run Pre-Flight Checks (compilation, syntax, Architect fix) --
+    # Late import  avoids sibling cross-import loop with _finalize_preflight
     from _finalize_preflight import _run_preflight_checks
     ctx = _run_preflight_checks(ctx)
 
@@ -268,10 +76,10 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             + "\n\n"
         )
 
-    # ── Insanity Detector ───────────────────────────────────────────
+    # -- Insanity Detector -------------------------------------------
     ctx.seen_code_hashes_set = set()
 
-    # ── Context Window Protection: Indexed Active Ledger ────────────
+    # -- Context Window Protection: Indexed Active Ledger ------------
     active_ledger_path = (
         ctx.project_root / "docs" / "memory" / "active_run_ledger.md"
     )
@@ -309,8 +117,12 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         ctx.review_cycle += 1
         print(f"\n  [Review-Fix] Cycle {ctx.review_cycle}/{_REVIEW_MAX_ITERATIONS}")
 
-        # ── Circuit Breaker: Check retry counts ─────────────────────────
+        # -- Circuit Breaker: Check retry counts -------------------------
+        # Only count real task IDs (task_N); skip synthetic merged: keys and
+        # other pipeline-internal entries that should never trip the breaker.
         for tid in list(ctx.all_results_dict.keys()):
+            if not tid.startswith("task_"):
+                continue
             count = ctx.retry_counts.setdefault(tid, 0)
             if count >= _CB_MAX:
                 print(
@@ -355,7 +167,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 f"3. MANDATORY LUA LIFECYCLE AUDIT: You MUST actively audit Lua attraction scripts for strict event-driven lifecycle compliance. If the script fails to implement `OnLoadStatic()` (invoking `SpawnSharedBooth()`), `OnLoad()` (spawning bodies and registering `MidwayPhysics.OnStep`), or polls modifiers at load time rather than live every frame inside `OnStep(dt)`, you MUST issue an immediate FAIL.\n"
             )
 
-        # ── Review Input: Inline actual code, not just a TOC ──────────────
+        # -- Review Input: Inline actual code, not just a TOC --------------
         # Giving the reviewer only a PAGE_IN index causes it to hallucinate
         # violations from task titles. Inline the real task outputs so it can
         # only flag issues that actually appear in the code.
@@ -363,7 +175,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         # BUDGET STRATEGY: Measure the real non-code overhead first, then
         # divide the remaining space evenly across tasks.  This prevents
         # tail tasks from being silently dropped because the overhead estimate
-        # was wrong — which caused the context-collapse failure seen in earlier
+        # was wrong  which caused the context-collapse failure seen in earlier
         # runs where only task_2 reached the reviewer.
         #
         # Hard cap is set to leave a 1 500-char safety margin below the 16 384
@@ -433,17 +245,17 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # Show merged file once, labelled clearly
                 _snippet = _merged_out[:_task_code_budget * 2]
                 if len(_merged_out) > _task_code_budget * 2:
-                    _snippet += "\n…[merged output truncated]"
+                    _snippet += "\n[merged output truncated]"
                 inline_code_blocks.append(
                     f"### [MERGED FILE: {_rel_p}] (combines: {[t for t, m in _tid_to_merged.items() if m == _mkey]})\n{_snippet}"
                 )
                 _emitted_merged.add(_mkey)
                 continue
             elif _mkey and _mkey in _emitted_merged:
-                # This task's output is already represented by the merged block — skip
+                # This task's output is already represented by the merged block  skip
                 continue
 
-            # No merge — show individual task output as before
+            # No merge  show individual task output as before
             if len(_out) > _task_code_budget:
                 _snippet_overflow = _out[_task_code_budget:]
                 _snippet = _out[:_task_code_budget]
@@ -459,12 +271,12 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         body_lines=[_snippet_overflow],
                     )
                     _snippet += (
-                        f"\n[📄 {len(_snippet_overflow)} chars truncated — "
+                        f"\n[📄 {len(_snippet_overflow)} chars truncated  "
                         f"use `<invoke_kernel><action>PAGE_IN</action>"
                         f"<target>{_rv_oid}</target></invoke_kernel>` to retrieve full output.]"
                     )
                 except Exception:
-                    _snippet += "\n…[truncated]"
+                    _snippet += "\n[truncated]"
             else:
                 _snippet = _out
             inline_code_blocks.append(f"### [{_tid}] [{_domain}]\n{_snippet}")
@@ -484,7 +296,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         if ctx.pre_flight_errors and ctx.pre_flight_errors.strip():
             _pf_collapsed = TokenBudget._block_aware_collapse(ctx.pre_flight_errors, 1500)
             _preflight_preamble = (
-                "## ⛔ PRE-FLIGHT VIOLATIONS — PASS IS FORBIDDEN UNTIL THESE ARE RESOLVED\n"
+                "## ⛔ PRE-FLIGHT VIOLATIONS  PASS IS FORBIDDEN UNTIL THESE ARE RESOLVED\n"
                 "The automated pre-flight checker found the following violations in the code below.\n"
                 "You MUST issue [VERDICT: FAIL] and list every unresolved violation under Issues.\n"
                 "You MAY issue [VERDICT: PASS] ONLY if you can confirm each violation listed here "
@@ -498,16 +310,16 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             f"## Original Feature Request\n{ctx.user_prompt}\n\n"
             f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
             f"{ctx.conflicts_str}"
-            f"## Generated Code (review ONLY what is shown below — do NOT invent issues)\n"
+            f"## Generated Code (review ONLY what is shown below  do NOT invent issues)\n"
             f"{inline_code_str}\n"
             f"{_visibility_mandate}\n"
             f"{neg_guard_str}\n\n"
         )
 
-        # ── Inject bridge contract so reviewer can flag phantom APIs ────────
+        # -- Inject bridge contract so reviewer can flag phantom APIs --------
         # Without this, the reviewer sees phantom names like GetPrizeValue()
         # and cannot distinguish them from real bridge exports.
-        # NOTE: _build_bridge_fn() returns a dict — it must be rendered to a
+        # NOTE: _build_bridge_fn() returns a dict  it must be rendered to a
         # human-readable string before slicing or it raises TypeError and the
         # snippet is silently dropped (the previous regression cause).
         _review_bridge_snippet = ""
@@ -532,7 +344,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                                 _bc_lines.append(f"  - {_item}")
                     _bc_str = "\n".join(_bc_lines)[:3000]
                     _review_bridge_snippet = (
-                        "## Active Bridge Contract — APPROVED APIs (exhaustive list)\n"
+                        "## Active Bridge Contract  APPROVED APIs (exhaustive list)\n"
                         "Any Lua call that is NOT on this list is a phantom API and MUST be flagged as a FAIL.\n"
                         f"{_bc_str}\n\n"
                     )
@@ -542,7 +354,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
 
         # Append tail (bridge + review prompt) AFTER the code body so it always
         # survives.  D14: When truncation is necessary, collapse the frame prose
-        # sections first and protect the task code blocks — the reviewer must see
+        # sections first and protect the task code blocks  the reviewer must see
         # real code or it cannot produce a meaningful verdict.
         review_input_full = review_input_raw + _review_bridge_snippet + _prompts_mod.REVIEW_PROMPT
         # Use the same model-aware hard cap computed above rather than a bare
@@ -550,7 +362,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         _VRAM_GUARD_CAP = _REVIEW_HARD_CAP
         if len(review_input_full) > _VRAM_GUARD_CAP:
             _excess = len(review_input_full) - _VRAM_GUARD_CAP
-            print(f"  [VRAM Guard] Review input oversized ({len(review_input_full)} chars) — "
+            print(f"  [VRAM Guard] Review input oversized ({len(review_input_full)} chars)  "
                   f"collapsing {_excess} chars from code body via block-aware paging (tail preserved).")
             _tail = _review_bridge_snippet + _prompts_mod.REVIEW_PROMPT
             # D14: collapse the frame (prose) section first, keeping the task code blocks intact.
@@ -560,7 +372,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 _collapsed_frame
                 + f"\n\n[SYSTEM KERNEL: Feature request / director sections collapsed to {_frame_cap} chars "
                 f"to protect code blocks below. Bridge contract and review instructions are complete.]\n\n"
-                + f"## Generated Code (review ONLY what is shown below — do NOT invent issues)\n"
+                + f"## Generated Code (review ONLY what is shown below  do NOT invent issues)\n"
                 + inline_code_str
                 + f"\n{_visibility_mandate}\n{neg_guard_str}\n\n"
             )
@@ -577,8 +389,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             review_input = review_input_full
 
 
-        # ── Physical Compilation Gate Override ──
-        # Skip entirely when no configured build tree exists — running cmake
+        # -- Physical Compilation Gate Override --
+        # Skip entirely when no configured build tree exists  running cmake
         # without a cache produces infrastructure noise ("could not load cache")
         # that poisons every fix cycle with meaningless errors.
         _cmake_cache = ctx.project_root / "CMakeCache.txt"
@@ -588,9 +400,9 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             re.IGNORECASE,
         )
         if not _cmake_cache.is_file():
-            compile_success = True   # treat as pass — nothing to compile yet
+            compile_success = True   # treat as pass  nothing to compile yet
             compile_stderr = ""
-            print("  [Compile Gate] No CMakeCache.txt — skipping physical compilation check.")
+            print("  [Compile Gate] No CMakeCache.txt  skipping physical compilation check.")
         else:
             compile_success, compile_stderr = compile_project(ctx.project_root)
             # Strip pure cmake-infrastructure lines so only real compiler
@@ -620,7 +432,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 skip_pre_summarizer=True
             )
             if _is_fatal_ollama(ctx.review_output):
-                print(f"  [Review-Fix] ⛔ Ollama error during review — aborting review loop.")
+                print(f"  [Review-Fix] ⛔ Ollama error during review  aborting review loop.")
                 ctx.review_verdict = "BLOCKED"
                 break
             ctx.review_verdict = get_verdict(ctx.review_output)
@@ -634,22 +446,22 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         if ctx.review_verdict == "PASS":
             # FM3: Hard-gate PASS against open preflight errors.
             # The LLM can emit PASS even when the preflight preamble lists
-            # violations — treat any open errors as an automatic FAIL so
+            # violations  treat any open errors as an automatic FAIL so
             # the fix loop actually runs.
             _open_pf = (ctx.pre_flight_errors or "").strip()
             if _open_pf:
                 print(f"  [Review-Fix] ⛔ Reviewer emitted PASS but preflight errors are still open "
-                      f"— overriding to FAIL (cycle {ctx.review_cycle}).")
+                      f" overriding to FAIL (cycle {ctx.review_cycle}).")
                 ctx.review_verdict = "FAIL"
                 ctx.review_output = (
                     ctx.review_output
-                    + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL — open pre-flight violations "
+                    + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL  open pre-flight violations "
                     "must be resolved before this run can be approved.]"
                 )
             else:
                 # FM4: Hard-gate PASS for attraction scopes against missing economy/modifier content.
                 # The reviewer model regularly passes Lua that omits AttractionConstants.modifiers
-                # and Engine.AwardTickets — catch it programmatically before the gate closes.
+                # and Engine.AwardTickets  catch it programmatically before the gate closes.
                 _rev_scope = getattr(ctx, '_scope_mode', '')
                 if _rev_scope in ("NEW_ATTRACTION", "MODIFY_ATTRACTION"):
                     _all_lua = " ".join(
@@ -660,14 +472,14 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         "attractionconstants.modifiers", "engine_mod_", ".modifiers",
                     )):
                         _missing_economy.append(
-                            "No AttractionConstants.modifiers read found in OnStep — "
+                            "No AttractionConstants.modifiers read found in OnStep  "
                             "the attraction MUST read modifiers every frame."
                         )
                     if not any(kw in _all_lua for kw in (
                         "awardtickets", "awardtokens",
                     )):
                         _missing_economy.append(
-                            "No Engine.AwardTickets or Engine.AwardTokens call found — "
+                            "No Engine.AwardTickets or Engine.AwardTokens call found  "
                             "the attraction MUST award tickets/tokens on win/score events "
                             "using Engine.GetStreak() as a multiplier."
                         )
@@ -675,13 +487,13 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         _econ_issues = "\n".join(f"  - {e}" for e in _missing_economy)
                         print(
                             f"  [Review-Fix] ⛔ Reviewer emitted PASS but mandatory economy "
-                            f"content is absent — overriding to FAIL (cycle {ctx.review_cycle}):\n"
+                            f"content is absent  overriding to FAIL (cycle {ctx.review_cycle}):\n"
                             f"{_econ_issues}"
                         )
                         ctx.review_verdict = "FAIL"
                         ctx.review_output = (
                             ctx.review_output
-                            + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL — mandatory economy "
+                            + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL  mandatory economy "
                             "obligations are not met:\n" + _econ_issues + "\n"
                             "Fix all items above before this run can be approved.]"
                         )
@@ -698,13 +510,13 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         # formatting slip doesn't burn a full fix cycle unnecessarily.
         if ctx.review_verdict == "UNKNOWN":
             ctx.review_verdict = "NO_VERDICT"
-            print(f"  [Review-Fix] ⚠ NO_VERDICT — reviewer produced no verdict line. "
+            print(f"  [Review-Fix] ⚠ NO_VERDICT  reviewer produced no verdict line. "
                   f"Issuing one verdict re-prompt before fix routing (cycle {ctx.review_cycle}).")
             _pf_reminder = ""
             if ctx.pre_flight_errors and ctx.pre_flight_errors.strip():
                 _pf_collapsed = TokenBudget._block_aware_collapse(ctx.pre_flight_errors, 800)
                 _pf_reminder = (
-                    "\n\n## ⚠ OPEN PRE-FLIGHT VIOLATIONS — PASS IS FORBIDDEN\n"
+                    "\n\n## ⚠ OPEN PRE-FLIGHT VIOLATIONS  PASS IS FORBIDDEN\n"
                     + _pf_collapsed
                     + "\n"
                 )
@@ -723,7 +535,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 skip_pre_summarizer=True,
             )
             if _is_fatal_ollama(_retry_out):
-                print(f"  [Review-Fix] ⛔ Ollama error during verdict re-prompt — aborting review loop.")
+                print(f"  [Review-Fix] ⛔ Ollama error during verdict re-prompt  aborting review loop.")
                 ctx.review_verdict = "BLOCKED"
                 break
             _retry_verdict = get_verdict(_retry_out)
@@ -734,21 +546,21 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 if ctx.review_verdict == "PASS":
                     # FM3 (re-prompt path): same hard-gate as the primary PASS check.
                     # The re-prompt model can emit PASS while static guards are still
-                    # open — treat open preflight errors as an automatic FAIL override.
+                    # open  treat open preflight errors as an automatic FAIL override.
                     _open_pf_rp = (ctx.pre_flight_errors or "").strip()
                     if _open_pf_rp:
-                        print(f"  [Review-Fix] ⛔ Re-prompt PASS overridden — preflight errors still open "
+                        print(f"  [Review-Fix] ⛔ Re-prompt PASS overridden  preflight errors still open "
                               f"(cycle {ctx.review_cycle}).")
                         ctx.review_verdict = "FAIL"
                         ctx.review_output = (
                             ctx.review_output
-                            + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL — open pre-flight violations "
+                            + "\n\n[SYSTEM KERNEL: PASS overridden to FAIL  open pre-flight violations "
                             "must be resolved before this run can be approved.]"
                         )
                     else:
                         break
             else:
-                print(f"  [Review-Fix] Re-prompt still produced no verdict — treating as FAIL.")
+                print(f"  [Review-Fix] Re-prompt still produced no verdict  treating as FAIL.")
                 ctx.review_verdict = "FAIL"
 
         if ctx.review_verdict == "FAIL" and ctx.review_cycle < _REVIEW_MAX_ITERATIONS:
@@ -761,18 +573,18 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 if issues_match else ctx.review_output[:1000]
             )
 
-            print(f"  [Review-Fix] Review failed — routing critiques to original domain agents...")
+            print(f"  [Review-Fix] Review failed  routing critiques to original domain agents...")
             ctx.output_parts.append(
                 f"### Domain Agent Fix Cycle {ctx.review_cycle}\n"
             )
 
-            # ── Domain-Aware Fix Loop ─────────────────────────────
+            # -- Domain-Aware Fix Loop -----------------------------
             # Instead of using a generic ARCHITECT_FIX_SYSTEM, iterate over
             # failing task IDs and route the Reviewer's critique back to the
             # *original domain agent* so it retains its strict C++/Lua rules.
             #
             # Fix #4: Only route tasks that have OPEN preflight errors.
-            # Using `tid in ctx.review_output` is too broad — it matches any task
+            # Using `tid in ctx.review_output` is too broad  it matches any task
             # ID mentioned in passing and routes clean tasks through fix agents,
             # burning VRAM cycles and introducing noise that can break passing code.
             # Strategy: first try to build a set of tids with explicit preflight
@@ -780,7 +592,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             _pf_error_tids: set = set()
             if ctx.pre_flight_errors:
                 for _pf_tid in ctx.all_results_dict:
-                    # Preflight errors are headed "— Task <tid> [" so a simple
+                    # Preflight errors are headed " Task <tid> [" so a simple
                     # contains check on the error string is safe and deterministic.
                     if f"Task {_pf_tid}" in ctx.pre_flight_errors or \
                        f"Task {_pf_tid.replace('_', ' ')}" in ctx.pre_flight_errors:
@@ -791,7 +603,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # Prefer the deterministic preflight-based set.
                 task_ids_in_review = _pf_error_tids
             else:
-                # No explicit preflight hits — fall back to reviewer-mentioned tasks.
+                # No explicit preflight hits  fall back to reviewer-mentioned tasks.
                 for tid, _ in ctx.all_results_dict.items():
                     if tid in ctx.review_output or tid.replace("_", " ") in ctx.review_output:
                         task_ids_in_review.add(tid)
@@ -800,18 +612,135 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # Last resort: use all tasks
                 task_ids_in_review = set(ctx.all_results_dict.keys())
 
-            domain_fix_outputs = {}
-            # Snapshot results BEFORE any fix writes so the post-fix revert has a
-            # clean previous-cycle value to fall back to (not the just-written bad one).
-            _pre_fix_snapshot = dict(ctx.all_results_dict)
-            for tid in sorted(task_ids_in_review):
-                task_obj = ctx.task_map.get(tid)
-                if task_obj is None:
-                    continue
+            # -- Monolithic Mode: single-file re-generation vs per-task routing --
+            # When ctx._monolithic_lua_target is set, the monolithic output
+            # satisfies ALL tasks.  Do NOT route per-task critiques to domain
+            # agents.  Instead, re-invoke the coder model with the review
+            # critiques as additional context and re-generate the monolithic file.
+            _mono_target = getattr(ctx, '_monolithic_lua_target', None)
+            if _mono_target:
+                print(f"  [Review-Fix] ⏭ Monolithic mode active (target: {_mono_target}) — "
+                      f"skipping per-domain fix routing, re-invoking coder model instead.")
+                _mono_snippet = ctx.all_results_dict.get("task_monolithic", "")
+                _mono_review_errors = (
+                    "## ⚠ REVIEW CRITIQUES (MUST FIX ALL)\n"
+                    + issues_text
+                    + "\n\n"
+                )
+                if ctx.pre_flight_errors and ctx.pre_flight_errors.strip():
+                    _mono_review_errors += (
+                        "## ⚠ PRE-FLIGHT VIOLATIONS (MUST FIX ALL)\n"
+                        + ctx.pre_flight_errors
+                        + "\n\n"
+                    )
 
-                original_agent_key = resolve_agent_name(task_obj.agent)
+                # Build a fix prompt that gives the coder model the current file,
+                # the review critiques, and instructions to produce a fixed version.
+                _mono_fix_system = (
+                    "You are a senior Lua engineer fixing a generated attraction script.\n"
+                    "You will receive:\n"
+                    "1. The CURRENT file content (with errors)\n"
+                    "2. Review critiques and pre-flight violations that MUST be fixed\n\n"
+                    "CRITICAL RULES:\n"
+                    "- Output ONLY valid Lua code, no markdown fences, no SEARCH/REPLACE blocks.\n"
+                    "- Output the COMPLETE corrected file, not a diff or snippet.\n"
+                    "- Preserve ALL function signatures: OnLoadStatic(), OnLoad(), OnUnload().\n"
+                    "- Every opened table '{' must have a matching '}'.\n"
+                    "- Every Lua function must have a matching 'end'.\n"
+                    "- Do NOT use: MidwayPhysics.PoolAcquire, PoolReturn, IsSensorTriggered, "
+                    "SkeeballGame, OnPlayerAim, OnPlayerPowerUp, OnThrow, OnCollisionWithTarget.\n"
+                    "- Balls move via physics simulation (gravity, friction, restitution), "
+                    "NOT via manual velocity arithmetic in Lua.\n"
+                    "- The generated file MUST pass `luac -p` syntax check.\n"
+                    "- OnLoadStatic() MUST call SpawnSharedBooth().\n"
+                    "- OnLoad() MUST register MidwayPhysics.OnStep.\n"
+                    "- OnStep MUST read AttractionConstants.modifiers every frame.\n"
+                    "- Engine.AwardTickets MUST be called with Engine.GetStreak() multiplier.\n"
+                )
+                _mono_fix_prompt = (
+                    f"## Target File: {_mono_target}\n\n"
+                    f"{_mono_review_errors}"
+                    f"## CURRENT FILE CONTENT (fix all errors above):\n"
+                    f"```lua\n{_mono_snippet}\n```\n\n"
+                    f"---\n"
+                    f"Write the COMPLETE corrected file. "
+                    f"Output ONLY valid Lua code, no markdown fences."
+                )
 
-                # Use a compact, repair-specific system prompt — NOT the full
+                from _pipeline_helpers import CODER_MODEL
+                _mono_fixed = call_ollama(
+                    _mono_fix_system,
+                    _mono_fix_prompt,
+                    f"Monolithic Fix (cycle {ctx.review_cycle})",
+                    CODER_MODEL,
+                    skip_pre_summarizer=True,
+                )
+
+                # Strip fences if model produced them anyway
+                _mono_fixed = re.sub(r"^```lua\s*\n?", "", _mono_fixed, flags=re.MULTILINE)
+                _mono_fixed = re.sub(r"\n?```\s*$", "", _mono_fixed, flags=re.MULTILINE)
+                _mono_fixed = _mono_fixed.strip()
+
+                # Write fixed content to disk
+                _mono_abs = ctx.project_root / _mono_target
+                atomic_write_text(_mono_abs, _mono_fixed)
+                print(f"  [Monolithic Fix] Wrote {len(_mono_fixed)} chars to {_mono_target}")
+
+                # Update context
+                ctx.all_results_dict["task_monolithic"] = _mono_fixed
+                ctx.final_output = _mono_fixed
+                # Keep all_results in sync
+                _mono_found = False
+                for _mi, _me in enumerate(ctx.all_results):
+                    if _me.get("task_id") == "task_monolithic":
+                        ctx.all_results[_mi] = {"task_id": "task_monolithic", "output": _mono_fixed}
+                        _mono_found = True
+                        break
+                if not _mono_found:
+                    ctx.all_results.append({"task_id": "task_monolithic", "output": _mono_fixed})
+
+                # Re-run luac
+                import subprocess as _mono_sp
+                _mono_luac = _mono_sp.run(
+                    ["luac", "-p", str(_mono_abs)],
+                    capture_output=True, text=True, timeout=15,
+                )
+                if _mono_luac.returncode == 0:
+                    print(f"  [Monolithic Fix] ✅ luac syntax check passed")
+                else:
+                    _mono_err = _mono_luac.stderr.strip()
+                    print(f"  [Monolithic Fix] ⚠ luac syntax error: {_mono_err[:200]}")
+
+                # Refresh static checks so next review cycle sees current state
+                try:
+                    from _finalize_preflight import (
+                        _inject_empty_output_errors,
+                        _inject_static_pattern_errors,
+                        _flush_results_to_workspace,
+                    )
+                    _flush_results_to_workspace(ctx)
+                    ctx.pre_flight_errors = ""
+                    _inject_empty_output_errors(ctx)
+                    _inject_static_pattern_errors(ctx)
+                except Exception:
+                    pass
+
+                fix_output = _mono_fixed
+                print(f"  [Monolithic Fix] Cycle {ctx.review_cycle} complete. Continuing review loop.")
+                # Continue to post-fix validation / next review cycle
+            else:
+                domain_fix_outputs = {}
+                # Snapshot results BEFORE any fix writes so the post-fix revert has a
+                # clean previous-cycle value to fall back to (not the just-written bad one).
+                _pre_fix_snapshot = dict(ctx.all_results_dict)
+                for tid in sorted(task_ids_in_review):
+                    task_obj = ctx.task_map.get(tid)
+                    if task_obj is None:
+                        continue
+
+                    original_agent_key = resolve_agent_name(task_obj.agent)
+
+                # Use a compact, repair-specific system prompt  NOT the full
                 # get_agent_system() which adds mesh/ledger/virtual-memory protocols
                 # (~11.8 k chars) and collapses the user payload to ~469 chars.
                 _base_review_fix_system = _prompts_mod.ARCHITECT_FIX_SYSTEM
@@ -835,10 +764,10 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 domain_name = ALL_DOMAINS.get(original_agent_key, {}).get("name", original_agent_key)
                 print(f"    Routing critique for {tid} to {domain_name}")
 
-                # ── Directive C: Context-Pruned Fix Payload ──────────────
+                # -- Directive C: Context-Pruned Fix Payload --------------
                 # Uses _prune_fix_context() to strip iterative history,
                 # provide only current file state + exact domain-relevant errors.
-                # Directive B — Safe Auto-Mounting: Pass paged_files_cache so
+                # Directive B  Safe Auto-Mounting: Pass paged_files_cache so
                 # cached text chunks are injected directly, bypassing the
                 # catastrophic file_path.read_text() that would pull 40k+ chars.
                 # Build bridge contract snippet for fix context so agents
@@ -873,10 +802,10 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 )
 
                 if _is_fatal_ollama(agent_fix_output):
-                    print(f"  [Review-Fix] ⛔ Ollama error during fix for {tid} — skipping, retaining previous output.")
+                    print(f"  [Review-Fix] ⛔ Ollama error during fix for {tid}  skipping, retaining previous output.")
                     continue
 
-                # ── Directive A: Sandbox validation ──────────────────────
+                # -- Directive A: Sandbox validation ----------------------
                 # Reject output if it attempts cross-domain file writes.
                 is_clean, safe_output = reject_cross_domain_output(
                     domain_key=original_agent_key,
@@ -884,11 +813,11 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     persona_name=domain_name,
                 )
                 if not is_clean:
-                    print(f"  [SANDBOX] ⛔ {domain_name} ({tid}) output rejected — "
+                    print(f"  [SANDBOX] ⛔ {domain_name} ({tid}) output rejected  "
                           f"cross-domain file write detected. Using truncated safe stub.")
                     agent_fix_output = safe_output
 
-                # ── Phase III: LangGraph AST Patch State Reducer ──────────────
+                # -- Phase III: LangGraph AST Patch State Reducer --------------
                 # Extract AST_PATCH signals from agent output, validate them,
                 # and apply as state-reducing merge operations. Malformed patches
                 # are routed through a fast-path micro-model syntax repair pass.
@@ -911,8 +840,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                                 })
                                 print(f"  [AST Reducer] ✅ Queued patch for {target_path} ({tid})")
                             else:
-                                # Malformed — route through fast-path syntax repair
-                                print(f"  [AST Reducer] ⚠ Malformed patch path '{target_path}' — routing to syntax repair")
+                                # Malformed  route through fast-path syntax repair
+                                print(f"  [AST Reducer] ⚠ Malformed patch path '{target_path}'  routing to syntax repair")
                                 from pipeline import SYNTAX_GATE_MODEL as _repair_model
                                 repair_model = _repair_model or _EXECUTION_MODEL
                                 repair_prompt = (
@@ -948,7 +877,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     # After collecting all patches, apply state reducer: merge patches into results dict.
                     # Group patches by (domain, target_path) so earlier valid patches from one domain
                     # are not silently overwritten by a later patch from a different domain targeting
-                    # the same file — each domain owns its own file namespace.
+                    # the same file  each domain owns its own file namespace.
                     latest_patches = {}
                     for patch in ctx.pending_patches:
                         tpath = patch["target_path"]
@@ -981,7 +910,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     f"### {domain_name} Fix ({tid})\n{agent_fix_output}\n"
                 )
 
-                # ── Circuit Breaker: increment review-fix retry count ─────────
+                # -- Circuit Breaker: increment review-fix retry count ---------
                 # retry_counts is only incremented during initial task execution
                 # in mesh_tasks.py.  We must also count fix-cycle attempts here
                 # so the circuit breaker at the top of the review loop can
@@ -1005,7 +934,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 for tid, output in domain_fix_outputs.items()
             )
 
-            # ── Post-Fix Validation: strip tasks whose fix output is still empty ──
+            # -- Post-Fix Validation: strip tasks whose fix output is still empty --
             # A fix that consists solely of [DELEGATE], [QUERY:DOC], or prose with
             # no code block must be zeroed out before the next review cycle.  If we
             # let them through, the reviewer sees a task with no code and issues a
@@ -1021,7 +950,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 _has_code = bool(_code_fence_re.search(_fout))
                 _is_delegate = bool(_delegate_only_re.search(_fout)) and not _has_code
                 if _is_delegate or (not _has_code and len(_fout.strip()) < 120):
-                    print(f"  [Post-Fix] ⚠ {_ftid} fix output is delegation/empty — retaining previous result.")
+                    print(f"  [Post-Fix] ⚠ {_ftid} fix output is delegation/empty  retaining previous result.")
                     # Revert to the pre-fix snapshot so the reviewer sees the last real code
                     # rather than prose-only output that guarantees another FAIL.
                     # NOTE: _pre_fix_snapshot was captured before the domain fix loop above.
@@ -1038,7 +967,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         if not _found_rv2:
                             ctx.all_results.append({"task_id": _ftid, "output": _reverted})
 
-            # ── Post-Fix Static Guard Refresh ─────────────────────
+            # -- Post-Fix Static Guard Refresh ---------------------
             # Re-run the lightweight static pattern guards against the newly
             # written code so ctx.pre_flight_errors reflects the CURRENT state
             # of all_results_dict.  Without this, stale errors from the original
@@ -1057,15 +986,15 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 _inject_static_pattern_errors(ctx)
                 if ctx.pre_flight_errors.strip():
                     print(f"  [Post-Fix Preflight] ⚠ Static guard still open after fix cycle "
-                          f"{ctx.review_cycle} — routing next review cycle with updated errors.")
+                          f"{ctx.review_cycle}  routing next review cycle with updated errors.")
                 else:
                     print(f"  [Post-Fix Preflight] ✅ All static guards clear after fix cycle "
                           f"{ctx.review_cycle}.")
             except Exception as _pf_refresh_err:
-                print(f"  [Post-Fix Preflight] ⚠ Guard refresh failed ({_pf_refresh_err}) — "
+                print(f"  [Post-Fix Preflight] ⚠ Guard refresh failed ({_pf_refresh_err})  "
                       f"retaining previous pre_flight_errors state.")
 
-            # ── Post-Fix Re-Merge: propagate fix-cycle corrections into merged artifacts ──
+            # -- Post-Fix Re-Merge: propagate fix-cycle corrections into merged artifacts --
             # If any fixed task contributes to a shared-file merge, regenerate the
             # merged artifact so the next review cycle sees updated unified code.
             _merged_reg = getattr(ctx, 'merged_file_registry', {})
@@ -1086,12 +1015,12 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     ctx = _remerge(ctx)
                     print(f"  [Post-Fix Re-Merge] ✅ Re-merge complete.")
 
-            # ── Insanity Detector (similarity-based) ──────────────
+            # -- Insanity Detector (similarity-based) --------------
             normalized = _normalize_fix_fingerprint(issues_text + ctx.conflicts_str)
             if check_insanity_similarity(normalized, ctx.seen_code_hashes_set, threshold=0.95):
                 print(
                     f"\n  [Insanity Detector] ⛔ Infinite fix loop detected! "
-                    f"Similar input >95% matches previous cycle — circuit breaker tripped."
+                    f"Similar input >95% matches previous cycle  circuit breaker tripped."
                 )
                 ctx.review_verdict = "BLOCKED"
                 break
@@ -1100,12 +1029,12 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
 
         break
 
-    # ── Reconciliation Gate (Active Rule Auditor) ─────────────────────────
+    # -- Reconciliation Gate (Active Rule Auditor) -------------------------
     # If the Tribunal/Reviewer struggled to reach consensus, trigger an audit
     # to cross-reference ledgers for conflicting rules.
     if ctx.review_verdict != "PASS" and ctx.review_cycle >= _REVIEW_MAX_ITERATIONS:
         print(f"\n{'='*50}")
-        print(f"  🔍 RECONCILIATION GATE — Active Rule Auditor")
+        print(f"  🔍 RECONCILIATION GATE  Active Rule Auditor")
         print(f"{'='*50}")
         print(f"  Tribunal struggled to reach consensus after {ctx.review_cycle} cycles.")
         # When running as a stream server there is no TTY, so input() would block
@@ -1122,7 +1051,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             except (EOFError, KeyboardInterrupt):
                 _audit_choice = "n"
             if _audit_choice not in ("n", "no"):
-                print("  [Reconciliation] Auditor triggered — review open preflight errors above.")
+                print("  [Reconciliation] Auditor triggered  review open preflight errors above.")
         else:
             print(
                 "  [Reconciliation] ⚠ No TTY detected (running as server). "
@@ -1131,7 +1060,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             )
         ctx.review_verdict = "FAIL"
         ctx.output_parts.append(
-            "\n## ❌ Pipeline Failed — Review did not converge\n"
+            "\n## ❌ Pipeline Failed  Review did not converge\n"
             f"Tribunal reached max cycles ({ctx.review_cycle}) without consensus.\n"
             "Open preflight errors were still present at cycle limit. "
             "Review the static guard output above and re-run with a more specific task description.\n"

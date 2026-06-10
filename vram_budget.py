@@ -1,8 +1,8 @@
 """
-vram_budget.py — VRAM Budget Tracker (Advisory Only)
+vram_budget.py  VRAM Budget Tracker (Advisory Only)
 =====================================================
 Tracks cumulative model consumption across the 12GB unified memory budget
-for telemetry and diagnostics. NEVER blocks model loads — that is handled
+for telemetry and diagnostics. NEVER blocks model loads  that is handled
 by Ollama's keep_alive=0 eviction (one model at a time).
 
 Hardware: 16GB unified memory (Steam Deck OLED).
@@ -19,8 +19,8 @@ Headroom at current settings (peak model: phi3:14b):
   12.0 GB budget − 9.0 GB (phi3:14b at 8192 ctx) = 3.0 GB free
 
 Context upgrade potential:
-  phi3:14b at 16384 ctx  → ~10.2 GB  (1.8 GB free — tight but viable)
-  llama3.1:8b at 32768 ctx → ~9.6 GB  (2.4 GB free — viable)
+  phi3:14b at 16384 ctx  → ~10.2 GB  (1.8 GB free  tight but viable)
+  llama3.1:8b at 32768 ctx → ~9.6 GB  (2.4 GB free  viable)
   !! Profile on device before raising ctx beyond these values !!
 
 Calculation basis (q4_K_M weights + q8_0 KV cache):
@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Set
 
-# ── VRAM Budget Configuration ──────────────────────────────────────────────
+# -- VRAM Budget Configuration ----------------------------------------------
 # 16GB total unified memory; 4GB reserved for OS/system processes
 VRAM_TOTAL_GB: float = 16.0
 VRAM_HEADROOM_GB: float = 4.0
@@ -72,7 +72,7 @@ _MODEL_COST_TABLE: Dict[str, tuple] = {
 }
 
 
-# ── Active Model Registry ─────────────────────────────────────────────────
+# -- Active Model Registry -------------------------------------------------
 # Tracks currently loaded models and their context windows
 _active_registry: Dict[str, float] = {}  # model_name → estimated_GB
 _total_used_gb: float = 0.0
@@ -97,14 +97,14 @@ def register_model(model_name: str, ctx_size: int = 8192) -> bool:
 
     Logs VRAM budget warnings if the model would exceed budget, but NEVER
     blocks the load. The actual VRAM management is handled by Ollama's
-    keep_alive=0 eviction — one model at a time.
+    keep_alive=0 eviction  one model at a time.
 
     If the model is already registered (hot-loaded), returns True without
     incrementing budget.
     """
     global _total_used_gb
 
-    # Already loaded — no change
+    # Already loaded  no change
     if model_name in _active_registry:
         return True
 
@@ -114,7 +114,7 @@ def register_model(model_name: str, ctx_size: int = 8192) -> bool:
             f"  [VRAM Budget] ⚠ Warning: '{model_name}' "
             f"({cost:.1f} GB estimated) may exceed budget. "
             f"Used: {_total_used_gb:.1f}/{VRAM_SAFE_BUDGET:.1f} GB. "
-            f"(Advisory only — load proceeding.)"
+            f"(Advisory only  load proceeding.)"
         )
 
     _active_registry[model_name] = cost
@@ -166,7 +166,7 @@ def get_vram_report() -> str:
 def get_models_to_evict(model_name: str, ctx_size: int = 8192) -> Set[str]:
     """Return set of currently loaded models that should be evicted to make
     room for a new model. Returns empty set if there's enough room already.
-    (Unused by main eviction code — kept for telemetry/safety net.)"""
+    (Unused by main eviction code  kept for telemetry/safety net.)"""
     if can_load_model(model_name, ctx_size):
         return set()
 

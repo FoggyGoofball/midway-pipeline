@@ -3,7 +3,7 @@ from pathlib import Path
 p = Path("C:/Users/Admin/source/repos/midway-pipeline/mesh_loops.py")
 text = p.read_text("utf-8")
 
-# ── Task 2: Reorder - Move Phase 1+2 BEFORE Auto-Feeder and Phase 0.5 ──
+# -- Task 2: Reorder - Move Phase 1+2 BEFORE Auto-Feeder and Phase 0.5 --
 # The current order (lines 79-154): Phase 0.5 (Auto-Feeder + Scope Gate)
 # The desired order: Guard → Phase 1 → Phase 2 → AutoFetch → AutoFeeder → Phase 0.5
 
@@ -33,7 +33,7 @@ section_b = ''.join(lines[155:189])  # exclusive at 189 (line 189 blank before D
 
 # Extract just the read_only_keywords and is_read_only_question definition from the guard
 # (without the if/else wrapper from the old code)
-guard_def = """    # ── Defensive Guard: Detect read-only / informational prompts ──
+guard_def = """    # -- Defensive Guard: Detect read-only / informational prompts --
     # Even if the INFORMATIONAL classifier miscategorized, the Scope Gate
     # should NEVER route a read-only question to the Lead Producer.
     read_only_keywords = [
@@ -44,7 +44,7 @@ guard_def = """    # ── Defensive Guard: Detect read-only / informational pr
         "context on", "update on", "report on"
     ]
     prompt_lower = ctx.user_prompt.lower().strip()
-    # If the prompt ends with '?' it's a question — never blueprint it
+    # If the prompt ends with '?' it's a question  never blueprint it
     is_read_only_question = (
         prompt_lower.endswith("?")
         or any(prompt_lower.startswith(kw) for kw in read_only_keywords)
@@ -63,7 +63,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
         or ctx.user_prompt.strip().lower() in auto_feed_triggers
     )
 
-    # ── Defensive Guard: Detect read-only / informational prompts ──
+    # -- Defensive Guard: Detect read-only / informational prompts --
     # Even if the INFORMATIONAL classifier miscategorized, the Scope Gate
     # should NEVER route a read-only question to the Lead Producer.
     read_only_keywords = [
@@ -74,7 +74,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
         "context on", "update on", "report on"
     ]
     prompt_lower = ctx.user_prompt.lower().strip()
-    # If the prompt ends with '?' it's a question — never blueprint it
+    # If the prompt ends with '?' it's a question  never blueprint it
     is_read_only_question = (
         prompt_lower.endswith("?")
         or any(prompt_lower.startswith(kw) for kw in read_only_keywords)
@@ -85,7 +85,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
         ctx.final_output = "Failed to start."
         return ctx
 
-    # ── Phase 1: GDD Librarian (always runs — gathers design context) ──────
+    # -- Phase 1: GDD Librarian (always runs  gathers design context) ------
     print(f"\\n{'='*70}")
     print(f"  Phase 1: GDD Librarian")
     print(f"{'='*70}")
@@ -97,7 +97,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
     else:
         ctx.output_parts.append("No relevant GDD sections found.\\n")
 
-    # ── Phase 2: Project State & File Context (always runs) ────────────
+    # -- Phase 2: Project State & File Context (always runs) ------------
     print(f"\\n{'='*70}")
     print(f"  Phase 2: Project Context")
     print(f"{'='*70}")
@@ -109,7 +109,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
     ctx.structure = curate_project_structure(ctx.user_prompt)
     ctx.output_parts.append(ctx.structure + "\\n")
 
-    # ── Auto-Fetch Referenced Files ───────────────────────────────────
+    # -- Auto-Fetch Referenced Files -----------------------------------
     refs = parse_file_references(ctx.user_prompt)
     refs_block = fetch_referenced_files(refs)
     set_referenced_files_cache(refs_block)
@@ -119,7 +119,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
         )
         print(f"  [AutoRef] {len(refs)} file reference(s) parsed and cached for all agents")
 
-    # ── Auto-Feeder: extract next task from blueprint (for auto-feed requests) ──
+    # -- Auto-Feeder: extract next task from blueprint (for auto-feed requests) --
     if is_auto_feed_request:
         if blueprint_path.is_file():
             content = blueprint_path.read_text(encoding="utf-8")
@@ -139,7 +139,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
                 ctx.final_output = "Blueprint complete."
                 return ctx
 
-    # ── Phase 0.5: Lead Producer (Scope Gate) — only for fresh prompts ──
+    # -- Phase 0.5: Lead Producer (Scope Gate)  only for fresh prompts --
     # Runs AFTER GDD/Project State gathering so the model can make informed decisions.
     if not is_auto_feed_request:
         gdd_snippet = ctx.gdd_context[:2000] if ctx.gdd_context else "(no GDD context)"
@@ -166,7 +166,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
                 print(f"\\n  [Lead Producer] Scope is TOO_BROAD. Generating blueprint...")
                 unavailable_text = get_unavailable_domains_text()
                 hard_constraints = (
-                    f"HARD CONSTRAINTS — Do NOT plan for:\\n"
+                    f"HARD CONSTRAINTS  Do NOT plan for:\\n"
                     f"{unavailable_text}\\n\\n"
                     f"This is a custom engine using SDL2/OpenGL/Jolt/Box2D/Lua. "
                     f"Never reference Unreal, Unity, Godot, or proprietary engines. "
@@ -200,7 +200,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
                 blueprint_path.write_text(blueprint, encoding="utf-8")
                 print(f"  [Lead Producer] Saved to docs/project_blueprint.md.")
 
-                # ── Continuous Execution: extract first task & fall through ──
+                # -- Continuous Execution: extract first task & fall through --
                 content = blueprint_path.read_text(encoding="utf-8")
                 first_match = re.search(
                     r"^[-*]?[ \t]*[[] []][ \t]*(?:Task [0-9]+:[ \t]*)?(.+)",
@@ -215,7 +215,7 @@ new_block = """    blueprint_path = ctx.project_root / "docs" / "project_bluepri
                     print(f"  [Lead Producer] Auto-feeding first task: {task_text}")
                     print(f"  [Lead Producer] Continuing to Phase 3...")
                 else:
-                    print("  [Lead Producer] Blueprint generated but no tasks found — continuing with original prompt.")
+                    print("  [Lead Producer] Blueprint generated but no tasks found  continuing with original prompt.")
 
 """
 

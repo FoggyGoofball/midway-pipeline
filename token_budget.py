@@ -1,8 +1,8 @@
 """
-Token budget manager — tracks and enforces token budget across pipeline execution.
+Token budget manager  tracks and enforces token budget across pipeline execution.
 Provides density-aware estimation and AST-aware/block-aware truncation.
 
-No async/await — purely synchronous estimation and string manipulation.
+No async/await  purely synchronous estimation and string manipulation.
 """
 
 from __future__ import annotations
@@ -12,12 +12,12 @@ from typing import List, Optional, Tuple
 
 MAX_TOKENS: int = 12000
 
-# ── Directive C: Kernel Interrupt Thresholds ────────────────────────────────
+# -- Directive C: Kernel Interrupt Thresholds --------------------------------
 # These constants define the VRAM critical thresholds per model.
 # When the estimated token payload exceeds the threshold, a Kernel warning
 # is prepended to the prompt telling the agent to <PAGE_OUT>.
 VRAM_CRITICAL_RATIO: float = 0.80
-# ── Phase 7: VRAM-Guarded Model Token Limits ─────────────────────────────
+# -- Phase 7: VRAM-Guarded Model Token Limits -----------------------------
 # Synchronized with ollama_client.py OLLAMA_NUM_CTX/*_LARGE/*_MASSIVE values
 # after unlocking VRAM context limits.
 #
@@ -28,18 +28,18 @@ VRAM_CRITICAL_RATIO: float = 0.80
 #   7B at 32768: ~8-9GB (unlocked from 8192)
 #   8B at 32768: ~8-9GB (unlocked from 8192)
 #   14B at 16384: ~10-11GB (was 9-10GB at 8192)
-#   phi3.5 at 16384: ~11-12GB (tight — was exceeding at 32768)
+#   phi3.5 at 16384: ~11-12GB (tight  was exceeding at 32768)
 MODEL_TOKEN_LIMITS: dict = {
     # Thresholds = 80% of context window
     "qwen3.5:9b":          (6553, 8192),   # 80% of 8K
-    "qwen2.5-coder:7b":    (26214, 32768), # 80% of 32K — unlocked
+    "qwen2.5-coder:7b":    (26214, 32768), # 80% of 32K  unlocked
     "qwen2.5-coder:1.5b":  (6553, 8192),
-    # Pre-summarizer: 3.8B mini — larger window is fine; it's ~2.5 GB
+    # Pre-summarizer: 3.8B mini  larger window is fine; it's ~2.5 GB
     "phi3.5":              (13107, 16384),  # 80% of 16K
     "phi-3.5":             (13107, 16384),  # format alias
     # phi3:14b bumped from 8K to 16K
-    "phi3:14b":            (13107, 16384),  # 80% of 16K — was 8192
-    "llama3.1:8b":         (26214, 32768),  # 80% of 32K — unlocked
+    "phi3:14b":            (13107, 16384),  # 80% of 16K  was 8192
+    "llama3.1:8b":         (26214, 32768),  # 80% of 32K  unlocked
     "llama3.2:1b":         (6553, 8192),
     "qwen3.5:14b":         (6553, 8192),
 }
@@ -192,7 +192,7 @@ class TokenBudget:
                 core_lines.append(f"[CORE_MEMORY] {key}: {value}")
             core_serialized = "\n".join(core_lines)
             core_memory_block = (
-                "\n## Core Memory Table (Phase I — MemGPT Protected)\n"
+                "\n## Core Memory Table (Phase I  MemGPT Protected)\n"
                 f"{core_serialized}\n"
             )
             # Increase effective budget by the size of the core memory block
@@ -294,15 +294,15 @@ class TokenBudget:
         for _b in blocks:
             _h = _b["header"].strip()
             if _h and not _b.get("is_fence_block"):
-                _toc_lines.append(f"  • {_h}")
+                _toc_lines.append(f"   {_h}")
         _toc_block = ""
         if _toc_lines:
             _toc_body = "\n".join(_toc_lines)
             if len(_toc_body) > 480:
-                _toc_body = _toc_body[:480] + "\n  … (truncated)"
+                _toc_body = _toc_body[:480] + "\n   (truncated)"
             _toc_block = f"## Context Index\n{_toc_body}\n"
 
-        # Phase 2: Prune oldest blocks first (bottom of stack) —
+        # Phase 2: Prune oldest blocks first (bottom of stack) 
         # but preserve the first header block (director's task breakdown)
         preserved_first = None
         if blocks and not blocks[0].get("is_fence_block"):
@@ -381,9 +381,9 @@ class TokenBudget:
         if offload_count > 0:
             _sym_list = ", ".join(_evicted_symbols[:8])
             if len(_evicted_symbols) > 8:
-                _sym_list += f" … (+{len(_evicted_symbols) - 8} more)"
+                _sym_list += f"  (+{len(_evicted_symbols) - 8} more)"
             output_lines.append(
-                f"\n\n[SYSTEM: {offload_count} block(s) offloaded to VRAM — "
+                f"\n\n[SYSTEM: {offload_count} block(s) offloaded to VRAM  "
                 f"evicted symbols: {_sym_list}. "
                 f"To restore a body, use: "
                 f'<invoke_kernel><action>PAGE_IN</action>'

@@ -1,9 +1,9 @@
 """
-_helpers_io.py — File system & hashing utilities for the mesh consensus pipeline.
+_helpers_io.py  File system & hashing utilities for the mesh consensus pipeline.
 Contains: audio chime, doc cache, project scanner, file tools,
 atomic writes, file hash locking, memory search.
 
-No async/await — purely synchronous.
+No async/await  purely synchronous.
 """
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-# ── Local constant — no sibling cross-import ──────────────────────────────
+# -- Local constant  no sibling cross-import ------------------------------
 PROJECT_ROOT: Path = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway")))
 
-# ── Phase IV: Uncommitted Virtual Staging Filesystem (AIOS Alignment) ─────
-# Global staging flag — when True, all atomic_write_text calls redirect to
+# -- Phase IV: Uncommitted Virtual Staging Filesystem (AIOS Alignment) -----
+# Global staging flag  when True, all atomic_write_text calls redirect to
 # .staging_workspace/ replicating the parent directory layout.
 _STAGING_ACTIVE: bool = False
 _STAGING_DIR: Optional[Path] = None
@@ -36,7 +36,7 @@ def enable_staging(project_root: Optional[Path] = None) -> Path:
     _STAGING_DIR = pr / ".staging_workspace"
     _STAGING_DIR.mkdir(parents=True, exist_ok=True)
     _STAGING_ACTIVE = True
-    print(f"  [Staging FS] ✅ Staging enabled — writes redirected to {_STAGING_DIR}")
+    print(f"  [Staging FS] ✅ Staging enabled  writes redirected to {_STAGING_DIR}")
     return _STAGING_DIR
 
 
@@ -44,7 +44,7 @@ def disable_staging() -> None:
     """Disable staged filesystem mode. Writes return to normal."""
     global _STAGING_ACTIVE
     _STAGING_ACTIVE = False
-    print(f"  [Staging FS] ⏹ Staging disabled — writes target real paths")
+    print(f"  [Staging FS] ⏹ Staging disabled  writes target real paths")
 
 
 def is_staging_active() -> bool:
@@ -93,11 +93,11 @@ def commit_staging(project_root: Optional[Path] = None) -> int:
         except Exception as e:
             print(f"  [Staging FS] ⚠ Error syncing {staged_file}: {e}")
     
-    print(f"  [Staging FS] 📦 Sync complete — {count} files transferred")
+    print(f"  [Staging FS] 📦 Sync complete  {count} files transferred")
     return count
 
 
-# ── Audio Chime Utility ─────────────────────────────────────────────────────
+# -- Audio Chime Utility -----------------------------------------------------
 
 def trigger_chime():
     """Play a system beep/chime to alert the user of a gate or important event.
@@ -114,7 +114,7 @@ def trigger_chime():
         print('\a')
 
 
-# ── LRU Doc Cache ───────────────────────────────────────────────────────────
+# -- LRU Doc Cache -----------------------------------------------------------
 
 _DOC_CACHE: Dict[str, Tuple[str, float]] = {}
 _DOC_CACHE_TTL = 30.0
@@ -151,7 +151,7 @@ def _get_doc_cached(rel_path: str, project_root: Path = None) -> str:
     return content
 
 
-# ── Project Structure Scanner ─────────────────────────────────────────────
+# -- Project Structure Scanner ---------------------------------------------
 
 def curate_project_structure(prompt: str, project_root: Path = None) -> str:
     """Scan the project directory tree for files relevant to the prompt."""
@@ -205,24 +205,24 @@ def curate_project_structure(prompt: str, project_root: Path = None) -> str:
     return "\n".join(lines)
 
 
-# ── File Tools ─────────────────────────────────────────────────────────────
+# -- File Tools -------------------------------------------------------------
 
 AGENT_FILE_TOOLS_PROMPT = (
     "\n\n---\n"
     "PROGRESSIVE FILE DISCLOSURE TOOLS:\n"
     "You have access to synchronous file-system tools to read the codebase "
     "during your reasoning. To use them, embed one of these signals:\n"
-    "- [FILE_READ:<relative_path>] — Read the contents of a file. "
+    "- [FILE_READ:<relative_path>]  Read the contents of a file. "
     "Returns the full text of the file at the given path.\n"
     "  Comma-separated paths are supported, e.g.:\n"
-    "  [FILE_READ:src/Engine.cpp, src/Engine.h] — reads multiple files.\n"
+    "  [FILE_READ:src/Engine.cpp, src/Engine.h]  reads multiple files.\n"
     "  Optional line bounds can be specified, e.g.:\n"
-    "  [FILE_READ:src/Engine.cpp, lines 300-450] — reads only lines 300-450.\n"
+    "  [FILE_READ:src/Engine.cpp, lines 300-450]  reads only lines 300-450.\n"
     "  Both can be combined: [FILE_READ:src/Engine.cpp, lines 300-450, src/Engine.h]\n"
-    "- [FILE_LIST:<relative_dir>] — List the files in a directory. "
+    "- [FILE_LIST:<relative_dir>]  List the files in a directory. "
     "Returns a directory listing with file names.\n"
     "  Comma-separated directories are supported, e.g.:\n"
-    "  [FILE_LIST:src/, attractions/] — lists multiple directories.\n"
+    "  [FILE_LIST:src/, attractions/]  lists multiple directories.\n"
     "The orchestrator will execute the tool and inject the result back into "
     "your context before your next iteration. Use these to explore the "
     "codebase progressively without exceeding your context window.\n"
@@ -237,7 +237,7 @@ def _read_single_file(pr: Path, path: str) -> str:
     """
     path = path.strip()
     # Detect optional line bounds: e.g. "src/Engine.cpp, lines 300-450"
-    line_bounds_match = re.search(r',\s*lines\s+(\d+)\s*[-–]\s*(\d+)\s*$', path, re.IGNORECASE)
+    line_bounds_match = re.search(r',\s*lines\s+(\d+)\s*[-]\s*(\d+)\s*$', path, re.IGNORECASE)
     start_line = None
     end_line = None
     if line_bounds_match:
@@ -290,7 +290,7 @@ def handle_file_read(signal_content: str, project_root: Path = None) -> str:
     Supports comma-separated paths and optional line bounds.
     Example: [FILE_READ:src/Engine.cpp, lines 300-450, src/Engine.h]
 
-    Includes strict path traversal boundary check — any path that resolves
+    Includes strict path traversal boundary check  any path that resolves
     outside PROJECT_ROOT is rejected with an error.
     """
     pr = (project_root or PROJECT_ROOT).resolve()
@@ -301,7 +301,7 @@ def handle_file_read(signal_content: str, project_root: Path = None) -> str:
     if len(parts) == 1:
         return _read_single_file(pr, parts[0])
 
-    # Detect if there's a "lines N-M" specifier — it attaches to the preceding path
+    # Detect if there's a "lines N-M" specifier  it attaches to the preceding path
     # Strategy: join all parts and check for line pattern, or parse intelligently
     # Simple approach: group consecutive parts that form a path+lines spec
     results = []
@@ -309,7 +309,7 @@ def handle_file_read(signal_content: str, project_root: Path = None) -> str:
     while i < len(parts):
         part = parts[i]
         # Check if this part looks like a line bounds specifier that belongs to previous result
-        line_match = re.match(r'^lines\s+(\d+)\s*[-–]\s*(\d+)$', part, re.IGNORECASE)
+        line_match = re.match(r'^lines\s+(\d+)\s*[-]\s*(\d+)$', part, re.IGNORECASE)
         if line_match and results:
             # Append line bounds to the last path processed
             last_result_line = results[-1]
@@ -367,7 +367,7 @@ def handle_file_list(signal_content: str, project_root: Path = None) -> str:
     Supports comma-separated directories.
     Example: [FILE_LIST:src/, attractions/]
 
-    Includes strict path traversal boundary check — any path that resolves
+    Includes strict path traversal boundary check  any path that resolves
     outside PROJECT_ROOT is rejected with an error.
     """
     pr = (project_root or PROJECT_ROOT).resolve()
@@ -384,7 +384,7 @@ def handle_file_list(signal_content: str, project_root: Path = None) -> str:
     return "\n---\n".join(results)
 
 
-# ── VRAM Stub Builder ─────────────────────────────────────────────────────
+# -- VRAM Stub Builder -----------------------------------------------------
 
 def _make_vram_stub(rel_path: str, content: str) -> str:
     """Build a <VRAM_STUB> pointer from file content for the Active Virtual Memory system.
@@ -403,7 +403,7 @@ def _make_vram_stub(rel_path: str, content: str) -> str:
     return f'<VRAM_STUB id="{rel_path}" summary="{first_line}" />'
 
 
-# ── Autonomous File Reading ────────────────────────────────────────────────
+# -- Autonomous File Reading ------------------------------------------------
 
 def find_relevant_files(prompt: str, persona: str, project_root: Path = None) -> list:
     """Scan the project for files relevant to the given prompt and persona."""
@@ -439,7 +439,7 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
         "shader": "docs/rules_shader.md",
         "lua":    "docs/rules_lua.md",
     }
-    # Skip pipeline system directories — not game engine files
+    # Skip pipeline system directories  not game engine files
     _PIPELINE_EXCLUDED_PREFIXES = {
         "midway-pipeline/",
         "docs/memory/",
@@ -519,7 +519,7 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
     return relevant
 
 
-# ── Memory Search ──────────────────────────────────────────────────────────────
+# -- Memory Search --------------------------------------------------------------
 
 def search_memory(query: str = "", project_root: Path = None) -> str:
     """Search the project's docs/memory/ directory for context.
@@ -555,7 +555,7 @@ def search_memory(query: str = "", project_root: Path = None) -> str:
     return "\n\n".join(results)
 
 
-# ── Blueprint Context Pack ─────────────────────────────────────────────────
+# -- Blueprint Context Pack -------------------------------------------------
 
 def build_blueprint_context_pack(
     gdd_context: str = "",
@@ -620,19 +620,78 @@ def build_blueprint_context_pack(
     return "\n\n".join(parts) if parts else "(no project context available)"
 
 
-# ── Atomic File Write Helper ──────────────────────────────────────────────
+# -- Sanitize Agent Output (Lexical Leakage Prevention) --------------------
 
-def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
+def sanitize_agent_file_output(domain_key: str, output_text: str) -> str:
+    """
+    Strip orphaned Markdown fences and Python/Bash-style comment markers
+    from agent-generated file output BEFORE it is written to disk.
+
+    This prevents two common LLM output errors:
+      1. Markdown fences (```lua, ```cpp, ```python, and bare ```) leaking
+         into source files alongside the actual code.
+      2. Python-style ``#`` comment markers leaking into Lua files (which
+         use ``--`` for comments).
+
+    Args:
+        domain_key: Domain identifier string (e.g. "Lua", "C++", "PHYS").
+        output_text: Raw agent output text, possibly wrapped in fences.
+
+    Returns:
+        Sanitized text with fences stripped and (in Lua files) ``#`` comments
+        converted to ``--`` comments. Whitespace-trimmed.
+    """
+    text = output_text
+
+    # 1. Strip orphaned Markdown opening fences with optional language tag.
+    #    Matches lines like: ```lua, ```cpp, ```python, ```c++, ```, etc.
+    text = re.sub(
+        r'^```[a-zA-Z0-9+#]*\s*\n?', '', text, flags=re.MULTILINE
+    )
+
+    # 2. Strip orphaned Markdown closing fences at the end of text or on
+    #    their own line.
+    text = re.sub(r'\n?```\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^```\s*$', '', text, flags=re.MULTILINE)
+
+    # 3. If domain is Lua, replace Python/Bash-style ``#`` comment markers
+    #    with standard Lua ``--`` comment markers.
+    if domain_key and domain_key.lower() in ("lua", "luascript", "lua scripter"):
+        # Replace lines that start with ``#`` (but NOT shebang ``#!``)
+        text = re.sub(
+            r'^#(?!\s*!).*$',
+            lambda m: '--' + m.group(0)[1:],
+            text,
+            flags=re.MULTILINE,
+        )
+
+    return text.strip()
+
+
+# -- Atomic File Write Helper ----------------------------------------------
+
+def atomic_write_text(
+    path: Path, content: str, encoding: str = "utf-8",
+    domain_key: str = "",
+) -> None:
     """Write content to file atomically to prevent corruption from Ctrl+C.
+
+    Accepts an optional ``domain_key`` parameter; when provided, the content
+    is first run through ``sanitize_agent_file_output()`` to strip Markdown
+    fences and fix comment-marker leakage before writing.
 
     Writes to a .tmp file first, flushes, then atomically renames to target.
     This prevents half-written files if the process is interrupted.
 
-    ── Phase IV: AIOS Staging Hook ─────────────────────────────────────
+    -- Phase IV: AIOS Staging Hook -------------------------------------
     When staging is active, the target path is automatically redirected to
     .staging_workspace/ to prevent dirty reads on the native source tree.
     """
-    # ── Phase IV: Redirect to staging workspace if active ────────────
+    # -- Sanitize agent output before write if domain_key is provided --
+    if domain_key:
+        content = sanitize_agent_file_output(domain_key, content)
+
+    # -- Phase IV: Redirect to staging workspace if active ------------
     if _STAGING_ACTIVE and _STAGING_DIR is not None:
         staging_path = get_staging_path(path)
         staging_path.parent.mkdir(parents=True, exist_ok=True)
@@ -650,7 +709,7 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
     tmp_path.replace(path)
 
 
-# ── File Hash Locking (Pre-Merge Hash Locking) ────────────────────────────
+# -- File Hash Locking (Pre-Merge Hash Locking) ----------------------------
 
 _FILE_HASHES: Dict[str, str] = {}
 

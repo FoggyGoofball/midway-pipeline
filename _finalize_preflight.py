@@ -1,7 +1,7 @@
 """
-_finalize_preflight.py — Pre-Flight Checks & Architect Fix
+_finalize_preflight.py  Pre-Flight Checks & Architect Fix
 ===========================================================
-Extracted from mesh_finalize.py — handles background compilation,
+Extracted from mesh_finalize.py  handles background compilation,
 syntax validation, and the Architect Syntax Fix invocation loop.
 
 Exported:
@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from models import PipelineContext
 from _pipeline_helpers import atomic_write_text
 from token_budget import TokenBudget
-import _prompts as _prompts_mod  # live module ref — reads post-bootstrap values
+import _prompts as _prompts_mod  # live module ref  reads post-bootstrap values
 from pipeline import (
     PROJECT_ROOT,
     call_ollama,
@@ -30,908 +30,80 @@ from pipeline import (
 #  Pre-Flight Checks: Compilation & Syntax Validation
 # ──────────────────────────────────────────────────────────────────────
 
-def _flush_results_to_workspace(ctx: PipelineContext) -> None:
-    """Pre-compilation file sync: flush all result content to disk before build."""
-    for tid, content in ctx.all_results_dict.items():
-        task = ctx.task_map.get(tid)
-        if task and task.target_file:
-            target_path = ctx.project_root / task.target_file
-            clean_content = _strip_search_replace_metadata(content)
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(target_path, clean_content)
-
-
-def _strip_search_replace_metadata(content: str) -> str:
-    """Sanitize SEARCH/REPLACE blocks: apply diff instructions natively in memory.
-
-    Handles multiple model-generated patch formats robustly:
-
-    Format 1 — canonical conflict-marker style (correct format):
-        <<<<<<< SEARCH
-        <old content>
-        =======
-        <new content>
-        >>>>>>> REPLACE
-
-    Format 2 — markdown-header style (model hallucination, tolerated):
-        ### SEARCH
-        <old content>
-        ### REPLACE
-        <new content>
-
-    Both formats are matched case-insensitively and tolerate extra angle-bracket
-    repetitions, extra hash characters, surrounding whitespace, colons, dashes,
-    and underscores around the SEARCH / REPLACE keywords.
-
-    Strategy for Format 2: strip the entire
-        ### SEARCH\n<old>\n### REPLACE\n
-    span (leaving only the REPLACE content in place), which safely handles
-    sequences of multiple consecutive blocks in a single pass.
-    """
-    import re as _re
-    result = content
-
-    # ── Format 1: canonical conflict-marker style ─────────────────────────
-    # Tolerates: extra < / > / = chars, surrounding spaces, lowercase.
-    # e.g.  <<<< search ... ==== ... >>>> replace
-    canonical = _re.compile(
-        r'<{3,9}[ \t]*search[ \t]*\n(.*?)\n={3,9}[ \t]*\n(.*?)\n>{3,9}[ \t]*replace[ \t]*',
-        _re.DOTALL | _re.IGNORECASE,
-    )
-    for match in canonical.finditer(content):
-        result = result.replace(match.group(0), match.group(2), 1)
-
-    # ── Format 2: markdown-header style ──────────────────────────────────
-    # Strip everything from ### SEARCH up to and including the ### REPLACE
-    # header line, leaving the replacement content intact in place.
-    # Tolerates: 1-6 # chars, spaces/dashes/underscores/colons around keyword,
-    # lowercase, e.g.  ## search:  /  #### SEARCH --  /  # replace
-    md_strip = _re.compile(
-        r'#{1,6}[ \t_\-]*search[ \t_\-:]*\n'   # ### SEARCH header
-        r'.*?'                                    # old content (non-greedy)
-        r'#{1,6}[ \t_\-]*replace[ \t_\-:]*\n',  # ### REPLACE header (consumed)
-        _re.DOTALL | _re.IGNORECASE,
-    )
-    result = md_strip.sub('', result)
-
-    return result
-
-
-_COMMENT_ONLY_RE = re.compile(
-    r'^\s*(//[^\n]*|/\*.*?\*/|#[^\n]*)\s*$',
-    re.DOTALL,
-)
-
-
-def _is_comment_only(content: str) -> bool:
-    """Return True if content is nothing but comments and whitespace."""
-    # Strip fenced code block markers, then check.
-    stripped = re.sub(r'```[^\n]*\n?|```', '', content).strip()
-    return bool(_COMMENT_ONLY_RE.match(stripped)) or not stripped
-
-
-# Detects a meaningful code block: at least one SEARCH/REPLACE pair, or a real
-# language keyword / declaration line. Bare triple-backtick fence markers are
-# intentionally excluded — a fenced block that contains only delegation signals
-# must NOT be treated as a real code implementation.
-_HAS_CODE_RE = re.compile(
-    r'(<{7}\s*SEARCH|\bfunction\b|\bclass\b|\bdef\b|\bvoid\b|\bint\b|\breturn\b|'
-    r'\blocal\s+\w+\s*=\s*(?:function\b|"[^"]*"|\d+|MidwayPhysics\.|\{))',
-    re.IGNORECASE,
-)
-# Fix K: 'local' keyword only counts as code if it's followed by an assignment
-# to a function, string, number, MidwayPhysics call, or table literal.
-# A bare 'local handle' or 'local handle = nil' is NOT real code — it's a
-# variable stub that the model puts in as a placeholder.
-
-
-
-# Patterns that indicate the output is a pure signal/delegation with no real code.
-# Matches DELEGATE, QUERY, CONF, REVISE, APPROVE, APPEAL, VETO, OBJECT, RECOURSE
-# and similar inter-agent signal lines so they are excluded from the "has real code"
-# check and from the non-signal line count.
-_DELEGATE_ONLY_RE = re.compile(
-    r'^\s*(\[DELEGATE:|\[QUERY:|\[CONF:|\[REVISE:|\[APPROVE\]|\[APPEAL:|\[VETO:|\[OBJECT:|\[RECOURSE:|\[CONSULT:|\[REJECT:|\[MERGE:|\[FLUSH\]|\[RESULT:)',
-    re.IGNORECASE | re.MULTILINE,
-)
-
-def _task_has_code(content: str) -> bool:
-    """Return True if *content* contains at least one concrete code construct
-    AND is not a pure delegation/signal response.
-
-    Rejects outputs that are primarily markdown table rows (hallucinated API
-    ledgers) even when they contain function keywords, since those keywords
-    appear inside table cell text, not as real code constructs.
-    """
-    if not content or not content.strip():
-        return False
-    # If the entire (stripped) content is only signal lines, treat as no-code.
-    non_signal_lines = [
-        ln for ln in content.splitlines()
-        if ln.strip() and not _DELEGATE_ONLY_RE.match(ln)
-    ]
-    if not non_signal_lines:
-        return False
-    # Ledger-hallucination guard: if the majority of non-empty lines look like
-    # markdown table rows (start with '|'), the LLM dumped a ledger table, not code.
-    _table_rows = sum(1 for ln in non_signal_lines if ln.strip().startswith('|'))
-    if _table_rows > 0 and _table_rows / len(non_signal_lines) > 0.40:
-        return False
-    # Must contain a real code construct in the non-signal portion of the output.
-    # We search the joined non-signal lines rather than the full raw content so
-    # that keywords buried inside APPEAL/APPROVE prose cannot satisfy the check.
-    non_signal_text = "\n".join(non_signal_lines)
-    return bool(_HAS_CODE_RE.search(non_signal_text))
-
-
-def _inject_empty_output_errors(ctx: PipelineContext) -> None:
-    """
-    Universal guard: if a task result contains only prose with no code, inject a
-    pre-flight error so the fix loop forces a proper implementation before review.
-    This check is project-agnostic — empty outputs are always a failure regardless
-    of domain or technology.
-    """
-    for tid, content in list(ctx.all_results_dict.items()):
-        if not content or not content.strip() or _is_comment_only(content):
-            ctx.pre_flight_errors += (
-                f"\n## Empty Output — Task {tid}\n"
-                f"Task {tid} produced no output at all (or only comments). "
-                f"The agent must provide a concrete implementation.\n"
-            )
-            print(f"  [Pre-Flight] EMPTY OUTPUT detected for task {tid} — injecting fix demand.")
-        elif _DELEGATE_ONLY_RE.search(content) and not _task_has_code(content):
-            ctx.pre_flight_errors += (
-                f"\n## Delegation Signal Only — Task {tid}\n"
-                f"Task {tid} responded with only a [DELEGATE/QUERY/CONF] signal and no "
-                f"concrete code. Delegation signals are forbidden as a substitute for "
-                f"implementation. The agent MUST produce a complete code block.\n"
-            )
-            print(f"  [Pre-Flight] DELEGATE-ONLY output detected for task {tid} — injecting fix demand.")
-        elif _DELEGATE_ONLY_RE.search(content[:500]) and not _task_has_code(content):
-            # Delegate signal buried at the start of a long hallucinated dump.
-            ctx.pre_flight_errors += (
-                f"\n## Delegation Signal Buried in Output — Task {tid}\n"
-                f"Task {tid} began with a [DELEGATE/QUERY/CONF] signal followed by "
-                f"non-code content (e.g., a ledger table dump). This is not a valid "
-                f"implementation. The agent MUST produce a complete working code block.\n"
-            )
-            print(f"  [Pre-Flight] DELEGATE+HALLUCINATION detected for task {tid} — injecting fix demand.")
-        # ── Orphaned SEARCH/REPLACE check ──
-        # If the LLM output contains SEARCH/REPLACE blocks (canonical
-        # <<<<<<< SEARCH format or markdown ### SEARCH format) but no
-        # ### task_X header, do NOT throw a NO CODE BLOCK error. Instead,
-        # apply the blocks to the target file and propagate the patched
-        # result to ALL tasks targeting that file so they are all resolved.
-        _has_sr = bool(re.search(
-            r'(?:<{3,9}\s*SEARCH|#{1,6}\s*SEARCH)', content, re.IGNORECASE
-        ))
-        if _has_sr:
-            # SEARCH/REPLACE blocks detected — apply them to the target file
-            # and propagate to all tasks sharing that target_file so they
-            # are all considered resolved.
-            _task_obj = ctx.task_map.get(tid)
-            if _task_obj and _task_obj.target_file:
-                _target_path = ctx.project_root / _task_obj.target_file
-                if _target_path.is_file():
-                    _file_content = _target_path.read_text(encoding="utf-8", errors="replace")
-                    _patched_content = _strip_search_replace_metadata(content)
-                    if _patched_content != content:
-                        # Before broadcasting, verify the patched content doesn't
-                        # contain static-guard violations.  A SEARCH/REPLACE block
-                        # that introduces phantom APIs (e.g. SpawnStaticMesh with a
-                        # string path, BUTTON.x, SLOT_X globals) must never be
-                        # propagated to sibling tasks — that would poison every task
-                        # sharing the file with the same bad pattern.
-                        _SR_GUARD_PATTERNS = [
-                            re.compile(r'MidwayPhysics\.SpawnStaticMesh\s*\(\s*[\'"]', re.IGNORECASE),
-                            re.compile(r'MidwayPhysics\.SpawnStaticPlane', re.IGNORECASE),
-                            re.compile(r'MidwayPhysics\.ApplyForce\b', re.IGNORECASE),
-                            re.compile(r'\bBUTTON\s*\.', re.MULTILINE),
-                            re.compile(r'\bSLOT_[XYZ]\b', re.MULTILINE),
-                            re.compile(r'\bSharedBooth\s*\.', re.MULTILINE),
-                            re.compile(r'\b(?:Mouse|Input)\s*\.', re.MULTILINE),
-                            re.compile(r'\bAttractionConstants\.(?:initialize|get)\w+\s*\(', re.IGNORECASE),
-                            re.compile(r'\bMidwayPhysics\.OnLoadStatic\s*\(', re.IGNORECASE),
-                            re.compile(r'\bsol\s*\.\s*(?:set_function|new_usertype|state)\s*\(', re.IGNORECASE),
-                        ]
-                        _sr_guard_hit = next(
-                            (p for p in _SR_GUARD_PATTERNS if p.search(_patched_content)),
-                            None,
-                        )
-                        if _sr_guard_hit:
-                            ctx.pre_flight_errors += (
-                                f"\n## Static Pattern Violation — Task {tid} [SEARCH/REPLACE blocked]\n"
-                                f"**Rule:** SEARCH/REPLACE output contains a static-guard violation "
-                                f"(matched: `{_sr_guard_hit.pattern}`) and was NOT broadcast to sibling tasks.\n"
-                                f"Rewrite task {tid} without phantom APIs, undefined globals (BUTTON, SLOT_X, "
-                                f"SharedBooth), or unsupported SpawnStaticMesh overloads.\n"
-                            )
-                            print(f"  [Pre-Flight] ⛔ SEARCH/REPLACE for task {tid} blocked — static guard hit: {_sr_guard_hit.pattern}")
-                            continue
-                        # SEARCH/REPLACE was applied — store globally for all
-                        # tasks targeting this file.
-                        ctx.all_results_dict[tid] = _patched_content
-                        # Sync all_results for the primary task.
-                        _fp_f0 = False
-                        for _fp_i0, _fp_e0 in enumerate(ctx.all_results):
-                            if _fp_e0.get("task_id") == tid:
-                                ctx.all_results[_fp_i0] = {"task_id": tid, "output": _patched_content}
-                                _fp_f0 = True
-                                break
-                        if not _fp_f0:
-                            ctx.all_results.append({"task_id": tid, "output": _patched_content})
-                        for _otid, _otask in ctx.task_map.items():
-                            if _otid != tid and _otask.target_file == _task_obj.target_file:
-                                ctx.all_results_dict[_otid] = _patched_content
-                                _fp_f1 = False
-                                for _fp_i1, _fp_e1 in enumerate(ctx.all_results):
-                                    if _fp_e1.get("task_id") == _otid:
-                                        ctx.all_results[_fp_i1] = {"task_id": _otid, "output": _patched_content}
-                                        _fp_f1 = True
-                                        break
-                                if not _fp_f1:
-                                    ctx.all_results.append({"task_id": _otid, "output": _patched_content})
-                        # Write patched content to disk
-                        _target_path.parent.mkdir(parents=True, exist_ok=True)
-                        atomic_write_text(_target_path, _patched_content)
-                        print(f"  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to {_task_obj.target_file} via {tid}")
-                        continue
-            # Fall through if SR blocks couldn't be applied — do NOT throw
-            # NO CODE BLOCK error (SR content is real code even without headers).
-        elif not _task_has_code(content):
-            ctx.pre_flight_errors += (
-                f"\n## No Code Block — Task {tid}\n"
-                f"Task {tid} response contains only prose with no code construct. "
-                f"The agent must produce at least one concrete code block "
-                f"that implements the task specification.\n"
-            )
-            print(f"  [Pre-Flight] NO CODE BLOCK detected for task {tid} — injecting fix demand.")
-
+from _preflight_helpers import (
+    _flush_results_to_workspace,
+    _strip_search_replace_metadata,
+    _is_comment_only,
+    _task_has_code,
+    _inject_empty_output_errors,
+)  # noqa: F401
 
 def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
-    """Deterministic, compiler-free checks for patterns that are always wrong.
+    """Delegated to _preflight_static  see that module for the full implementation."""
+    from _preflight_static import _inject_static_pattern_errors as _ise
+    _ise(ctx)
 
-    These fire before any LLM reviewer sees the code, so they cannot be
-    talked past by a permissive reviewer or skipped when no CMakeCache exists.
-    Each guard targets a failure pattern witnessed in real pipeline runs.
+def _build_synthetic_scaffold(tid: str, domain: str, original_output: str) -> str:
+    """Build a MINIMAL valid code scaffold when no clean anchor exists.
+
+    Instead of re-using broken output that contains static guard violations
+    (which poisoned every previous fix cycle), this function synthesises a
+    minimal but syntactically valid scaffold so the fix model has valid
+    structure to extend rather than garbage to repair.
+
+    Returns a string of collapsed scaffold code suitable for use as an
+    anchor block.
     """
-    # ── Guard patterns ────────────────────────────────────────────────────
-    # Each entry: (domain_filter, regex, short_label, explanation)
-    # domain_filter: None = all domains, otherwise only tasks for that agent.
-    _GUARDS = [
-        # Lua: require('nlohmann.json') — nlohmann is a C++ library.
-        (
-            "Lua",
-            re.compile(r"""require\s*\(\s*['"]nlohmann""", re.IGNORECASE),
-            "phantom require('nlohmann.json')",
-            "nlohmann/json is a C++ library and cannot be require()'d from Lua. "
-            "Use Engine.LoadJSON(path) or parse via the bridge contract instead.",
-        ),
-        # NOTE: SpawnDynamicBall, SpawnStaticBall, require('midway_physics'), and other
-        # phantom API names are now caught universally by the contract validator (C9).
-        # Individual entries here are no longer needed.
-        # C++: lua.set_function("X.Y", ...) — sol2 dot-notation table paths.
-        (
-            "C++",
-            re.compile(r'\.set_function\s*\(\s*"[A-Za-z_]\w*\.[A-Za-z_]\w*"', re.IGNORECASE),
-            "wrong sol2 table registration (dot-notation in set_function)",
-            'sol2 set_function() does not accept "Table.Method" dot-path strings. '
-            'Use lua["Table"]["Method"] = ... to register table-scoped functions.',
-        ),
-        # C7: Lua calling any sol.* method — sol is a C++ binding layer with no Lua-side object.
-        # Covers sol.set_function, sol.new_usertype, sol.state, sol.script, sol.log_message,
-        # and chained calls like sol.input.is_action_pressed(...), sol.state.open_libraries(...).
-        (
-            "Lua",
-            re.compile(r'\bsol\s*(?:\.[A-Za-z_]\w*)+\s*\(', re.IGNORECASE),
-            "sol.* called from Lua — sol is a C++ binding layer with no Lua-side object",
-            "'sol' is a C++ namespace/object and does not exist at Lua runtime. "
-            "Remove all sol.* calls (including sol.input.*, sol.state.*, etc.) from Lua code. "
-            "Use print() for logging; player input is handled by engine callbacks, not sol.",
-        ),
-        # C8 / C8b / C8c / C8d: Bare engine calls (DestroyBody, IsSensorTriggered,
-        # SpawnXxx, ApplyImpulse, etc.) without the required namespace prefix are now
-        # caught universally by the contract validator (C9 / bare-call pass).
-        # F19: SpawnStaticPlane and other phantom MidwayPhysics.* names are also
-        # caught by the contract validator.
-        # C15: MidwayPhysics.log / .log_message — subsumed by contract validator.
-        (
-            "C++",
-            re.compile(
-                r'sol::state[^;]{0,200}(?:SpawnDynamic|SpawnStatic|SpawnKinematic|SpawnSensor)',
-                re.DOTALL | re.IGNORECASE,
-            ),
-            "re-registration of existing bridge spawn function",
-            "SpawnDynamic/Static/Kinematic/SensorXxx are already registered in the sol2 "
-            "bridge contract. Re-adding them causes duplicate bindings. "
-            "Remove the C++ registration task and use the existing API from Lua instead.",
-        ),
-        # F17: Singleton method bound as free function pointer.
-        (
-            "C++",
-            re.compile(
-                r'set_function\s*\(\s*"[^"]+"\s*,\s*&[A-Z][A-Za-z_0-9]*::[A-Z][A-Za-z_0-9]*\s*\)',
-                re.IGNORECASE,
-            ),
-            "singleton method bound as free function pointer via set_function",
-            "Instance methods on singletons (e.g. &Engine::GetStreak) cannot be bound "
-            "directly as free function pointers. Wrap in a lambda: "
-            '[]{ return Engine::GetStreak(); }',
-        ),
-        # F18: Engine.Method() dot-notation in C++ (should be Engine::Method()).
-        (
-            "C++",
-            re.compile(r'\bEngine\.[A-Z][A-Za-z_0-9]*\s*\(', re.IGNORECASE),
-            "Engine.Method() dot-notation in C++ — should be Engine::Method()",
-            "C++ uses the :: scope operator, not the dot operator. "
-            "Replace Engine.GetStreak() with Engine::GetStreak() (or via the singleton accessor).",
-        ),
-        # F18b: MidwayPhysics.Method() dot-notation in C++ (not Lua).
-        (
-            "C++",
-            re.compile(r'\bMidwayPhysics\.[A-Z][A-Za-z_0-9]*\s*\(', re.IGNORECASE),
-            "MidwayPhysics.Method() dot-notation in C++ — should be MidwayPhysics::Method()",
-            "C++ uses the :: scope operator. "
-            "Replace MidwayPhysics.ApplyImpulse(...) with MidwayPhysics::ApplyImpulse(...) etc.",
-        ),
-        # C10: Duplicate top-level function definition in Lua.
-        # Detected via post-guard check below — regex finds all names first.
-        # C12: Bare OnStep defined — reliable two-pass check (see below).
-        # C++: re-registering existing bridge spawn functions.
-        # C17: MidwayInput called with an unknown action name.
-        # The only valid action strings are the five defined in MidwayInput.cpp.
-        (
-            "Lua",
-            re.compile(
-                r'\bMidwayInput\.IsActionDown\s*\(\s*["\'](?!fire|aim_left|aim_right|power_up|power_down)[^"\']+["\']',
-                re.IGNORECASE,
-            ),
-            "unknown MidwayInput action name",
-            "MidwayInput.IsActionDown only accepts: "
-            '"fire", "aim_left", "aim_right", "power_up", "power_down". '
-            "Use MidwayInput.IsKeyDown(name) for raw SDL key names instead.",
-        ),
-        # C18: MidwayInput.* dot-notation called from C++ (should use the bridge).
-        (
-            "C++",
-            re.compile(r'\bMidwayInput\.[A-Z][A-Za-z_0-9]*\s*\(', re.IGNORECASE),
-            "MidwayInput.Method() dot-notation in C++ — should be MidwayInput::Method()",
-            "C++ uses the :: scope operator. "
-            "Replace MidwayInput.Register(...) with MidwayInput::Register(...) etc.",
-        ),
-        # C16: require() referencing a wrapper or non-existent attraction file.
-        # Attractions are loaded by AttractionManager, not via Lua require().
-        (
-            "Lua",
-            re.compile(r'\brequire\s*\(\s*["\'](?:wrapped_|skeebalooks|skeeball_wrap)', re.IGNORECASE),
-            "require() targeting a non-existent wrapper file",
-            "Attraction scripts are loaded by AttractionManager directly. "
-            "Do not use require() to load other attraction files. "
-            "Define OnLoadAttraction() and OnUnload() directly in the target file.",
-        ),
-        # S1: Lua scaffold function — body is only a TODO comment or return nil stub.
-        # Matches functions whose entire body (ignoring whitespace/comments) is one of:
-        #   -- TODO / -- todo / -- placeholder / -- implement / -- stub / -- FIXME
-        #   return nil / return false / return 0 / return {} / ... (Lua vararg pass-through)
-        # These are never valid shipped implementations.
-        (
-            "Lua",
-            re.compile(
-                r'\bfunction\b[^\n]*\n'           # function header
-                r'(?:\s*(?:--[^\n]*)?\n)*'        # optional leading comment lines
-                r'\s*(?:'
-                    r'--\s*(?:TODO|FIXME|stub|placeholder|implement\s+me|to[-\s]?do)\b'
-                    r'|return\s+(?:nil|false|0|\{\s*\})'
-                    r'|\.\.\.'
-                r')\s*\n'
-                r'(?:\s*(?:--[^\n]*)?\n)*'        # optional trailing comment lines
-                r'\s*end\b',
-                re.IGNORECASE | re.DOTALL,
-            ),
-            "scaffold/stub Lua function — body is a TODO, return nil, or ... pass-through",
-            "The function contains only a placeholder body and is not a real implementation. "
-            "Replace the stub body with a complete, working implementation.",
-        ),
-        # S2: C++ scaffold function — body contains only a TODO comment or a bare return.
-        (
-            "C++",
-            re.compile(
-                r'\)\s*(?:const\s*)?\{[^}]{0,200}'    # short function body
-                r'(?://\s*(?:TODO|FIXME|stub|placeholder|implement\s+me|to[-\s]?do)\b'
-                r'|/\*\s*(?:TODO|FIXME|stub|placeholder)[^*]*\*/'
-                r'|\breturn\s*;\s*'
-                r')',
-                re.IGNORECASE | re.DOTALL,
-            ),
-            "scaffold/stub C++ function — body is a TODO comment or empty return",
-            "The C++ function body is a placeholder and not a real implementation. "
-            "Provide a complete function body with actual logic.",
-        ),
-        # G1: Undefined booth globals — BUTTON, SLOT_X/Y/Z, SharedBooth.
-        # These are never defined anywhere in the Midway runtime and will crash at load.
-        # Models hallucinate them from booth_shared.lua comments.
-        (
-            "Lua",
-            re.compile(r'\b(?:BUTTON|SLOT_[XYZ]|SharedBooth)\b', re.MULTILINE),
-            "undefined booth global (BUTTON / SLOT_X/Y/Z / SharedBooth)",
-            "BUTTON, SLOT_X, SLOT_Y, SLOT_Z, and SharedBooth are NOT defined in the "
-            "Midway runtime and will crash at load time. "
-            "Remove every reference to these names. "
-            "Replace them with plain numeric literals (e.g. 0, 1.0) declared as "
-            "module-level local constants at the top of the file. "
-            "Do NOT call SharedBooth.ButtonZ() or access BOOTH.width_x/height_y/depth_z — "
-            "those table fields do not exist in the runtime either.",
-        ),
-        # G2: Undefined input globals — Mouse.Position() / Input.Pressed().
-        # These namespaces are not in the engine bridge contract and will error at runtime.
-        (
-            "Lua",
-            re.compile(r'\b(?:Mouse|Input)\s*\.', re.MULTILINE),
-            "undefined input global (Mouse.* / Input.*)",
-            "Mouse and Input are NOT in the Midway engine bridge contract. "
-            "Remove all calls to Mouse.Position(), Input.Pressed(), and similar. "
-            "Player input is delivered through the OnStep dt callback and "
-            "AttractionConstants.modifiers — do not poll a Mouse or Input namespace.",
-        ),
-    ]
+    if domain == "Lua":
+        # Extract any function name hints from the original output
+        _scaffold_hints = ""
+        _orig_funcs = re.findall(
+            r'(?:local\s+)?function\s+(\w+)\s*\(',
+            original_output or "",
+        )
+        if _orig_funcs:
+            _scaffold_hints = (
+                "\n-- Detected function(s) that need re-implementing:\n"
+                + "\n".join(f"--   {f}(...)" for f in _orig_funcs[:5])
+            )
 
-    # ── Pre-pass: deterministically strip known phantom AttractionConstants / MidwayPhysics
-    # calls that the model repeatedly hallucinates.  These are stripped before the guard
-    # loop so the guards see clean content and do not fire on already-removed phantoms.
-    # Each entry: (regex_to_match_full_statement, replacement_string, description)
-    _PHANTOM_STRIP_PATTERNS = [
-        # AttractionConstants.initializeSkeeballMachine() — no such method in contract
-        (
-            re.compile(
-                r'\bAttractionConstants\.initialize\w+\(\s*\)[^\n]*\n?',
-                re.MULTILINE,
-            ),
-            "",
-            "phantom AttractionConstants.initialize*()",
-        ),
-        # AttractionConstants.getSkeeballMachinePos() — no such method in contract
-        (
-            re.compile(
-                r'\bAttractionConstants\.get\w+\([^)]*\)[^\n]*\n?',
-                re.MULTILINE,
-            ),
-            "",
-            "phantom AttractionConstants.get*()",
-        ),
-        # MidwayPhysics.OnLoadStatic() — not a real bridge function
-        (
-            re.compile(
-                r'\bMidwayPhysics\.OnLoadStatic\(\s*\)[^\n]*\n?',
-                re.MULTILINE,
-            ),
-            "",
-            "phantom MidwayPhysics.OnLoadStatic()",
-        ),
-        # AttractionConstants.booth / BOOTH table — these fields don't exist
-        (
-            re.compile(
-                r'^[\t ]*local\s+BOOTH\s*=\s*AttractionConstants\.booth[^\n]*\n',
-                re.MULTILINE,
-            ),
-            "",
-            "phantom AttractionConstants.booth table",
-        ),
-        # local SLOT_X/Y/Z = BOOTH.* — depends on the stripped BOOTH line
-        (
-            re.compile(
-                r'^[\t ]*local\s+SLOT_[XYZ]\s*=\s*BOOTH\.\w+[^\n]*\n',
-                re.MULTILINE,
-            ),
-            "",
-            "phantom BOOTH.* slot dimension",
-        ),
-        # SharedBooth.ButtonZ() call sites
-        (
-            re.compile(
-                r'SharedBooth\.ButtonZ\(\s*\)',
-                re.MULTILINE,
-            ),
-            "0",
-            "phantom SharedBooth.ButtonZ()",
-        ),
-    ]
-    for tid, content in list(ctx.all_results_dict.items()):
-        if not content:
-            continue
-        task_obj = ctx.task_map.get(tid) if ctx.task_map else None
-        domain = getattr(task_obj, "agent", None) if task_obj else None
-        if domain == "Lua":
-            _stripped = False
-            for (_pat, _repl, _desc) in _PHANTOM_STRIP_PATTERNS:
-                _new_content = _pat.sub(_repl, content)
-                if _new_content != content:
-                    content = _new_content
-                    _stripped = True
-                    print(f"  [Phantom Strip] ✂ Task {tid}: removed {_desc}")
-            if _stripped:
-                ctx.all_results_dict[tid] = content
+        # Minimal valid Lua module scaffold  --  no static caches or globals.
+        _scaffold = (
+            f'-- Minimal scaffold for {tid}\n'
+            f'-- Generated by synthetic-anchor builder (Failure Mode 4 fix)\n'
+            f'-- Extend this scaffold with working code. Do NOT discard it.\n'
+            f'\n'
+            f'-- Engine lifecycle callbacks\n'
+            f'function OnLoadStatic()\n'
+            f'end\n'
+            f'\n'
+            f'function OnLoad()\n'
+            f'end\n'
+            f'\n'
+            f'MidwayPhysics.OnStep(function(dt)\n'
+            f'    -- TODO: implement per-frame logic\n'
+            f'end)\n'
+            f'\n'
+            f'function OnUnload()\n'
+            f'end\n'
+            f'{_scaffold_hints}\n'
+        )
+    elif domain == "C++":
+        _scaffold = (
+            f'// Minimal scaffold for {tid}\n'
+            f'// Generated by synthetic-anchor builder\n'
+            f'#pragma once\n\n'
+            f'#include <cstdint>\n\n'
+            f'void {tid.replace("task_", "task").replace("-", "_")}_init() {{}}\n'
+        )
+    else:
+        # Generic fallback: emit a minimal valid code block structure
+        _scaffold = (
+            f'// Minimal scaffold for {tid} ({domain})\n'
+            f'// Generated by synthetic-anchor builder\n'
+        )
 
-    for tid, content in list(ctx.all_results_dict.items()):
-        if not content:
-            continue
-        task_obj = ctx.task_map.get(tid) if ctx.task_map else None
-        domain = getattr(task_obj, "agent", None) if task_obj else None
-
-        for (guard_domain, pattern, label, explanation) in _GUARDS:
-            if guard_domain and domain and domain != guard_domain:
-                continue
-            if pattern.search(content):
-                ctx.pre_flight_errors += (
-                    f"\n## Static Pattern Violation — Task {tid} [{domain or '?'}]\n"
-                    f"**Rule:** {label}\n"
-                    f"**Why this is always wrong:** {explanation}\n"
-                    f"Fix this before the reviewer sees the code.\n"
-                )
-                print(f"  [Static Guard] ❌ Task {tid} [{domain or '?'}]: {label}")
-
-        # ── C6: SpawnDynamicXxx / SpawnStaticXxx argument count hard check ────
-        # Maps function name → (min_args, max_args).
-        # Optional trailing args (e.g. mass, yawDeg) widen the max bound.
-        # The bridge registers mass via sol::object so it is always optional in Lua.
-        _SPAWN_SIGS = {
-            # name:                (min, max)
-            "SpawnDynamicSphere":   (4, 5),  # lx ly lz r [mass]
-            "SpawnDynamicBox":      (6, 7),  # lx ly lz w h d [mass]
-            "SpawnDynamicCapsule":  (5, 6),  # lx ly lz halfH r [mass]
-            "SpawnDynamicCylinder": (5, 6),  # lx ly lz halfH r [mass]
-            "SpawnDynamicMesh":     (6, 6),  # lx ly lz yaw mass path
-            "SpawnDynamicBoxR":     (7, 8),  # lx ly lz w h d mass [yawDeg]
-            "SpawnDynamicSphereR":  (5, 6),  # lx ly lz r mass [yawDeg]
-            "SpawnDynamicCapsuleR": (6, 7),
-            "SpawnDynamicCylinderR":(6, 7),
-            "SpawnStaticBox":       (6, 6),  # lx ly lz w h d
-            "SpawnStaticSphere":    (4, 4),  # lx ly lz r
-            "SpawnStaticCapsule":   (5, 5),  # lx ly lz halfH r
-            "SpawnStaticCylinder":  (5, 5),  # lx ly lz halfH r
-            "SpawnStaticMesh":      (4, 8),  # lx ly lz yaw path [sx sy sz]
-            "SpawnStaticBoxR":      (7, 7),
-            "SpawnStaticSphereR":   (5, 5),
-            "SpawnStaticCapsuleR":  (6, 6),
-            "SpawnStaticCylinderR": (6, 6),
-            "SpawnKinematicBox":    (6, 6),
-            "SpawnKinematicSphere": (4, 4),
-            "SpawnKinematicCapsule":(5, 5),
-            "SpawnKinematicCylinder":(5, 5),
-            "SpawnKinematicBoxR":   (7, 7),
-            "SpawnSensorBox":       (6, 6),
-            "SpawnSensorSphere":    (4, 4),
-        }
-        def _balanced_spawn_args(text: str, start_pos: int) -> str:
-            """Extract the full argument string between balanced parentheses
-            starting at the open-paren at position start_pos.
-            
-            Replaces the naive regex '([^)]{0,200})' which breaks on inline
-            arithmetic with nested parentheses like (i * ball_radius).
-            
-            NOTE: The opening '(' is NOT included in the returned string,
-            and the closing ')' is stripped. This ensures comma-splitting
-            logic (which tracks depth) does not see depth==1 immediately,
-            which would cause all internal commas to be skipped.
-            """
-            _depth = 0
-            _result = []
-            for _ch in text[start_pos:]:
-                if _ch == '(':
-                    _depth += 1
-                    if _depth == 1:
-                        # Skip the outermost '(' — do NOT add it to _result
-                        continue
-                elif _ch == ')':
-                    _depth -= 1
-                    if _depth == 0:
-                        break
-                    # Closing paren at depth > 0 is a nested close — keep it
-                if _depth >= 1:
-                    _result.append(_ch)
-            return "".join(_result).strip()
-
-        if domain == "Lua":
-            for _spawn_m in re.finditer(
-                r'MidwayPhysics\.(Spawn\w+)\s*\(',
-                content, re.IGNORECASE
-            ):
-                _fn_name = _spawn_m.group(1)
-                # Use depth-tracker instead of naive [^)] regex for args extraction
-                _args_str = _balanced_spawn_args(content, _spawn_m.start() + len(_spawn_m.group(0)) - 1)
-                _expected = _SPAWN_SIGS.get(_fn_name)
-                if _expected is None:
-                    # Unknown spawn call — flag as phantom API (C9 overlap)
-                    ctx.pre_flight_errors += (
-                        f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                        f"**Rule:** phantom spawn API MidwayPhysics.{_fn_name}\n"
-                        f"**Why this is always wrong:** {_fn_name} is not in the bridge contract. "
-                        f"Check docs/engine_lua_bridge_contract.md for the approved list.\n"
-                        f"Fix this before the reviewer sees the code.\n"
-                    )
-                    print(f"  [Static Guard] ❌ Task {tid} [Lua]: phantom spawn API {_fn_name}")
-                    continue
-                if _args_str:
-                    # Count top-level commas (ignore commas inside nested parens
-                    # AND nested Lua table literals like {x=0, y=0, z=0})
-                    _depth = 0
-                    _commas = 0
-                    for _ch in _args_str:
-                        if _ch in '({[':
-                            _depth += 1
-                        elif _ch in ')}]':
-                            _depth -= 1
-                        elif _ch == ',' and _depth == 0:
-                            _commas += 1
-                    _actual = _commas + 1
-                    _min_exp, _max_exp = _expected
-                    if not (_min_exp <= _actual <= _max_exp):
-                        # Build a human-readable positional signature so the fix
-                        # agent can copy the exact call pattern without guessing.
-                        _POS_LABELS = {
-                            "SpawnDynamicSphere":   "lx, ly, lz, radius [, mass]",
-                            "SpawnDynamicBox":      "lx, ly, lz, w, h, d [, mass]",
-                            "SpawnDynamicCapsule":  "lx, ly, lz, halfHeight, radius [, mass]",
-                            "SpawnDynamicCylinder": "lx, ly, lz, halfHeight, radius [, mass]",
-                            "SpawnDynamicMesh":     "lx, ly, lz, yaw, mass, path",
-                            "SpawnDynamicBoxR":     "lx, ly, lz, w, h, d, mass [, yawDeg]",
-                            "SpawnDynamicSphereR":  "lx, ly, lz, radius, mass [, yawDeg]",
-                            "SpawnStaticBox":       "lx, ly, lz, w, h, d",
-                            "SpawnStaticSphere":    "lx, ly, lz, radius",
-                            "SpawnStaticCapsule":   "lx, ly, lz, halfHeight, radius",
-                            "SpawnStaticCylinder":  "lx, ly, lz, halfHeight, radius",
-                            "SpawnStaticMesh":      "lx, ly, lz, yaw, path [, sx, sy, sz]",
-                            "SpawnKinematicBox":    "lx, ly, lz, w, h, d",
-                            "SpawnKinematicSphere": "lx, ly, lz, radius",
-                            "SpawnSensorBox":       "lx, ly, lz, w, h, d",
-                            "SpawnSensorSphere":    "lx, ly, lz, radius",
-                        }
-                        _pos_hint = _POS_LABELS.get(_fn_name, f"{_min_exp}–{_max_exp} positional args")
-                        # ── Fix G: Deterministic auto-patch ──────────────────────
-                        # Instead of relying on the LLM fix loop (which wastes 4 cycles
-                        # repeatedly getting arg counts wrong), apply a DIRECT string
-                        # replacement to the task output right here. We know the exact
-                        # bad call string from the regex match, and we know the correct
-                        # min arg count.  We extract the first _min_exp positional args
-                        # (ignoring trailing table literals, booleans, and other extras),
-                        # then rebuild the call with exactly _min_exp args.
-                        #
-                        # Strategy:
-                        #   1. Parse the args string into top-level tokens (comma-split
-                        #      at depth 0, ignoring nested parens/braces).
-                        #   2. Take only the first _min_exp positional args (these are
-                        #      always numbers or variable names — never tables or strings).
-                        #   3. If fewer than _min_exp were provided, pad with the last
-                        #      usable value (e.g. if only 4 args for a 6-arg box, use
-                        #      the 4th arg to fill h and d).
-                        #   4. Build the corrected call and do a literal string replace
-                        #      in ctx.all_results_dict[tid].
-                        #
-                        # This runs BEFORE the arch-fix cycle, so the fix model sees
-                        # correct arg counts and can focus on real logic errors.
-                        _bad_call_raw = _spawn_m.group(0) + _args_str + ")"  # e.g. "MidwayPhysics.SpawnKinematicBox(1.0, 1.0, 1.0, 0.5)"
-                        _bad_args_raw = _args_str
-                        if _bad_args_raw and _bad_call_raw in ctx.all_results_dict.get(tid, ""):
-                            # Split args at depth 0 (respects table literals)
-                            _depth_g = 0
-                            _tokens_g: list = []
-                            _current_g = ""
-                            for _ch_g in _bad_args_raw:
-                                if _ch_g in '({[':
-                                    _depth_g += 1
-                                elif _ch_g in ')}]':
-                                    _depth_g -= 1
-                                elif _ch_g == ',' and _depth_g == 0:
-                                    _tokens_g.append(_current_g.strip())
-                                    _current_g = ""
-                                    continue
-                                _current_g += _ch_g
-                            if _current_g.strip():
-                                _tokens_g.append(_current_g.strip())
-                            # Keep only the first _min_exp positional args
-                            _valid_tokens = _tokens_g[:_min_exp]
-                            # If short, pad by repeating the last usable value.
-                            # "Usable" = a number or identifier (not a string/table).
-                            _last_usable = 1.0  # safe default for any missing dimension
-                            for _tk in reversed(_valid_tokens):
-                                try:
-                                    _last_usable = float(_tk)
-                                    break
-                                except (ValueError, TypeError):
-                                    # Variable name like 'BALL_RADIUS' — use its value as hint
-                                    if _tk.isidentifier():
-                                        _last_usable = _tk  # keep as var name
-                                        break
-                            while len(_valid_tokens) < _min_exp:
-                                _valid_tokens.append(str(_last_usable))
-                            _corrected_args = ", ".join(_valid_tokens)
-                            _corrected_call = f"MidwayPhysics.{_fn_name}({_corrected_args})"
-                            # Apply the fix directly to output
-                            _old_content_g = ctx.all_results_dict[tid]
-                            _new_content_g = _old_content_g.replace(_bad_call_raw, _corrected_call, 1)
-                            if _new_content_g != _old_content_g:
-                                ctx.all_results_dict[tid] = _new_content_g
-                                _fg_found = False
-                                for _fg_i, _fg_e in enumerate(ctx.all_results):
-                                    if _fg_e.get("task_id") == tid:
-                                        ctx.all_results[_fg_i] = {"task_id": tid, "output": _new_content_g}
-                                        _fg_found = True
-                                        break
-                                if not _fg_found:
-                                    ctx.all_results.append({"task_id": tid, "output": _new_content_g})
-                                print(f"  [Fix G] ✅ Auto-patched {_fn_name} arg count "
-                                      f"({_actual}→{_min_exp}) in task {tid}")
-                                # Update ledger signatures for the corrected call
-                                try:
-                                    from ledger import update_internal_api_ledger
-                                    update_internal_api_ledger(_corrected_call, domain)
-                                except Exception:
-                                    pass
-                        # ── End Fix G ─────────────────────────────────────────────
-
-                        ctx.pre_flight_errors += (
-                            f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                            f"**Rule:** MidwayPhysics.{_fn_name} wrong argument count "
-                            f"(got {_actual}, expected {_min_exp}–{_max_exp})\n"
-                            f"**Why this is always wrong:** Wrong argument count causes a "
-                            f"runtime error or silent incorrect physics.\n"
-                            f"**Required call signature:** "
-                            f"MidwayPhysics.{_fn_name}({_pos_hint})\n"
-                            f"**CRITICAL — NO handle or label parameter:** The first argument "
-                            f"is ALWAYS the world X position (a number). "
-                            f"There is NO handle, name string, or label argument. "
-                            f"The function RETURNS a handle; it does NOT accept one as input. "
-                            f"NEVER write MidwayPhysics.{_fn_name}('label', ...) "
-                            f"or MidwayPhysics.{_fn_name}(handle, ...).\n"
-                            f"Fix this before the reviewer sees the code.\n"
-                        )
-                        print(f"  [Static Guard] ❌ Task {tid} [Lua]: {_fn_name} arg count {_actual}≠{_min_exp}–{_max_exp}")
-
-        # ── C9: Contract-driven API validation ────────────────────────────────
-        # Instead of a growing blacklist of known-bad names, we validate
-        # positively against the authoritative bridge contract from the
-        # cartridge.  This catches both phantom (unknown namespaced) calls
-        # AND bare calls (missing namespace prefix) for every symbol in the
-        # contract — universally, without per-symbol maintenance.
-        if domain == "Lua":
-            try:
-                from contract_validator import build_lua_contract, validate_lua_content
-                # Resolve the bridge contract from the active cartridge.
-                _bc_fn = getattr(ctx, '_cartridge_build_bridge_contract', None)
-                _raw_bc = _bc_fn() if callable(_bc_fn) else {}
-                if _raw_bc:
-                    _lua_contract = build_lua_contract(
-                        _raw_bc,
-                        extra_engine_namespaces={"sol"},
-                    )
-                    _cv_violations = validate_lua_content(content, _lua_contract)
-                    _cv_phantom_names: set = set()
-                    for _viol in _cv_violations:
-                        ctx.pre_flight_errors += (
-                            f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                            f"**Rule:** {_viol.label}\n"
-                            f"**Why this is always wrong:** {_viol.explanation}\n"
-                            f"Fix this before the reviewer sees the code.\n"
-                        )
-                        print(f"  [Static Guard] ❌ Task {tid} [Lua]: {_viol.label}")
-                        if _viol.kind in ("phantom_api", "bare_call"):
-                            _cv_phantom_names.add(_viol.call_text.split(".")[-1])
-                    if _cv_violations:
-                        # Prepend a single approved-API hint block before the first
-                        # violation for this task so the fix agent always has the
-                        # complete approved surface visible at the top of the errors.
-                        _hint_header = (
-                            f"\n## Approved Bridge API — Task {tid} [Lua] "
-                            f"(use ONLY these exact names)\n"
-                            f"{_lua_contract.approved_names_hint}\n"
-                        )
-                        _marker = f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                        _insert_pos = ctx.pre_flight_errors.rfind(_marker)
-                        if _insert_pos == -1:
-                            ctx.pre_flight_errors += _hint_header
-                        else:
-                            ctx.pre_flight_errors = (
-                                ctx.pre_flight_errors[:_insert_pos]
-                                + _hint_header
-                                + ctx.pre_flight_errors[_insert_pos:]
-                            )
-                    if _cv_phantom_names:
-                        try:
-                            from ledger import retract_ledger_entries
-                            retract_ledger_entries(_cv_phantom_names)
-                        except Exception:
-                            pass
-            except Exception as _cv_err:
-                print(f"  [Static Guard] ⚠ C9 contract validator error: {_cv_err}")
-
-        # ── C10: Duplicate top-level function definition in Lua ───────────────
-        if domain == "Lua":
-            _fn_names_seen: dict = {}
-            # Match both declaration styles:
-            #   function Foo()   — classic style
-            #   Foo = function() — assignment style
-            for _fn_m in re.finditer(
-                r'^(?:(?:local\s+)?function\s+(\w+)\s*\(|(\w+)\s*=\s*function\s*\()',
-                content, re.MULTILINE
-            ):
-                _name = _fn_m.group(1) or _fn_m.group(2)
-                _fn_names_seen[_name] = _fn_names_seen.get(_name, 0) + 1
-            for _name, _count in _fn_names_seen.items():
-                if _count > 1:
-                    ctx.pre_flight_errors += (
-                        f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                        f"**Rule:** duplicate function definition '{_name}' ({_count}×)\n"
-                        f"**Why this is always wrong:** Lua silently overwrites the first "
-                        f"definition. The second definition wins, causing unpredictable "
-                        f"behaviour. Remove the duplicate.\n"
-                        f"Fix this before the reviewer sees the code.\n"
-                    )
-                    print(f"  [Static Guard] ❌ Task {tid} [Lua]: duplicate function '{_name}'")
-
-        # ── C11: Local variable used outside its defining scope ───────────────
-        # Detect: local X declared inside OnLoad/OnLoadStatic body,
-        # then referenced inside OnUnload body without re-declaration.
-        if domain == "Lua":
-            _func_bodies: dict = {}
-            for _fb_m in re.finditer(
-                r'^(?:local\s+)?function\s+(\w+)\s*\([^)]*\)(.*?)^end\b',
-                content, re.DOTALL | re.MULTILINE
-            ):
-                _func_bodies[_fb_m.group(1)] = _fb_m.group(2)
-            _spawn_fns = {"OnLoad", "OnLoadStatic"}
-            _cleanup_fns = {"OnUnload"}
-            _defined_locals: set = set()
-            for _fn in _spawn_fns:
-                body = _func_bodies.get(_fn, "")
-                for _loc_m in re.finditer(r'\blocal\s+(\w+)\s*=', body):
-                    _defined_locals.add(_loc_m.group(1))
-            for _fn in _cleanup_fns:
-                body = _func_bodies.get(_fn, "")
-                if not body:
-                    continue
-                for _ref_m in re.finditer(r'\b(\w+)\b', body):
-                    _ref = _ref_m.group(1)
-                    if _ref in _defined_locals:
-                        # Check it's not re-declared locally in OnUnload
-                        if not re.search(r'\blocal\s+' + re.escape(_ref) + r'\b', body):
-                            ctx.pre_flight_errors += (
-                                f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                                f"**Rule:** local variable '{_ref}' used in {_fn} but declared in OnLoad/OnLoadStatic\n"
-                                f"**Why this is always wrong:** Local variables are scoped to their "
-                                f"function. '{_ref}' will be nil in {_fn}.\n"
-                                f"**How to fix:** Remove the 'local' keyword from the declaration inside "
-                                f"OnLoad/OnLoadStatic and instead declare '{_ref}' at the TOP of the file, "
-                                f"above all function definitions, like this:\n"
-                                f"  local {_ref}  -- module-level, accessible from all lifecycle functions\n"
-                                f"Then assign it inside OnLoad/OnLoadStatic without the 'local' keyword.\n"
-                                f"Fix this before the reviewer sees the code.\n"
-                            )
-                            print(f"  [Static Guard] ❌ Task {tid} [Lua]: local '{_ref}' out-of-scope in {_fn}")
-                            break  # one error per function pair is sufficient
-
-        # ── C12: Bare OnStep defined without MidwayPhysics.OnStep registration ─
-        # Two-pass: (1) a non-local (module-level) bare global OnStep exists,
-        #           (2) MidwayPhysics.OnStep registration is absent.
-        # Scoping fix: 'local function OnStep' is valid as an upvalue passed to
-        # MidwayPhysics.OnStep — do NOT flag it.  Only flag a *non-local* bare
-        # global 'function OnStep' that has no corresponding registration call.
-        if domain == "Lua":
-            _has_bare_onstep = bool(re.search(
-                r'^function\s+OnStep\s*\(',
-                content, re.MULTILINE
-            ))
-            _has_registered_onstep = bool(re.search(
-                r'MidwayPhysics\.OnStep\s*\(',
-                content, re.IGNORECASE
-            ))
-            if _has_bare_onstep and not _has_registered_onstep:
-                ctx.pre_flight_errors += (
-                    f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
-                    f"**Rule:** OnStep defined as bare global but MidwayPhysics.OnStep never registered\n"
-                    f"**Why this is always wrong:** The engine ignores bare OnStep globals. "
-                    f"You MUST register via MidwayPhysics.OnStep(function(dt) ... end) inside OnLoad().\n"
-                    f"Fix this before the reviewer sees the code.\n"
-                )
-                print(f"  [Static Guard] ❌ Task {tid} [Lua]: bare OnStep without MidwayPhysics.OnStep")
+    return TokenBudget._block_aware_collapse(_scaffold, 1500)
 
 
 def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
@@ -954,18 +126,26 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     # Coverage check: every task in task_map must have a non-empty result.
     # Tasks that were never executed (e.g. the LLM dropped them) are surfaced
     # here so the fix loop has a concrete mandate to generate the missing output.
-    if ctx.task_map:
+    # NOTE: In monolithic mode, ctx._monolithic_lua_target is set and the single
+    # monolithic output satisfies ALL task coverage requirements. Skip per-task
+    # checks to avoid flagging every task as "no output" when only the monolithic
+    # result exists.
+    if getattr(ctx, '_monolithic_lua_target', None):
+        _mono_file = ctx._monolithic_lua_target
+        print(f"  [Coverage Check] ⏭ Monolithic mode active (target: {_mono_file}) — "
+              f"skipping per-task coverage check (monolithic output satisfies all tasks).")
+    elif ctx.task_map:
         for _cov_tid, _cov_task in ctx.task_map.items():
             _cov_out = ctx.all_results_dict.get(_cov_tid, "")
             if not _cov_out or not _cov_out.strip():
                 _cov_dom = getattr(_cov_task, "agent", "?")
                 _cov_desc = getattr(_cov_task, "description", "") or getattr(_cov_task, "title", "")
                 ctx.pre_flight_errors += (
-                    f"\n## Missing Output — Task {_cov_tid} [{_cov_dom}]\n"
+                    f"\n## Missing Output  Task {_cov_tid} [{_cov_dom}]\n"
                     f"Task {_cov_tid} ({_cov_desc[:120]}) was planned but produced no output. "
                     f"A complete implementation is required for every planned task.\n"
                 )
-                print(f"  [Coverage Check] ⛔ Task {_cov_tid} [{_cov_dom}] has no output — injecting fix demand.")
+                print(f"  [Coverage Check] ⛔ Task {_cov_tid} [{_cov_dom}] has no output  injecting fix demand.")
 
     # Integration schema conflict check: handle ownership collisions across tasks.
     try:
@@ -973,7 +153,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
         _schema_conflict_text = validate_schema_conflicts(ctx)
         if _schema_conflict_text:
             ctx.pre_flight_errors += _schema_conflict_text
-            print(f"  [IntegrationSchema] ⚡ Schema conflicts detected — injecting into preflight errors.")
+            print(f"  [IntegrationSchema] ⚡ Schema conflicts detected  injecting into preflight errors.")
     except Exception:
         pass
 
@@ -1009,7 +189,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     try:
         if sys.platform == "win32":
             if not _cmake_cache.is_file():
-                print("  [Pre-Flight] No CMakeCache.txt found — skipping cmake build check.")
+                print("  [Pre-Flight] No CMakeCache.txt found  skipping cmake build check.")
             else:
                 cmake_build = subprocess.run(
                     ["cmake", "--build", "."],
@@ -1018,7 +198,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 )
                 if cmake_build.returncode != 0:
                     err_tail = "\n".join(cmake_build.stderr.splitlines()[-50:])
-                    # Discard cmake infrastructure errors — only propagate real compiler diagnostics.
+                    # Discard cmake infrastructure errors  only propagate real compiler diagnostics.
                     _infra_error = any(
                         kw in err_tail.lower()
                         for kw in ("could not load cache", "no cmake_cache", "run cmake first",
@@ -1037,7 +217,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         print(f"  [Pre-Flight] cmake infrastructure error suppressed (not a compiler diagnostic): {err_tail[:120]}")
         else:
             if not _makefile.is_file():
-                print("  [Pre-Flight] No Makefile found — skipping make build check.")
+                print("  [Pre-Flight] No Makefile found  skipping make build check.")
             else:
                 make_process = subprocess.run(
                     ["make", "-j4"], capture_output=True, text=True,
@@ -1078,8 +258,8 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
         # Only attempt to build tests if a configured cmake build tree exists.
         _cmake_cache = ctx.project_root / "CMakeCache.txt"
         if not _cmake_cache.is_file():
-            print("  [Pro Mode] No CMakeCache.txt — test binary build skipped (no configured build tree).")
-            # Informational only — do NOT append to ctx.pre_flight_errors.
+            print("  [Pro Mode] No CMakeCache.txt  test binary build skipped (no configured build tree).")
+            # Informational only  do NOT append to ctx.pre_flight_errors.
             # Writing here makes pre_flight_errors non-empty even after all real
             # violations are resolved, causing the arch-fix loop to fire on clean code.
         else:
@@ -1104,7 +284,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         ctx.pre_flight_errors += (
                             f"\n## Test Suite Compilation Errors:\n```\n{err_tail}\n```\n"
                         )
-                        print(f"  [Pro Mode] ⚠ Test suite failed to compile — treating as [VETO]")
+                        print(f"  [Pro Mode] ⚠ Test suite failed to compile  treating as [VETO]")
             except (subprocess.TimeoutExpired, Exception) as e:
                 test_build_ok = False
                 ctx.pre_flight_errors += (
@@ -1122,7 +302,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         ctx.pre_flight_errors += (
                             f"\n## Unit Test Failures:\n```\n{test_stderr[:2000]}\n```\n"
                         )
-                        print(f"  [Pro Mode] ⛔ Tests FAILED — feeding errors back to domain agents")
+                        print(f"  [Pro Mode] ⛔ Tests FAILED  feeding errors back to domain agents")
                     else:
                         print(f"  [Pro Mode] ✅ All unit tests passed!")
                 except subprocess.TimeoutExpired:
@@ -1142,32 +322,132 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     if is_staging_active() and _staging_root.is_dir():
         _lua_roots.append(_staging_root)
 
+    # Build a reverse map: relative-path string → task_id so that luac errors
+    # can be attributed to the owning task and the fix model receives a labelled
+    # mandate rather than a bare stderr dump.
+    # Covers both regular tasks (target_file attr) and merged keys
+    # (stored as "merged:<rel_path>" in all_results_dict).
+    _lua_file_to_tid: dict = {}
+    if ctx.task_map:
+        for _rtid, _rtask in ctx.task_map.items():
+            _tf = getattr(_rtask, "target_file", None) or getattr(_rtask, "output_file", None)
+            if _tf:
+                _lua_file_to_tid[str(_tf).replace("\\", "/")] = _rtid
+    for _rkey in ctx.all_results_dict:
+        if _rkey.startswith("merged:"):
+            _rrel = _rkey[len("merged:"):]
+            _lua_file_to_tid[_rrel.replace("\\", "/")] = _rkey
+            # Also register under the bare filename so luac hits in the project
+            # root (which only have lf.name, not the full relative path) still
+            # resolve to a task ID instead of returning 'unknown'.
+            _rbare = _rrel.replace("\\", "/").split("/")[-1]
+            if _rbare not in _lua_file_to_tid:
+                _lua_file_to_tid[_rbare] = _rkey
+
     _luac_missing = False
+    # Track resolved absolute paths already checked so the merged file is never
+    # reported more than once, even when both the project tree and the staging
+    # tree contain a copy, or when multiple reverse-map keys point to the same
+    # physical file.
+    _luac_seen: set = set()
     for _lua_root in _lua_roots:
         if _luac_missing:
             break
         for lf in _lua_root.rglob("*.lua"):
+            # Skip test harness files  they are not generated output and their
+            # syntax errors must not inflate pre_flight_errors or trigger the
+            # arch-fix loop.  Pattern covers test_task_N.lua and any file whose
+            # stem starts with "test_task".
+            if lf.stem.startswith("test_task"):
+                continue
+
+            # Deduplicate: resolve the canonical path and skip if already seen.
+            try:
+                _lf_canon = lf.resolve()
+            except Exception:
+                _lf_canon = lf
+            if _lf_canon in _luac_seen:
+                continue
+            _luac_seen.add(_lf_canon)
+
+            # Resolve the task-id for this file (used in error messages and
+            # circuit-breaker).  Try both staging-relative and project-relative paths.
+            _lf_rel = ""
+            try:
+                _lf_rel = lf.relative_to(_lua_root).as_posix()
+            except ValueError:
+                _lf_rel = lf.name
+            _owning_tid = (
+                _lua_file_to_tid.get(_lf_rel)
+                or _lua_file_to_tid.get(lf.name)
+            )
+
             try:
                 lua_proc = subprocess.run(
-                    ["luac", "-p", str(lf)], capture_output=True, text=True, timeout=30,
+                    ["luac", "-p", str(lf)],
+                    capture_output=True, text=True, timeout=30,
                 )
                 if lua_proc.returncode != 0:
+                    # luac writes errors to stderr; strip the temp-path prefix so
+                    # the fix model sees a clean line/column reference.
+                    _raw_err = lua_proc.stderr.strip()
+                    # Replace the full absolute path with just the filename so the
+                    # message is stable across machines and easier to read.
+                    _clean_err = _raw_err.replace(str(lf), lf.name)
+
+                    # Extract the first "line N" reference so we can surface it
+                    # prominently in the mandate.
+                    _line_ref = ""
+                    _line_m = re.search(r':(\d+):', _clean_err)
+                    if _line_m:
+                        _line_ref = f" (line {_line_m.group(1)})"
+
+                    _task_label = f"Task {_owning_tid}" if _owning_tid else f"file {lf.name}"
                     ctx.pre_flight_errors += (
-                        f"\n## Lua Syntax Error in {lf.name}:\n```\n{lua_proc.stderr}\n```"
+                        f"\n## ⛔ Lua Syntax Error  {_task_label}\n"
+                        f"**File:** `{lf.name}`{_line_ref}\n"
+                        f"**luac output:**\n```\n{_clean_err}\n```\n"
+                        f"**Fix mandate:** The Lua code for {_task_label} contains a syntax error "
+                        f"and will NOT load in the engine. You MUST:\n"
+                        f"1. Identify the exact line{_line_ref} reported above.\n"
+                        f"2. Correct ONLY the syntax defect  do NOT rewrite unrelated code.\n"
+                        f"3. Re-output the COMPLETE corrected Lua file prefixed with "
+                        f"`### {_owning_tid or lf.stem}`.\n"
+                        f"Do NOT emit prose, placeholders, or partial snippets.\n"
                     )
+                    print(f"  [luac] ⛔ Syntax error in {lf.name}{_line_ref} "
+                          f"(owner: {_owning_tid or 'unknown'})")
+
+                    # Circuit-breaker: increment the owning task's retry counter so
+                    # the review loop treats this file as actively failing and routes
+                    # it to the fix agent on the next cycle.
+                    if _owning_tid and _owning_tid in ctx.task_map:
+                        ctx.retry_counts[_owning_tid] = (
+                            ctx.retry_counts.get(_owning_tid, 0) + 1
+                        )
+                        print(f"  [Circuit Breaker] {_owning_tid} retry_count → "
+                              f"{ctx.retry_counts[_owning_tid]} (luac syntax failure)")
+                else:
+                    print(f"  [luac] ✅ {lf.name}  syntax OK")
+
             except subprocess.TimeoutExpired:
                 ctx.pre_flight_errors += (
-                    f"\n## Lua Syntax Error in {lf.name}:\n```\nluac timed out after 30s\n```\n"
+                    f"\n## ⛔ Lua Syntax Error  {_task_label if '_task_label' in dir() else lf.name}\n"
+                    f"**File:** `{lf.name}`\n"
+                    f"```\nluac timed out after 30 s  file may be extremely large or contain an infinite loop at parse time.\n```\n"
+                    f"**Fix mandate:** Investigate `{lf.name}` for runaway macro expansions or "
+                    f"excessively deep table literals that cause the parser to hang.\n"
                 )
             except FileNotFoundError:
-                # luac is not installed — warn once and skip file-level Lua syntax checks.
-                # Static guards above still run; this is a degraded but not silent path.
-                print("  [Pre-Flight] ⚠ luac not found — Lua file-level syntax check skipped. "
-                      "Install luac for full Lua syntax coverage.")
+                # luac is not installed  warn once and skip.
+                # This should not happen after the DEVCOM.Lua winget install, but
+                # the pipeline must remain functional in CI environments without it.
+                print("  [Pre-Flight] ⚠ luac not found  Lua file-level syntax check skipped. "
+                      "Install Lua 5.4 and ensure luac is on PATH for full syntax coverage.")
                 _luac_missing = True
                 break
-            except Exception:
-                pass
+            except Exception as _luac_ex:
+                print(f"  [Pre-Flight] ⚠ luac check skipped for {lf.name}: {_luac_ex}")
 
     # ── Headless Runtime Simulation ─────────────────────────────────────────
     # Run the lightweight Lua tick harness against all Lua/physics task outputs.
@@ -1216,9 +496,66 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 f"\n## Python Syntax Error in {pf.name} (line {_se.lineno}):\n"
                 f"```\n{_se.msg}: {_se.text}\n```\n"
             )
-            print(f"  [Pre-Flight] ⛔ Python SyntaxError in {pf.name}:{_se.lineno} — {_se.msg}")
+            print(f"  [Pre-Flight] ⛔ Python SyntaxError in {pf.name}:{_se.lineno}  {_se.msg}")
         except Exception:
             pass
+
+    # ── F5: Per-Cycle luac Re-Validation ──────────────────────────────────────
+    # After each fix cycle, re-run luac syntax checks on all affected .lua files
+    # to detect regressions introduced by the fix model (Failure Mode 5).
+    # Without this, a fix for task_2 can introduce syntax errors in the file that
+    # was partially written by task_3, and the system never identifies which task
+    # caused the regression.
+    def _revalidate_lua_syntax(ctx, applied_tids: set) -> str:
+        """Re-run luac syntax check on .lua files touched by the applied fixes.
+        Returns a string of new syntax errors, or empty string if all pass.
+        """
+        _new_errors = ""
+        if not applied_tids:
+            return _new_errors
+        # Collect target files from fixed tasks
+        _affected_files = set()
+        for _tid in applied_tids:
+            _task_obj = ctx.task_map.get(_tid)
+            if _task_obj and getattr(_task_obj, 'target_file', None):
+                _tf = str(_task_obj.target_file).replace('\\', '/')
+                _abs = ctx.project_root / _tf
+                if _abs.is_file():
+                    _affected_files.add(_abs)
+        if not _affected_files:
+            return _new_errors
+        for _lf in _affected_files:
+            try:
+                _lua_proc = subprocess.run(
+                    ["luac", "-p", str(_lf)],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if _lua_proc.returncode != 0:
+                    _raw_err = _lua_proc.stderr.strip().replace(str(_lf), _lf.name)
+                    _tid_hint = ""
+                    for _tid in applied_tids:
+                        _task_obj = ctx.task_map.get(_tid)
+                        if _task_obj and str(getattr(_task_obj, 'target_file', '')).replace('\\', '/') == _lf.name:
+                            _tid_hint = f" (regression from fix for {_tid})"
+                            break
+                    _new_errors += (
+                        f"\n## ⛔ Post-Fix Lua Syntax Error  {_lf.name}{_tid_hint}\n"
+                        f"**File:** `{_lf.name}`\n"
+                        f"**luac output:**\n```\n{_raw_err}\n```\n"
+                        f"**Fix mandate:** A previous fix cycle has introduced a syntax error.\n"
+                        f"Re-fix the syntax defect immediately.\n"
+                    )
+                    print(f"  [Post-Fix luac] ⛔ Syntax error in {_lf.name} after fix cycle{_tid_hint}")
+                else:
+                    print(f"  [Post-Fix luac] ✅ {_lf.name}  syntax OK after fix cycle")
+            except subprocess.TimeoutExpired:
+                _new_errors += f"\n## ⛔ Post-Fix Lua Syntax Error  {_lf.name}\nluac timed out after 30s\n"
+            except FileNotFoundError:
+                print("  [Post-Fix luac] ⚠ luac not found  skipping post-fix validation.")
+                break
+            except Exception as _le:
+                print(f"  [Post-Fix luac] ⚠ Error re-checking {_lf.name}: {_le}")
+        return _new_errors
 
     # ── Architect Syntax Fix Cycle ─────────────────────────────────────
     if ctx.pre_flight_errors:
@@ -1241,7 +578,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             re.compile(r'\bMidwayPhysics\s*\.\s*log(?:_message)?\s*\(', re.IGNORECASE),
             re.compile(r'\bMidwayPhysics\s*\.\s*FindBodyByLabel\s*\(', re.IGNORECASE),
             re.compile(r'\bMidwayPhysics\s*\.\s*SetPosition\s*\(', re.IGNORECASE),
-            # Undefined booth globals — never defined in the Midway runtime.
+            # Undefined booth globals  never defined in the Midway runtime.
             re.compile(r'\b(?:BUTTON|SLOT_[XYZ]|SharedBooth)\b', re.MULTILINE),
         ]
         _last_good: dict = {}
@@ -1256,7 +593,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             _last_good[_tid] = _out
 
         # Guard: skip any block the LLM filled with an [ERROR] stub, a bare
-        # delegation token, or a placeholder — these would poison the next cycle.
+        # delegation token, or a placeholder  these would poison the next cycle.
         _error_stub_re = re.compile(
             r'^\s*(\[ERROR\]|\[DELEGATE|\[QUERY:DOC|\[CONF:|\[REVISE|<<<<<<|import sys'
             r'|name .sys. is not defined'
@@ -1268,16 +605,34 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
         # This prevents qwen2.5-coder from being asked to write Lua, C++, and
         # PHYS simultaneously and falling back to language-agnostic placeholders.
         # NOTE: Task uses .agent (canonical domain key like "Lua", "C++") not .domain.
+        #
+        # Only include tasks that actually have violations in pre_flight_errors.
+        # Previously ALL tasks were fed into the fix call regardless of whether
+        # they were broken, causing 12-task batches that blew the context budget.
+        _failing_tids_set: set = set(re.findall(r'\btask_\d+\b', ctx.pre_flight_errors))
+
         from collections import defaultdict
         domain_task_groups: dict = defaultdict(list)
         for tid, output in ctx.all_results_dict.items():
+            if _failing_tids_set and tid not in _failing_tids_set:
+                continue  # no violations for this task  skip it
             task_obj = ctx.task_map.get(tid)
             domain = (task_obj.agent if task_obj and getattr(task_obj, 'agent', None)
                       else "Unknown")
             domain_task_groups[domain].append((tid, output))
 
-        for domain, task_pairs in domain_task_groups.items():
-            # Build labelled task blocks — LLM is explicitly instructed to
+        # Split large task lists into small batches so each fix call stays well
+        # under the pre-summarizer threshold (~24000 chars for 7B/8B models).
+        # 3 tasks × 3000-char anchor + errors + cheatsheet ≈ 13000 chars  safe.
+        _FIX_BATCH_SIZE = 3
+
+        def _iter_domain_batches(groups, batch_size):
+            for _d, _pairs in groups.items():
+                for _i in range(0, max(1, len(_pairs)), batch_size):
+                    yield _d, _pairs[_i:_i + batch_size]
+
+        for domain, task_pairs in _iter_domain_batches(domain_task_groups, _FIX_BATCH_SIZE):
+            # Build labelled task blocks  LLM is explicitly instructed to
             # echo back the same ### task_N header so the extraction regex works.
             task_blocks = [f"### {tid}\n{output}" for tid, output in task_pairs]
             domain_code_str = "\n\n".join(task_blocks)
@@ -1296,18 +651,19 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 if _anchor:
                     _collapsed_anchor = TokenBudget._block_aware_collapse(_anchor, _ANCHOR_BUDGET)
                     _anchor_blocks.append(
-                        f"### {_atid} [ANCHOR — repair this, do NOT rewrite from scratch]\n"
+                        f"### {_atid} [ANCHOR  repair this, do NOT rewrite from scratch]\n"
                         f"{_collapsed_anchor}"
                     )
-                elif _aout and _aout.strip() and _task_has_code(_aout):
-                    # No clean anchor — provide the current (dirty) output so the
-                    # model has concrete code to patch rather than generating stubs.
-                    _dirty_anchor = TokenBudget._block_aware_collapse(
-                        _strip_search_replace_metadata(_aout), _ANCHOR_BUDGET
-                    )
+                elif _aout and _aout.strip():
+                    # No clean anchor — build a MINIMAL synthetic scaffold
+                    # instead of re-using broken output as the anchor.
+                    # The dirty output contains violations that poisoned every
+                    # previous fix cycle (Failure Mode 4). A synthetic scaffold
+                    # gives the fix model valid structure to build on.
+                    _synthetic_scaffold = _build_synthetic_scaffold(_atid, domain, _aout)
                     _anchor_blocks.append(
-                        f"### {_atid} [CURRENT CODE — fix ONLY the listed violations, do NOT discard]\n"
-                        f"{_dirty_anchor}"
+                        f"### {_atid} [MINIMAL SYNTHETIC SCAFFOLD — extend this, do NOT discard]\n"
+                        f"{_synthetic_scaffold}"
                     )
             _anchor_str = (
                 "\n\n## Previous Implementation (ANCHOR)\n"
@@ -1318,7 +674,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             ) if _anchor_blocks else ""
 
             # Build a compact bridge cheatsheet for the fix model so it has
-            # approved names in front of it — not just error messages.
+            # approved names in front of it  not just error messages.
             # Consolidated: delegate to the shared builder in _finalize_review
             # instead of maintaining a second inline copy here.
             _fix_cheatsheet = ""
@@ -1341,7 +697,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 pass
 
             # E17: Extract the exact required signature from the error block so the
-            # fix model sees the CORRECT call pattern directly — not buried inside
+            # fix model sees the CORRECT call pattern directly  not buried inside
             # a 3000-char collapsed error blob.  Without this, the model guesses
             # (e.g. adding a boolean flag) instead of copying the known-correct form.
             _signature_extract = ""
@@ -1351,7 +707,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     _signature_extract += _line.strip() + "\n"
             if _signature_extract:
                 _signature_extract = (
-                    "\n## ⚡ CORRECT SIGNATURE (from pre-flight checker — copy this EXACTLY)\n"
+                    "\n## ⚡ CORRECT SIGNATURE (from pre-flight checker  copy this EXACTLY)\n"
                     + _signature_extract
                     + "Use the EXACT positional signature shown above. "
                     "Do NOT add extra arguments, boolean flags, table literals, or labels.\n"
@@ -1395,7 +751,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         if _cart_domain:
                             _sp = _cart_domain.system_prompt or ""
                             # Extract only up to 1800 chars from the domain prompt
-                            # (enough for lifecycle + bridge rules) — no mesh/ledger.
+                            # (enough for lifecycle + bridge rules)  no mesh/ledger.
                             _domain_prohibitions = "\n\n## Domain Rules (summary)\n" + _sp[:1800]
                     if not _domain_prohibitions:
                         _ctx_reg = getattr(_pf_ctx2, 'domain_registry', None) or {}
@@ -1426,7 +782,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
 
             # ── Primary extraction: LLM used required ### task_N headers ────
             # The regex tolerates any trailing label the model echoes after the
-            # task ID (e.g. "### task_1 [ANCHOR — repair this...]") because the
+            # task ID (e.g. "### task_1 [ANCHOR  repair this...]") because the
             # prompt injects such labels and the model verbatim-echoes them.
             # Previously the regex required ONLY whitespace after the ID, causing
             # every arch-fix round to produce "no valid block" and retain bad code.
@@ -1438,17 +794,72 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 fixed_code = match.group(2).strip()
                 if not fixed_code or _error_stub_re.search(fixed_code):
                     print(f"  [Arch Fix] Skipping stub/error block for {tid} ({domain}) "
-                          f"— LLM did not produce valid code.")
+                          f" LLM did not produce valid code.")
                     continue
                 if _is_comment_only(fixed_code) or not _task_has_code(fixed_code):
                     print(f"  [Arch Fix] Skipping comment-only/empty block for {tid} ({domain}) "
-                          f"— output contains no real implementation.")
+                          f" output contains no real implementation.")
                     continue
                 if tid in applied_tids:
-                    print(f"  [Arch Fix] ⚠ Duplicate block for {tid} ({domain}) — ignoring second copy.")
+                    print(f"  [Arch Fix] ⚠ Duplicate block for {tid} ({domain})  ignoring second copy.")
                     continue
                 if tid in ctx.all_results_dict:
                     _af_code = _strip_search_replace_metadata(fixed_code)
+                    # Guard: refuse to introduce duplicate function definitions.
+                    # When multiple tasks all target the same file and the LLM
+                    # fix generates e.g. "function OnLoadStatic() end" for each
+                    # one, this guard prevents the file from accumulating
+                    # duplicates. Check if this fix would create a duplicate
+                    # in the aggregated file.
+                    _af_task_obj = ctx.task_map.get(tid)
+                    if _af_task_obj and getattr(_af_task_obj, 'target_file', None):
+                        _af_target_file = str(_af_task_obj.target_file).replace('\\', '/')
+                        # Build the aggregated merged output for this file
+                        _af_merged_lines = {}
+                        for _af_mtid, _af_mout in ctx.all_results_dict.items():
+                            if _af_mtid.startswith('merged:') and _af_target_file in _af_mtid:
+                                _af_merged_lines[_af_mtid] = _af_mout
+                            elif _af_mtid != tid:
+                                _af_mtobj = ctx.task_map.get(_af_mtid)
+                                if _af_mtobj and getattr(_af_mtobj, 'target_file', None):
+                                    if str(_af_mtobj.target_file).replace('\\', '/') == _af_target_file:
+                                        _af_merged_lines[_af_mtid] = _af_mout
+                        # Check for duplicate function definitions in the fix
+                        _af_new_funcs = set(re.findall(r'^function\s+(\w+)\s*\(', _af_code, re.MULTILINE))
+                        _af_existing_funcs = set()
+                        for _af_v in _af_merged_lines.values():
+                            if _af_v:
+                                _af_existing_funcs.update(
+                                    re.findall(r'^function\s+(\w+)\s*\(', _af_v, re.MULTILINE)
+                                )
+                        _af_dupes = _af_new_funcs & _af_existing_funcs
+                        if _af_new_funcs and _af_dupes:
+                            # Strip the duplicate function definitions from the fix
+                            # by removing "function <name>...end" blocks that already exist
+                            for _af_dfunc in _af_dupes:
+                                _af_old_count = len(_af_code)
+                                # Remove the duplicate function definition
+                                _af_code = re.sub(
+                                    r'function\s+' + re.escape(_af_dfunc) + r'\s*\([^)]*\)[^e]*?end\s*',
+                                    '',
+                                    _af_code,
+                                    count=1
+                                )
+                                if len(_af_code) < _af_old_count:
+                                    print(f"  [Arch Fix] \u26a0 Stripped duplicate function '{_af_dfunc}' "
+                                          f"from fix for {tid} (already defined by another task)")
+                    # Guard: refuse to replace a real implementation with a stub.
+                    # If the incoming fix is >40% shorter than the current code
+                    # AND fewer than 5 non-blank lines, treat it as a regression stub.
+                    _existing = ctx.all_results_dict[tid]
+                    _existing_lines = [l for l in _existing.splitlines() if l.strip()]
+                    _af_lines = [l for l in _af_code.splitlines() if l.strip()]
+                    _shrink_ratio = (len(_existing) - len(_af_code)) / max(len(_existing), 1)
+                    if _shrink_ratio > 0.40 and len(_af_lines) < 5:
+                        print(f"  [Arch Fix] \u26a0 Refusing stub regression for {tid} ({domain}) "
+                              f"({len(_af_lines)} lines vs {len(_existing_lines)} existing, "
+                              f"{_shrink_ratio:.0%} smaller).")
+                        continue
                     ctx.all_results_dict[tid] = _af_code
                     # Keep all_results list in sync.
                     _af_found = False
@@ -1461,6 +872,15 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         ctx.all_results.append({"task_id": tid, "output": _af_code})
                     applied_tids.add(tid)
                     print(f"  [Arch Fix] ✅ Applied fix for {tid} ({domain})")
+                    # Invalidate stale merged key so next flush uses patched output.
+                    _af_task_obj = ctx.task_map.get(tid)
+                    if _af_task_obj and getattr(_af_task_obj, 'target_file', None):
+                        _af_rel = str(_af_task_obj.target_file).replace('\\', '/')
+                        _af_mk = f'merged:{_af_rel}'
+                        if _af_mk in ctx.all_results_dict:
+                            del ctx.all_results_dict[_af_mk]
+                            getattr(ctx, 'merged_file_registry', {}).pop(_af_rel, None)
+                            print(f'  [Arch Fix] Invalidated stale merged key for {_af_rel}')
                     # Ledger: record final committed signatures (arch-fix may be
                     # the first time real code appears for a task that delegated)
                     try:
@@ -1517,7 +937,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                     ctx.all_results.append({"task_id": tid, "output": _sr_code})
                                 applied_tids.add(tid)
                                 print(f"  [Arch Fix] ✅ SEARCH/REPLACE matched for {tid} ({task.target_file})")
-                    # No file match — try all unapplied tasks if only one SR block
+                    # No file match  try all unapplied tasks if only one SR block
                     if len(sr_blocks) == 1 and len(unapplied) > 0:
                         # Single SR block: apply to first unapplied task
                         tid = unapplied[0]
@@ -1553,7 +973,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     and _task_has_code(m.group(1))
                 ]
                 if len(code_blocks) == 1 and len(unapplied) == 1:
-                    # Single block, single un-patched task — safe 1:1 apply.
+                    # Single block, single un-patched task  safe 1:1 apply.
                     tid = unapplied[0]
                     if tid in ctx.all_results_dict:
                         _sb_code = _strip_search_replace_metadata(code_blocks[0])
@@ -1574,7 +994,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                             pass
                 elif len(code_blocks) == 1 and len(unapplied) > 1:
                     # One block returned for multiple un-patched tasks.
-                    # NEVER broadcast a single skeleton to all tasks — doing so
+                    # NEVER broadcast a single skeleton to all tasks  doing so
                     # silently collapses a full multi-section implementation into
                     # the last task's narrow fix snippet.  Instead, reject the
                     # response and inject a hard error demanding one ### task_N
@@ -1589,14 +1009,14 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     for target_file, tids in file_tasks.items():
                         if target_file == "__no_file__" or len(tids) <= 1:
                             continue
-                        # Multiple tasks share this file — refuse the single block.
+                        # Multiple tasks share this file  refuse the single block.
                         print(
                             f"  [Arch Fix] \u26a0 Refused to broadcast single block to "
-                            f"{len(tids)} task(s) for {target_file} ({domain}) — "
+                            f"{len(tids)} task(s) for {target_file} ({domain})  "
                             "would collapse implementation. Demanding per-task blocks."
                         )
                         ctx.pre_flight_errors += (
-                            f"\n## Arch Fix Output Rejected — {domain} ({target_file})\n"
+                            f"\n## Arch Fix Output Rejected  {domain} ({target_file})\n"
                             f"The fix agent returned exactly 1 code block for {len(tids)} "
                             f"tasks ({', '.join(tids)}) that all write to `{target_file}`.\n"
                             f"Broadcasting a single block would overwrite all tasks with "
@@ -1625,7 +1045,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                             ctx.all_results.append({"task_id": tid, "output": patched_content})
                         resolved_any = True
                         print(f"  [Arch Fix] \u2705 Applied fix for {tid} ({domain})")
-                    # Legacy broadcast path removed — see comment above.
+                    # Legacy broadcast path removed  see comment above.
                     if False:
                         first_tid = ""
                         if first_tid in ctx.all_results_dict:
@@ -1654,10 +1074,10 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                 pass
                             break
                     if not resolved_any:
-                        print(f"  [Arch Fix] ⚠ Single block cannot be broadcast — "
+                        print(f"  [Arch Fix] ⚠ Single block cannot be broadcast  "
                               f"no matching file found for {len(unapplied)} tasks ({domain})")
                 elif len(code_blocks) == len(unapplied):
-                    # One block per un-patched task — zip in order
+                    # One block per un-patched task  zip in order
                     for tid, blk in zip(unapplied, code_blocks):
                         if tid in ctx.all_results_dict:
                             _oz_code = _strip_search_replace_metadata(blk)
@@ -1681,7 +1101,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     # tasks.  Rather than retaining known-broken output and cycling
                     # into the next review/fix loop with the same errors, re-execute
                     # each failing task individually through its original scripter
-                    # agent — the same path that produced the first output — but
+                    # agent  the same path that produced the first output  but
                     # with the preflight errors injected as targeted feedback into
                     # task.context so the model knows exactly what to fix.
                     #
@@ -1697,7 +1117,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     #     summary then restored, so the retry is self-contained and
                     #     doesn't pollute later iteration context.
                     #   - If execute_task itself raises, the broken output is kept
-                    #     and a warning is printed — we never crash the pipeline.
+                    #     and a warning is printed  we never crash the pipeline.
                     try:
                         from _helpers_exec import execute_task as _exec_task
                     except ImportError:
@@ -1707,19 +1127,19 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         _strike = ctx.retry_counts.get(tid, 0)
                         if _strike >= 3:
                             print(f"  [Arch Fix] ⛔ Circuit breaker: {tid} ({domain}) "
-                                  f"has {_strike} strike(s) — skipping re-execution, "
+                                  f"has {_strike} strike(s)  skipping re-execution, "
                                   f"retaining broken output.")
                             continue
 
                         if _exec_task is None:
                             print(f"  [Arch Fix] ⚠ execute_task unavailable for {tid} "
-                                  f"({domain}) — retaining previous output.")
+                                  f"({domain})  retaining previous output.")
                             continue
 
                         task_obj = ctx.task_map.get(tid)
                         if not task_obj:
                             print(f"  [Arch Fix] ⚠ No task object for {tid} "
-                                  f"({domain}) — retaining previous output.")
+                                  f"({domain})  retaining previous output.")
                             continue
 
                         # Build a compact, focused error summary for this task only.
@@ -1737,7 +1157,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                             )
 
                         _error_injection = (
-                            f"\n\n## ⚠ Pre-Flight Failures — You MUST fix ALL of these\n"
+                            f"\n\n## ⚠ Pre-Flight Failures  You MUST fix ALL of these\n"
                             f"{_per_task_errors}\n"
                             f"Re-implement the task correctly. "
                             f"Do NOT repeat any of the violations listed above."
@@ -1761,7 +1181,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                 gdd_context=ctx.gdd_context,
                             )
                             # If Ollama is down, execute_task returns a fatal
-                            # error sentinel.  Stop retrying this task — the
+                            # error sentinel.  Stop retrying this task  the
                             # circuit breaker will already be armed, and we
                             # must not overwrite existing output with an error
                             # string that looks like code to downstream phases.
@@ -1771,36 +1191,51 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                 _is_fatal = None
                             if _is_fatal and _is_fatal(_new_output):
                                 print(f"  [Arch Fix] ⛔ Ollama error during re-execution of "
-                                      f"{tid} ({domain}) — aborting retries for this task.")
+                                      f"{tid} ({domain})  aborting retries for this task.")
                                 ctx.retry_counts[tid] = 3  # arm circuit breaker
                             elif (_new_output and _new_output.strip()
                                     and not _is_comment_only(_new_output)
                                     and _task_has_code(_new_output)):
                                 _re_code = _strip_search_replace_metadata(_new_output)
-                                ctx.all_results_dict[tid] = _re_code
-                                # Sync all_results list.
-                                _re_found = False
-                                for _re_i, _re_e in enumerate(ctx.all_results):
-                                    if _re_e.get("task_id") == tid:
-                                        ctx.all_results[_re_i] = {"task_id": tid, "output": _re_code}
-                                        _re_found = True
-                                        break
-                                if not _re_found:
-                                    ctx.all_results.append({"task_id": tid, "output": _re_code})
-                                print(f"  [Arch Fix] ✅ Re-execution produced valid output "
-                                      f"for {tid} ({domain}).")
-                                try:
-                                    from ledger import update_internal_api_ledger
-                                    update_internal_api_ledger(_re_code, domain)
-                                except Exception:
-                                    pass
+                                # Reject re-executed Lua output that still contains
+                                # bare namespace violations (CreatePool / PoolAcquire /
+                                # PoolFree / PoolReturn without MidwayPhysics. prefix).
+                                # These pass _task_has_code() but will fail the next
+                                # static guard cycle, wasting another round.
+                                _bare_ns_re = re.compile(
+                                    r'(?<!MidwayPhysics\.)'  # not already prefixed
+                                    r'\b(CreatePool|PoolAcquire|PoolFree|PoolReturn|MoveKinematic)\s*\(',
+                                    re.MULTILINE,
+                                )
+                                if domain == "Lua" and _bare_ns_re.search(_re_code):
+                                    print(f"  [Arch Fix] ⚠ Re-execution output for {tid} "
+                                          f"({domain}) still contains bare namespace calls "
+                                          f" rejecting and retaining previous output.")
+                                else:
+                                    ctx.all_results_dict[tid] = _re_code
+                                    # Sync all_results list.
+                                    _re_found = False
+                                    for _re_i, _re_e in enumerate(ctx.all_results):
+                                        if _re_e.get("task_id") == tid:
+                                            ctx.all_results[_re_i] = {"task_id": tid, "output": _re_code}
+                                            _re_found = True
+                                            break
+                                    if not _re_found:
+                                        ctx.all_results.append({"task_id": tid, "output": _re_code})
+                                    print(f"  [Arch Fix] ✅ Re-execution produced valid output "
+                                          f"for {tid} ({domain}).")
+                                    try:
+                                        from ledger import update_internal_api_ledger
+                                        update_internal_api_ledger(_re_code, domain)
+                                    except Exception:
+                                        pass
                             else:
                                 print(f"  [Arch Fix] ⚠ Re-execution output for {tid} "
-                                      f"({domain}) is empty/comment-only — retaining "
+                                      f"({domain}) is empty/comment-only  retaining "
                                       f"previous output.")
                         except Exception as _re_err:
                             print(f"  [Arch Fix] ⚠ Re-execution raised for {tid} "
-                                  f"({domain}): {_re_err} — retaining previous output.")
+                                  f"({domain}): {_re_err}  retaining previous output.")
                         finally:
                             # Always restore context so later iterations are clean.
                             task_obj.context = _saved_context
@@ -1813,10 +1248,140 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     if ctx.pre_flight_errors:
         print("  [Pre-Flight] Re-validating after arch-fix to clear resolved errors...")
         ctx.pre_flight_errors = ""
+        # Re-flush so patched task outputs (and invalidated merged keys) land on disk.
+        _flush_results_to_workspace(ctx)
         _inject_empty_output_errors(ctx)
         _inject_static_pattern_errors(ctx)
+        # Re-run luac so disk-level syntax errors are reflected in pre_flight_errors.
+        import subprocess as _sp_recheck
+        for _rc_lf in ctx.project_root.rglob("*.lua"):
+            if _rc_lf.stem.startswith("test_task"):
+                continue
+            try:
+                _rc_proc = _sp_recheck.run(
+                    ["luac", "-p", str(_rc_lf)], capture_output=True, text=True, timeout=30
+                )
+                if _rc_proc.returncode != 0:
+                    _rc_err = _rc_proc.stderr.strip().replace(str(_rc_lf), _rc_lf.name)
+                    ctx.pre_flight_errors += (
+                        f"\n## ✅ Lua Syntax Error (post-fix) -- {_rc_lf.name}\n"
+                        f"```\n{_rc_err}\n```\n"
+                    )
+            except (FileNotFoundError, Exception):
+                break
+
+        # ── Holistic File-Level Dedup Pass (Fix 4) ──────────────────────────
+        # The per-domain arch fix operates on individual task outputs and can
+        # create duplicate function definitions (e.g. every task generates
+        # "function OnLoadStatic() end"). This pass reads the actual merged
+        # file on disk, detects duplicate function patterns, and requests a
+        # SINGLE unified patch from the LLM to deduplicate the file.
         if ctx.pre_flight_errors:
-            print(f"  [Pre-Flight] ⚠ {ctx.pre_flight_errors.count('## Static') + ctx.pre_flight_errors.count('## Empty')} "
+            _dup_re = re.compile(r"duplicate function definition '(\w+)'")
+            _dup_files: dict = {}  # file_path -> list of duplicate function names
+            for _err_line in ctx.pre_flight_errors.splitlines():
+                _dm = _dup_re.search(_err_line)
+                if _dm:
+                    _df_err = _err_line.strip()
+                    # Extract the file name from the error line (heuristic: look for `...`)
+                    _ff = _df_err.split("`") if "`" in _df_err else []
+                    _fname = _ff[1] if len(_ff) > 1 else ""
+                    if _fname:
+                        if _fname not in _dup_files:
+                            _dup_files[_fname] = []
+                        _dup_files[_fname].append(_dm.group(1))
+
+            if _dup_files:
+                print(f"  [Holistic Dedup] 🧹 Detected duplicate functions in {len(_dup_files)} file(s): "
+                      f"{', '.join(_dup_files.keys())}")
+                for _df_name, _dup_funcs in _dup_files.items():
+                    _df_path = ctx.project_root / _df_name
+                    if not _df_path.is_file():
+                        continue
+                    try:
+                        _df_content = _df_path.read_text(encoding="utf-8", errors="replace")
+                    except Exception:
+                        continue
+                    if not _df_content.strip():
+                        continue
+
+                    # Build a focused dedup prompt
+                    _dedup_funcs_list = ", ".join(set(_dup_funcs))
+                    _dedup_input = (
+                        f"## Lua File with Duplicate Functions\n"
+                        f"**File:** `{_df_name}`\n"
+                        f"**Duplicate functions detected:** {_dedup_funcs_list}\n\n"
+                        f"**Current file content:**\n"
+                        f"```lua\n{_df_content}\n```\n\n"
+                        f"**Fix mandate:**\n"
+                        f"1. The functions `{_dedup_funcs_list}` appear MULTIPLE times in this file.\n"
+                        f"2. Keep EXACTLY ONE copy of each function with ALL content merged into it.\n"
+                        f"3. Do NOT add new code, wrappers, or scaffolding.\n"
+                        f"4. Output ONLY the corrected complete file prefixed with `### {_df_name}`.\n"
+                        f"5. Do NOT output any SEARCH/REPLACE blocks or prose commentary.\n"
+                        f"6. Do NOT emit placeholders or skeleton stubs.\n"
+                    )
+
+                    _dedup_system = (
+                        "You are a precise code deduplicator. "
+                        "You receive a Lua file with duplicate function definitions. "
+                        "Remove the duplicates while preserving ALL unique code from each instance. "
+                        "Output the complete deduplicated file with no commentary."
+                    )
+
+                    _dedup_result = call_ollama(
+                        _dedup_system, _dedup_input,
+                        f"Holistic Dedup [{_df_name}]",
+                        # Use the domain-specific model for Lua
+                        getattr(ctx, 'domain_registry', {})\
+                            .get("Lua", {})\
+                            .get("model", "") or __import__('pipeline').EXECUTION_MODEL
+                    )
+
+                    # Extract the deduplicated code block
+                    _dedup_code = ""
+                    _dedoc_match = re.search(
+                        r"###\s*[^\n]*\n(.*)", _dedup_result, re.DOTALL
+                    )
+                    if _dedoc_match:
+                        _dedup_code = _dedoc_match.group(1).strip()
+                    else:
+                        # Fallback: try code fence
+                        _dedoc_fence = re.search(
+                            r"```(?:lua)?\n(.*?)```", _dedup_result, re.DOTALL
+                        )
+                        if _dedoc_fence:
+                            _dedup_code = _dedoc_fence.group(1).strip()
+
+                    if _dedup_code and len(_dedup_code) > 20:
+                        # Apply the deduplicated content to the file
+                        try:
+                            from _helpers_io import atomic_write_text as _staging_write
+                            _staging_write(_df_path, _dedup_code)
+                        except Exception:
+                            _df_path.write_text(_dedup_code, encoding="utf-8")
+                        print(f"  [Holistic Dedup] ✅ Applied deduplicated content to {_df_name} "
+                              f"({len(_dedup_code)} chars)")
+                        # Also update the merged key in all_results_dict so the
+                        # review loop sees the corrected content
+                        _merged_key = f"merged:{_df_name.replace('/', '\\').replace('\\', '/')}"
+                        for _mr_key in list(ctx.all_results_dict.keys()):
+                            if _mr_key.startswith("merged:") and _df_name in _mr_key:
+                                ctx.all_results_dict[_mr_key] = _dedup_code
+                                print(f"  [Holistic Dedup] ✅ Updated merged key '{_mr_key}' in results dict")
+                                break
+                    else:
+                        print(f"  [Holistic Dedup] ⚠ Could not extract valid dedup output for {_df_name}")
+
+            # Re-validate after holistic dedup pass
+            if ctx.pre_flight_errors:
+                ctx.pre_flight_errors = ""
+                _flush_results_to_workspace(ctx)
+                _inject_empty_output_errors(ctx)
+                _inject_static_pattern_errors(ctx)
+
+        if ctx.pre_flight_errors:
+            print(f"  [Pre-Flight] ⚠ {ctx.pre_flight_errors.count('## Static') + ctx.pre_flight_errors.count('## Empty') + ctx.pre_flight_errors.count('## Lua Syntax')} "
                   f"violation(s) remain after arch-fix.")
         else:
             print("  [Pre-Flight] ✅ All violations resolved after arch-fix.")

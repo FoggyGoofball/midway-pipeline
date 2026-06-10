@@ -1,5 +1,5 @@
 """
-test_full_pipeline_dry_run.py — Step 4.17
+test_full_pipeline_dry_run.py  Step 4.17
 ========================================
 Regression test that exercises the full run_pipeline() with mocked LLM calls.
 Runs identically against BOTH the refactored pipeline AND the original monolith
@@ -19,9 +19,9 @@ from unittest.mock import patch
 import pytest
 
 
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 #  Canned LLM Responses
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 # These simulate what real LLM calls would return for each pipeline phase.
 # The exact text is what the pipeline parsers look for.
 
@@ -29,7 +29,7 @@ CANNED_MODIFICATION = "MODIFICATION"      # classify_intent
 CANNED_NARROW = "NARROW"                  # Scope gate (prompt within limits)
 CANNED_DIRECTOR = textwrap.dedent("""\
     ## Task Breakdown: Test Feature
-    ### Task 1: [C++] — Implement test feature
+    ### Task 1: [C++]  Implement test feature
 """).strip()
 
 CANNED_TASK_1 = textwrap.dedent("""\
@@ -83,9 +83,9 @@ def _make_canned_streamed(system: str, user: str, label: str, model: str = None)
     yield response
 
 
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 #  Baseline Monolith Loader
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 
 BASELINE_PATH = (
     Path(__file__).resolve().parent.parent.parent / "pipeline.py.old"
@@ -114,9 +114,9 @@ def _load_baseline_module(tmp_dir: Path) -> object:
     return mod
 
 
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 #  Structural Comparison
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 # The refactored pipeline and baseline monolith format output differently
 # (different headers, timestamps, etc.). We compare structural content
 # that should be identical: phase presence, verdict markers, task structure.
@@ -164,7 +164,7 @@ def _assert_structural_match(ref_output: str, base_output: str,
 
     for key in ref_keys:
         if key == "phases_found":
-            # Compare phase lists — baseline may have phases the refactored doesn't
+            # Compare phase lists  baseline may have phases the refactored doesn't
             # or vice versa, but the shared phases should overlap
             shared_phases = set(ref_keys["phases_found"]) & set(base_keys["phases_found"])
             assert len(shared_phases) >= min(
@@ -180,9 +180,9 @@ def _assert_structural_match(ref_output: str, base_output: str,
             )
 
 
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 #  Tests
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 
 class TestFullPipelineDryRun:
     """Regression: refactored pipeline output matches baseline monolith."""
@@ -224,7 +224,7 @@ class TestFullPipelineDryRun:
         import _pipeline_helpers
         monkeypatch.setattr(_pipeline_helpers, "PROJECT_ROOT", self.tmp_root)
 
-    # ── Refactored pipeline runner ─────────────────────────────────────
+    # -- Refactored pipeline runner -------------------------------------
 
     def _run_refactored(self, prompt: str) -> str:
         """Run the refactored pipeline with mocked LLM calls."""
@@ -243,7 +243,7 @@ class TestFullPipelineDryRun:
                         output = run_pipeline(prompt)
         return output
 
-    # ── Baseline monolith runner ───────────────────────────────────────
+    # -- Baseline monolith runner ---------------------------------------
 
     def _run_baseline(self, prompt: str, tmp_dir: Path) -> str:
         """Run the baseline monolithic pipeline with mocked LLM calls."""
@@ -252,12 +252,12 @@ class TestFullPipelineDryRun:
         # Point the baseline to the same temp project root
         mod.PROJECT_ROOT = self.tmp_root
 
-        # The baseline's run_pipeline writes an output file — suppress that
+        # The baseline's run_pipeline writes an output file  suppress that
         # by temporarily redirecting or accepting the side effect
         output = mod.run_pipeline(prompt)
         return output
 
-    # ── Tests ──────────────────────────────────────────────────────────
+    # -- Tests ----------------------------------------------------------
 
     def test_dry_run_produces_output(self):
         """Refactored pipeline produces output without real LLM calls."""

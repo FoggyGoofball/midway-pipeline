@@ -114,9 +114,9 @@ class AcquisitionWizard:
 
     def _phase_1_source_identification(self) -> None:
         """Phase 1: Identify & prioritize sources."""
-        print("\n" + "─" * 80)
+        print("\n" + "-" * 80)
         print("PHASE 1: SOURCE IDENTIFICATION & PRIORITIZATION")
-        print("─" * 80)
+        print("-" * 80)
 
         if 1 in self.completed_phases:
             print("\n✓ Phase 1 already completed.")
@@ -194,9 +194,9 @@ TIER 3 SOURCES (Reference):
 
     def _phase_2_web_scraping(self) -> None:
         """Phase 2: Web scraping & documentation harvesting."""
-        print("\n" + "─" * 80)
+        print("\n" + "-" * 80)
         print("PHASE 2: WEB SCRAPING & DOCUMENTATION HARVESTING")
-        print("─" * 80)
+        print("-" * 80)
 
         if 2 in self.completed_phases:
             print("\n✓ Phase 2 already completed.")
@@ -206,10 +206,10 @@ TIER 3 SOURCES (Reference):
 
         print("""
 This phase programmatically extracts:
-  • Official API documentation (classes, methods, properties)
-  • Code examples & patterns
-  • Best practices & warnings
-  • Engine source patterns
+   Official API documentation (classes, methods, properties)
+   Code examples & patterns
+   Best practices & warnings
+   Engine source patterns
 
 SCRAPING TARGETS:
 
@@ -243,9 +243,9 @@ SCRAPING TARGETS:
             "include_source": include_source,
         }
 
-        print("\n" + "─" * 40)
+        print("\n" + "-" * 40)
         print("SCRAPING SIMULATION")
-        print("─" * 40)
+        print("-" * 40)
         print("\n[Note: Full scraping not yet implemented. This is a stub.]")
         print("\nIn production, we would:\n")
 
@@ -275,9 +275,9 @@ SCRAPING TARGETS:
 
     def _phase_3_constraints(self) -> None:
         """Phase 3: Constraint & safety rule extraction."""
-        print("\n" + "─" * 80)
+        print("\n" + "-" * 80)
         print("PHASE 3: CONSTRAINT & SAFETY RULE EXTRACTION")
-        print("─" * 80)
+        print("-" * 80)
 
         if 3 in self.completed_phases:
             print("\n✓ Phase 3 already completed.")
@@ -285,11 +285,11 @@ SCRAPING TARGETS:
 
         print("""
 This phase identifies:
-  • Dangerous APIs (what NOT to use)
-  • Safe alternatives (recommended patterns)
-  • Compilation flags & build constraints
-  • Performance limits (file size, memory, loops)
-  • Network replication rules
+   Dangerous APIs (what NOT to use)
+   Safe alternatives (recommended patterns)
+   Compilation flags & build constraints
+   Performance limits (file size, memory, loops)
+   Network replication rules
 
 DANGEROUS API CATEGORIES:
 
@@ -313,14 +313,14 @@ DANGEROUS API CATEGORIES:
 PERFORMANCE LIMITS:
 
   FILE SIZES:
-    • C++ Code: max 100KB per file
-    • Blueprint: max 50KB per asset
-    • Config: max 25KB per file
+     C++ Code: max 100KB per file
+     Blueprint: max 50KB per asset
+     Config: max 25KB per file
 
   MEMORY:
-    • TArray: reasonable bounds (100K elements)
-    • TMap: warn on > 10K entries
-    • No circular references (UObject ownership)
+     TArray: reasonable bounds (100K elements)
+     TMap: warn on > 10K entries
+     No circular references (UObject ownership)
 """)
 
         print("\nWould you like to customize constraint levels? (y/n): ", end="")
@@ -338,9 +338,9 @@ PERFORMANCE LIMITS:
 
     def _phase_4_knowledge_graph(self) -> None:
         """Phase 4: Knowledge graph construction."""
-        print("\n" + "─" * 80)
+        print("\n" + "-" * 80)
         print("PHASE 4: KNOWLEDGE GRAPH CONSTRUCTION")
-        print("─" * 80)
+        print("-" * 80)
 
         if 4 in self.completed_phases:
             print("\n✓ Phase 4 already completed.")
@@ -352,12 +352,12 @@ This phase builds a queryable knowledge index:
 KNOWLEDGE GRAPH SCHEMA:
 
   Items include:
-    • Class / Function definitions
-    • API signatures & network properties
-    • Safe patterns & dangerous functions
-    • Code examples
-    • Warnings & gotchas
-    • Related items (cross-references)
+     Class / Function definitions
+     API signatures & network properties
+     Safe patterns & dangerous functions
+     Code examples
+     Warnings & gotchas
+     Related items (cross-references)
 
 STORAGE & INDEXING:
 
@@ -407,9 +407,9 @@ STORAGE & INDEXING:
 
     def _phase_5_cartridge_integration(self) -> None:
         """Phase 5: Cartridge integration."""
-        print("\n" + "─" * 80)
+        print("\n" + "-" * 80)
         print("PHASE 5: CARTRIDGE INTEGRATION")
-        print("─" * 80)
+        print("-" * 80)
 
         if 5 in self.completed_phases:
             print("\n✓ Phase 5 already completed.")
@@ -455,9 +455,9 @@ CARTRIDGE UPDATES:
 
     def _phase_6_feedback_loop(self) -> None:
         """Phase 6: Continuous learning & feedback."""
-        print("\n" + "─" * 80)
+        print("\n" + "-" * 80)
         print("PHASE 6: CONTINUOUS LEARNING & FEEDBACK LOOP")
-        print("─" * 80)
+        print("-" * 80)
 
         if 6 in self.completed_phases:
             print("\n✓ Phase 6 already completed.")
@@ -477,10 +477,10 @@ FEEDBACK LOOP:
 
 METRICS TRACKED:
 
-  • Knowledge completeness: % of known APIs documented
-  • Agent success rate: % of generated code compiles
-  • Review pass rate: % passing review on first pass
-  • Knowledge gaps: Which domains need more info
+   Knowledge completeness: % of known APIs documented
+   Agent success rate: % of generated code compiles
+   Review pass rate: % passing review on first pass
+   Knowledge gaps: Which domains need more info
 
 FEEDBACK SOURCES:
 
@@ -505,9 +505,9 @@ FEEDBACK SOURCES:
 
     def _show_status(self) -> None:
         """Display acquisition status & metrics."""
-        print("\n" + "─" * 80)
+        print("\n" + "-" * 80)
         print("ACQUISITION STATUS & METRICS")
-        print("─" * 80)
+        print("-" * 80)
 
         completed = len(self.completed_phases)
         progress = (completed / 6) * 100
@@ -536,7 +536,7 @@ FEEDBACK SOURCES:
         if self.config.get("scraping_config"):
             print("\nScraping Configuration:")
             for key, val in self.config["scraping_config"].items():
-                print(f"  • {key}: {val}")
+                print(f"   {key}: {val}")
 
 
 def main():

@@ -215,7 +215,7 @@ class PipelineContext(BaseModel):
     all_results: List[Dict[str, Any]] = []
     all_results_dict: Dict[str, str] = {}
 
-    # ── Blueprint cross-iteration memory ──────────────────────────────────────
+    # -- Blueprint cross-iteration memory --------------------------------------
     # Maps relative file path → on-disk content snapshot taken at the end of
     # each approved blueprint iteration.  Intentionally NOT zeroed by
     # reset_state() so the Director always sees what prior iterations wrote.

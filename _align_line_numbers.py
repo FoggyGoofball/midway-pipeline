@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-STABLE line-number alignment — v5.1.
-Pure regex pattern substitution — NO proximity matching.
+STABLE line-number alignment  v5.1.
+Pure regex pattern substitution  NO proximity matching.
 Only replaces when entity name and L<digits> appear in a structured context together.
 """
 import re, sys
@@ -10,7 +10,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 
-# ── Build truth table from anchor index ─────────────────────────────
+# -- Build truth table from anchor index -----------------------------
 anchor = (DOCS_DIR / "pipeline_anchor_index.md").read_text("utf-8")
 truth = {}
 
@@ -83,7 +83,7 @@ def verify(text, truth_table, label):
                 errors += 1
     return errors
 
-# ── Process each doc ─────────────────────────────────────────────────
+# -- Process each doc -------------------------------------------------
 results = []
 for doc_label, doc_path in [("checklist", "pipeline_master_checklist.md"),
                              ("agent_todo", "pipeline_agent_todo.md")]:
@@ -100,18 +100,18 @@ for doc_label, doc_path in [("checklist", "pipeline_master_checklist.md"),
     errs = verify(updated, truth, doc_label)
     results.append((doc_label, errs))
 
-# ── Fix header ──────────────────────────────────────────────────────
+# -- Fix header ------------------------------------------------------
 mcl = (DOCS_DIR / "pipeline_master_checklist.md").read_text("utf-8")
 mcl = re.sub(r'> \*\*File:\*\* `pipeline\.py` \(\d+[,\d]* lines, ~\d+ KB\)',
              '> **File:** `pipeline.py` (4,440 lines, ~178 KB)', mcl)
 (DOCS_DIR / "pipeline_master_checklist.md").write_text(mcl, "utf-8")
 
-# ── Summary ──────────────────────────────────────────────────────────
+# -- Summary ----------------------------------------------------------
 print("\n\n=== VERIFICATION SUMMARY ===", file=sys.stderr)
 all_ok = True
 for label, errs in results:
     status = "✅ ZERO ERRORS" if errs == 0 else f"❌ {errs} remaining"
-    print(f"  {status} — {label}", file=sys.stderr)
+    print(f"  {status}  {label}", file=sys.stderr)
     if errs > 0:
         all_ok = False
 

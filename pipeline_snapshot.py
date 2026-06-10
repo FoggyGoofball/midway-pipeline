@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midway to Nowhere — Pipeline Snapshot Manager
+Midway to Nowhere  Pipeline Snapshot Manager
 ==============================================
 Creates a hidden mirror directory (.pipeline_snapshots/) that stores:
   - Original file contents (before any modifications)
@@ -39,14 +39,23 @@ import hashlib
 from datetime import datetime
 from pathlib import Path
 
+# Late import for pipeline artifact stripping (avoids circular import at module level)
+_strip_artifacts = None
+def _get_strip_artifacts():
+    global _strip_artifacts
+    if _strip_artifacts is None:
+        from _helpers_text import strip_pipeline_artifacts
+        _strip_artifacts = strip_pipeline_artifacts
+    return _strip_artifacts
 
-# ── Configuration ──────────────────────────────────────────────────────────
+
+# -- Configuration ----------------------------------------------------------
 
 SNAPSHOT_DIR = Path(__file__).parent / ".pipeline_snapshots"
 PROJECT_ROOT = Path(__file__).parent.resolve()
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────
+# -- Helpers ----------------------------------------------------------------
 
 def _ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
@@ -120,7 +129,7 @@ def _try_infer_filepath(lang: str, code: str, known_files: set) -> str:
     return ""
 
 
-# ── SnapshotManager ────────────────────────────────────────────────────────
+# -- SnapshotManager --------------------------------------------------------
 
 class SnapshotManager:
     """
@@ -172,7 +181,7 @@ class SnapshotManager:
             encoding="utf-8",
         )
 
-    # ── Saving Originals ──────────────────────────────────────────────
+    # -- Saving Originals ----------------------------------------------
 
     def save_originals(self, file_paths: list) -> list:
         """
@@ -205,21 +214,28 @@ class SnapshotManager:
         if paths:
             self.save_originals(paths)
 
-    # ── Saving Proposals ──────────────────────────────────────────────
+    # -- Saving Proposals ----------------------------------------------
 
     def save_proposal(self, persona: str, task_id: int, rel_path: str, content: str):
         """
         Save a proposed file write from an agent.
+        Pipeline artifacts (<fix-plan> blocks, anchor headers, code-fence wrappers)
+        are stripped before writing to disk to prevent LLM reasoning tags from
+        contaminating the final source output.
         Computes an MD5 content_hash stored in the manifest for later
         integrity verification during apply_proposals().
         """
+        # Strip pipeline reasoning artifacts that leak into agent output
+        strip_fn = _get_strip_artifacts()
+        clean_content = strip_fn(content) if strip_fn else content
+
         task_dir = _ensure_dir(self.proposals_dir / f"task{task_id}_{persona.replace(' ', '_')}")
         safe = _safe_path(rel_path)
         dest = task_dir / safe
-        dest.write_text(content, encoding="utf-8")
+        dest.write_text(clean_content, encoding="utf-8")
 
-        # Compute content fingerprint for integrity verification
-        content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+        # Compute content fingerprint from the stripped content (what's actually on disk)
+        content_hash = hashlib.md5(clean_content.encode("utf-8")).hexdigest()
 
         # Track in manifest
         if rel_path not in self._manifest["proposals"]:
@@ -266,7 +282,7 @@ class SnapshotManager:
 
         self._save_manifest()
 
-    # ── Diff Generation ───────────────────────────────────────────────
+    # -- Diff Generation -----------------------------------------------
 
     def generate_diff(self, rel_path: str) -> str:
         """
@@ -307,7 +323,7 @@ class SnapshotManager:
             result[rel_path] = diff
         return result
 
-    # ── Apply / Revert ────────────────────────────────────────────────
+    # -- Apply / Revert ------------------------------------------------
 
     def apply_proposals(self, rel_paths: list = None) -> list:
         """
@@ -323,7 +339,7 @@ class SnapshotManager:
         if rel_paths is None:
             rel_paths = list(proposals.keys())
 
-        # Track phantom files — files that were created during the run
+        # Track phantom files  files that were created during the run
         # (i.e., they have proposals but were never in originals_dir)
         created_during_run = []
         for rel_path in rel_paths:
@@ -345,14 +361,14 @@ class SnapshotManager:
                 results.append((rel_path, False, "Proposal file missing"))
                 continue
 
-            # ── Integrity verification: hash check before copy ────────
+            # -- Integrity verification: hash check before copy --------
             expected_hash = latest.get("content_hash")
             if expected_hash is not None:
                 try:
                     disk_bytes = proposed_path.read_bytes()
                     disk_hash = hashlib.md5(disk_bytes).hexdigest()
                     if disk_hash != expected_hash:
-                        msg = (f"Hash mismatch — possible silent file corruption. "
+                        msg = (f"Hash mismatch  possible silent file corruption. "
                                f"Expected {expected_hash[:10]}..., got {disk_hash[:10]}...")
                         print(f"  [Snapshot] ⛔ HASH MISMATCH: {rel_path}\n"
                               f"             {msg}")
@@ -366,9 +382,9 @@ class SnapshotManager:
                     results.append((rel_path, False, msg))
                     continue
             else:
-                # Legacy manifest entries (pre-hash) — warn and skip
+                # Legacy manifest entries (pre-hash)  warn and skip
                 print(f"  [Snapshot] ⚠ No stored hash for {rel_path}"
-                      f" — skipping integrity check (legacy entry)")
+                      f"  skipping integrity check (legacy entry)")
 
             dest = PROJECT_ROOT / rel_path
             # Ensure parent directory exists
@@ -404,7 +420,7 @@ class SnapshotManager:
             results.append((rel_path, True, ""))
             print(f"  [Snapshot] Reverted: {rel_path}")
 
-        # Remove phantom files — files that were created during the run
+        # Remove phantom files  files that were created during the run
         # and have no original to restore to.
         created_during_run = self._manifest.get("created_during_run", [])
         for rel_path in created_during_run:
@@ -452,7 +468,7 @@ class SnapshotManager:
             print(f"  [Snapshot] Proposal file missing: {proposed_path}")
             return False
 
-        # ── Integrity verification: hash check before copy ────────
+        # -- Integrity verification: hash check before copy --------
         expected_hash = proposal_entry.get("content_hash")
         if expected_hash is not None:
             try:
@@ -470,7 +486,7 @@ class SnapshotManager:
                 print(f"  [Snapshot] Hash verification failed: {e}")
                 return False
         else:
-            print(f"  [Snapshot] ⚠ No stored hash for {rel_path} — skipping integrity check")
+            print(f"  [Snapshot] ⚠ No stored hash for {rel_path}  skipping integrity check")
 
         # Copy the historical proposal state to the project root
         dest = PROJECT_ROOT / rel_path
@@ -479,7 +495,7 @@ class SnapshotManager:
         print(f"  [Snapshot] Reverted {rel_path} to cycle {cycle_index}")
         return True
 
-    # ── Status / Info ─────────────────────────────────────────────────
+    # -- Status / Info -------------------------------------------------
 
     def summary(self) -> str:
         """Return a human-readable summary of this snapshot."""
@@ -502,7 +518,7 @@ class SnapshotManager:
         return "\n".join(lines)
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────
+# -- CLI --------------------------------------------------------------------
 
 def _list_snapshots():
     """List all snapshot runs."""

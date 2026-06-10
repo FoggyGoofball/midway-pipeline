@@ -1,7 +1,13 @@
-# Refactoring: Context Budgeting & VRAM Allocation
+# Option C: Forensic Cleanup & Hardening
 
-- [x] Read ollama_client.py and paging_kernel.py to identify exact lines
-- [ ] Downscale OLLAMA_NUM_CTX_LARGE to 16384 and OLLAMA_NUM_CTX_MASSIVE to 32768 (ollama_client.py lines 289-290)
-- [ ] Update call_ollama_streamed payload with low_vram, cache_quantization, num_predict=4096 (ollama_client.py lines 387-400)
-- [ ] Update _stream_messages_payload with low_vram, cache_quantization, num_predict=4096 (ollama_client.py lines 153-163)
-- [ ] Update build_resume_payload num_predict from 12000 to 4096 (paging_kernel.py lines 904-915)
+## Part A — Quick Cleanup (stale artifacts)
+- [x] Delete: apply_5_fixes.py, verify_5_fixes.py, fix_5b_final.py, apply_fix_gaps.py
+- [x] Delete: fix_5b_cheatsheet.py, apply_security_patches.py, hardening_patches.py
+
+## Part B — Architectural Hardening
+- [ ] Fix _build_skeleton.py _ANCHOR_MARKERS — add TASK_1, TASK_2
+- [ ] Fix _helpers_text.py _FILE_CTX_CHAR_BUDGET — 12000→24000 for 32K context
+- [ ] Remove deprecated sig patterns (FETCH, READ_OFFLOADED, EXTRACT_SKELETON, MATH_EVAL) from signals.py
+- [ ] Simplify recursive_librarian() in _helpers_exec.py
+- [ ] Update test_import.py expectations for signal patterns
+- [ ] Run tests and verify import chain still works

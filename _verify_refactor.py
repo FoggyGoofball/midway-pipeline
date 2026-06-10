@@ -1,5 +1,5 @@
 """
-_verify_refactor.py — Verify the Paging Manifest → Key-Value Cache refactor.
+_verify_refactor.py  Verify the Paging Manifest → Key-Value Cache refactor.
 Checks all six modified files for syntax validity and cross-references.
 """
 import ast
@@ -18,9 +18,9 @@ for f in files:
     try:
         with open(f, 'r', encoding='utf-8') as fh:
             ast.parse(fh.read())
-        print(f"  ✅ {f} — syntax OK")
+        print(f"  ✅ {f}  syntax OK")
     except SyntaxError as e:
-        print(f"  ❌ {f} — SYNTAX ERROR: {e}")
+        print(f"  ❌ {f}  SYNTAX ERROR: {e}")
         errors.append(f"{f}: {e}")
 
 if errors:
@@ -28,7 +28,7 @@ if errors:
     sys.exit(1)
 
 # 2. Cross-check paged_files_cache references
-print("\n── Cross-Reference: paged_files_cache ──")
+print("\n-- Cross-Reference: paged_files_cache --")
 for f in files:
     with open(f, 'r', encoding='utf-8') as fh:
         content = fh.read()
@@ -37,7 +37,7 @@ for f in files:
         print(f"  📋 {f}: {len(refs)} references")
 
 # 3. Verify legacy signal handlers are PURGED from mesh_loops.py
-print("\n── Legacy Signal Purge Check (mesh_loops.py) ──")
+print("\n-- Legacy Signal Purge Check (mesh_loops.py) --")
 with open('mesh_loops.py', 'r', encoding='utf-8') as fh:
     loops = fh.read()
 
@@ -77,14 +77,14 @@ else:
     print(f"  ✅ legacy FETCH handler: PURGED")
 
 # 4. Verify _paged_inheritance_note injection in mesh_loops.py
-print("\n── Cache Inheritance Check (mesh_loops.py) ──")
+print("\n-- Cache Inheritance Check (mesh_loops.py) --")
 if 'paged_files_cache' in loops:
     print("  ✅ paged_files_cache referenced in mesh_loops.py")
 else:
     print("  ⚠️  paged_files_cache NOT found in mesh_loops.py")
 
 # 5. Verify mesh_finalize.py passes paged_files_cache
-print("\n── Fix-Cycle Cache Injection Check (mesh_finalize.py) ──")
+print("\n-- Fix-Cycle Cache Injection Check (mesh_finalize.py) --")
 with open('mesh_finalize.py', 'r', encoding='utf-8') as fh:
     finalize = fh.read()
 if 'paged_files_cache=getattr(task_obj' in finalize:
@@ -100,7 +100,7 @@ else:
 # 6. Summary
 print(f"\n{'='*50}")
 if not errors:
-    print("  ✅ ALL CHECKS PASSED — Refactor complete!")
+    print("  ✅ ALL CHECKS PASSED  Refactor complete!")
     print("  Directive A: paged_in_manifest → paged_in_cache dict")
     print("  Directive B: Safe Auto-Mounting via cached chunks (no disk I/O)")
     print("  Directive C: Legacy signal handlers purged from mesh_loops.py")

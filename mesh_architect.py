@@ -1,5 +1,5 @@
 """
-mesh_architect.py — Phase 0: Pre-Decomposition Architect Pass
+mesh_architect.py  Phase 0: Pre-Decomposition Architect Pass
 
 Runs BEFORE the Director decomposes the prompt into tasks.  A reasoning-model
 pass reads the raw user prompt and produces a structured AttractionDesign JSON
@@ -34,21 +34,21 @@ from models import (
     PipelineContext,
 )
 
-# ── Architect System Prompt ────────────────────────────────────────────────────
+# -- Architect System Prompt ----------------------------------------------------
 
 ARCHITECT_SYSTEM = (
     "You are the ATTRACTION ARCHITECT. "
     "Your ONLY job is to read a feature request and produce a structured JSON design "
     "document that will guide every downstream agent. "
     "Do NOT write implementation code. Do NOT decompose into tasks. "
-    "Output ONLY valid JSON inside a ```json ... ``` fence — nothing else.\n\n"
+    "Output ONLY valid JSON inside a ```json ... ``` fence  nothing else.\n\n"
     "The JSON MUST have exactly these top-level keys:\n"
-    '  "title"            : string — short name for the attraction\n'
-    '  "summary"          : string — one paragraph describing what the attraction does\n'
+    '  "title"            : string  short name for the attraction\n'
+    '  "summary"          : string  one paragraph describing what the attraction does\n'
     '  "handles"          : array of {name, lua_type, owner_hint, lifecycle, description}\n'
     '                       owner_hint is a short domain label like "physics" or "economy"\n'
     '                       lifecycle is one of: OnLoadStatic | OnLoad | runtime\n'
-    '  "lifecycle_order"  : ordered array of strings — the sequence of registrations\n'
+    '  "lifecycle_order"  : ordered array of strings  the sequence of registrations\n'
     '                       that must appear inside OnLoad (e.g. "MidwayPhysics.OnStep(...)")\n'
     '  "event_flow"       : array of {trigger, action} edges\n'
     '                       trigger: a Lua condition expression\n'
@@ -56,8 +56,16 @@ ARCHITECT_SYSTEM = (
     '  "pool_requirements": object mapping pool key to minimum count (integer)\n'
     '  "economy_hooks"    : array of economy API names actually needed\n'
     '  "feature_checklist": array of plain-English feature statements to verify at the end\n\n'
+    '  "task_anchors"     : array of {task_id, hook, location}  one per expected task.\n'
+    '                       Each entry declares a deterministic anchor comment that will be\n'
+    '                       inserted into the initial file scaffold so downstream agents\n'
+    '                       have exact SEARCH targets.\n'
+    '                       task_id: string like "3"\n'
+    '                       hook:    the literal anchor comment like "-- [TASK_3_INSERT_HOOK] -- physics / pool setup"\n'
+    '                       location: where to insert in the scaffold like "inside OnLoad()",\n'
+    '                                 "inside OnStep(dt)", "inside OnUnload()", or "at module root"\n\n'
     "Rules:\n"
-    "1. Only declare handles that are genuinely needed — do not invent extras.\n"
+    "1. Only declare handles that are genuinely needed  do not invent extras.\n"
     "2. lifecycle_order must be complete enough that agents know what order to register.\n"
     "3. feature_checklist items should be independently verifiable (grep/AST checkable).\n"
     "4. If the request does not involve physics, leave handles empty.\n"
@@ -72,7 +80,7 @@ ARCHITECT_SYSTEM = (
     "to ticket/token payouts' as a third feature_checklist item."
 )
 
-# ── JSON extractor ─────────────────────────────────────────────────────────────
+# -- JSON extractor -------------------------------------------------------------
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 
@@ -120,7 +128,7 @@ def _extract_json(text: str) -> Optional[dict]:
     return None
 
 
-# ── Design doc builder ────────────────────────────────────────────────────────
+# -- Design doc builder --------------------------------------------------------
 
 def _build_design_from_dict(data: dict, raw_json: str) -> AttractionDesign:
     """Convert a parsed JSON dict into a validated AttractionDesign."""
@@ -154,6 +162,15 @@ def _build_design_from_dict(data: dict, raw_json: str) -> AttractionDesign:
         except (TypeError, ValueError):
             pass
 
+    task_anchors = []
+    for a in data.get("task_anchors") or []:
+        if isinstance(a, dict) and a.get("task_id") and a.get("hook"):
+            task_anchors.append({
+                "task_id": str(a["task_id"]),
+                "hook": str(a["hook"]),
+                "location": str(a.get("location", "")),
+            })
+
     return AttractionDesign(
         title=str(data.get("title") or ""),
         summary=str(data.get("summary") or ""),
@@ -163,11 +180,12 @@ def _build_design_from_dict(data: dict, raw_json: str) -> AttractionDesign:
         pool_requirements=pool_req,
         economy_hooks=[str(x) for x in (data.get("economy_hooks") or [])],
         feature_checklist=[str(x) for x in (data.get("feature_checklist") or [])],
+        task_anchors=task_anchors,
         raw_json=raw_json,
     )
 
 
-# ── Seed integration schema from design ───────────────────────────────────────
+# -- Seed integration schema from design ---------------------------------------
 
 def _seed_integration_schema(design: AttractionDesign) -> IntegrationSchema:
     """Pre-populate the IntegrationSchema from the AttractionDesign handles."""
@@ -184,7 +202,7 @@ def _seed_integration_schema(design: AttractionDesign) -> IntegrationSchema:
     return schema
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+# -- Main entry point ----------------------------------------------------------
 
 def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
     """
@@ -199,14 +217,14 @@ def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
     """
     # Blueprint continuation: preserve design across batches
     if ctx.attraction_design is not None:
-        print("  [Architect] ℹ Design doc already present — skipping re-generation (blueprint continuation).")
+        print("  [Architect] ℹ Design doc already present  skipping re-generation (blueprint continuation).")
         if ctx.integration_schema is None:
             ctx.integration_schema = _seed_integration_schema(ctx.attraction_design)
         return ctx
 
     prompt = ctx.canonical_request.strip()
     if not prompt:
-        print("  [Architect] ⚠ No user prompt found — skipping architect pass.")
+        print("  [Architect] ⚠ No user prompt found  skipping architect pass.")
         return ctx
 
     print("\n" + "=" * 60)
@@ -231,12 +249,12 @@ def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
         )
 
         if is_fatal_ollama_error(raw):
-            print(f"  [Architect] ⛔ Ollama error during architect pass — continuing without design doc.")
+            print(f"  [Architect] ⛔ Ollama error during architect pass  continuing without design doc.")
             return ctx
 
         data = _extract_json(raw)
         if not data:
-            print(f"  [Architect] ⚠ Could not parse JSON from architect response — continuing without design doc.")
+            print(f"  [Architect] ⚠ Could not parse JSON from architect response  continuing without design doc.")
             print(f"  Raw response (first 400 chars): {raw[:400]}")
             return ctx
 

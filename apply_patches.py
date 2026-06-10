@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-apply_patches.py — Surgical patch script for pipeline.py
+apply_patches.py  Surgical patch script for pipeline.py
 Applies 4 targeted patches to pipeline.py for autonomous, resilient,
 memory-optimized multi-agent orchestration on Steam Deck.
 
@@ -29,9 +29,9 @@ def backup():
         print(f"  [Backup] Saved to {bak.name}")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # PATCH 1: Autonomous Intent Parsing & File Retrieval (Zero-Friction Context)
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Already partially implemented (parse_file_references + fetch_referenced_files
 # at lines 1057-1118).  We need to INTEGRATE it into the agent prompt builder
 # so that file refs are injected into every agent's context.
@@ -39,10 +39,10 @@ def backup():
 # We patch the format_file_context AND execute_task functions to:
 #   1. Parse prompt for file refs BEFORE the director runs (Phase 0)
 #   2. Inject referenced file blocks into every agent's prompt automatically
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 PATCH1_NEW_FUNC = """
-# ── Pre-Mesh File Reference Injection ──────────────────────────────────────────
+# -- Pre-Mesh File Reference Injection ------------------------------------------
 # Injects user-requested file references into agent prompts automatically.
 # Called during Phase 2 (Project Context) to prep referenced files for all agents.
 
@@ -57,9 +57,9 @@ def get_referenced_files_cache() -> str:
 """
 
 # Insert PATCH1_NEW_FUNC after the `parse_file_references` / `fetch_referenced_files` block
-# (right before "# ── Synchronous File-System Tools for Agent Reasoning" at line 1121)
+# (right before "# -- Synchronous File-System Tools for Agent Reasoning" at line 1121)
 
-INSERT_PATCH1_AFTER = "# ── Synchronous File-System Tools for Agent Reasoning ────────────────────"
+INSERT_PATCH1_AFTER = "# -- Synchronous File-System Tools for Agent Reasoning --------------------"
 
 
 def apply_patch1(content):
@@ -75,7 +75,7 @@ def apply_patch1(content):
     # Step 2: Patch execute_task() to inject auto-referenced files into context
     # Find execute_task and modify it to include referenced files
     old_exec_line = '    # Include parent context if this is a sub-task'
-    new_exec_chunk = '''    # ── Auto-Inject Referenced Files ──────────────────────────────────
+    new_exec_chunk = '''    # -- Auto-Inject Referenced Files ----------------------------------
     refs_block = get_referenced_files_cache()
     if refs_block:
         context_parts.append(refs_block)
@@ -90,13 +90,13 @@ def apply_patch1(content):
     # Step 3: In run_mesh_pipeline, after project_context but BEFORE Phase 3 (Director),
     # parse file refs from user_prompt and cache them.
     # Find the Phase 3: Director section and inject auto-ref parsing before it.
-    p3_marker = 'print(f"\\n{\'=\'*70}")\\n        print(f"  Phase 3: Director — Task Decomposition")\\n        print(f"{\'=\'*70}")'
+    p3_marker = 'print(f"\\n{\'=\'*70}")\\n        print(f"  Phase 3: Director  Task Decomposition")\\n        print(f"{\'=\'*70}")'
     # Better approach: find where project_state + structure is assembled
     # and inject the file reference parsing right after it.
     inject_marker = "output_parts.append(structure + \"\\n\")"
     new_injection = '''output_parts.append(structure + "\\n")
 
-        # ── Auto-Fetch Referenced Files ───────────────────────────────────────────
+        # -- Auto-Fetch Referenced Files -------------------------------------------
         refs = parse_file_references(user_prompt)
         refs_block = fetch_referenced_files(refs)
         set_referenced_files_cache(refs_block)
@@ -112,12 +112,12 @@ def apply_patch1(content):
     return content
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # PATCH 2: Reverse Chronological Document Ingestion
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Modify _collect_ledger_entries() to split into chunks by headers, reverse order.
 # Modify handle_fetch_signal() to reverse chunk order within fetched sections.
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 # Replace _collect_ledger_entries with header-split, reversed version
 OLD_COLLECT = """def _collect_ledger_entries(mem_file: Path) -> list:
@@ -189,7 +189,7 @@ NEW_COLLECT = """def _collect_ledger_entries(mem_file: Path) -> list:
         if current_chunk is not None:
             chunks.append(current_chunk)
 
-        # Phase 2: Reverse chunks — newest first
+        # Phase 2: Reverse chunks  newest first
         for chunk in reversed(chunks):
             text = (
                 f"  - [{chunk['title']}]({chunk['rel']}#{chunk['anchor']}) "
@@ -216,13 +216,13 @@ def apply_patch2(content):
     return content
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # PATCH 3: AST-Aware & Block-Aware Truncation (already partially implemented)
 # The _block_aware_collapse static method already exists and does block-aware
 # collapse.  But we need to verify it's actually BEING USED by TokenBudget.add().
 # The add() method was already patched previously to call _block_aware_collapse
-# — let's make sure the fallback path is also blocked.
-# ═══════════════════════════════════════════════════════════════════════════════
+#  let's make sure the fallback path is also blocked.
+# ===============================================================================
 
 # Ensure _block_aware_collapse is the ONLY truncation path in add()
 # Check if add() still has old head/tail behavior as a fallback
@@ -242,7 +242,7 @@ OLD_ADD = """    def add(self, text: str, label: str = \"\") -> str:
             self.used += estimated
             return text
 
-        # ── Overflow Ledger Rotation ─────────────────────────────────
+        # -- Overflow Ledger Rotation ---------------------------------
         overflow_path = PROJECT_ROOT / \"docs\" / \"memory\" / \"overflow_ledger.md\"
         if overflow_path.is_file() and overflow_path.stat().st_size > 100 * 1024:
             archive_dir = overflow_path.parent
@@ -268,7 +268,7 @@ OLD_ADD = """    def add(self, text: str, label: str = \"\") -> str:
         # Block-aware collapse
         available = self.hard_limit - self.used
         if available <= 100:
-            self.warnings.append(f\"[Budget] {label}: OVERFLOW — no room available\")
+            self.warnings.append(f\"[Budget] {label}: OVERFLOW  no room available\")
             return f\"\\n[TOKEN BUDGET EXCEEDED: {label} truncated]\\n\"
 
         # Estimate chars-per-token ratio based on text characteristics
@@ -300,7 +300,7 @@ NEW_ADD = """    def add(self, text: str, label: str = \"\") -> str:
             self.used += estimated
             return text
 
-        # ── Overflow Ledger Rotation ─────────────────────────────────
+        # -- Overflow Ledger Rotation ---------------------------------
         overflow_path = PROJECT_ROOT / \"docs\" / \"memory\" / \"overflow_ledger.md\"
         if overflow_path.is_file() and overflow_path.stat().st_size > 100 * 1024:
             archive_dir = overflow_path.parent
@@ -323,10 +323,10 @@ NEW_ADD = """    def add(self, text: str, label: str = \"\") -> str:
             overflow_path.write_text(fresh_content, encoding=\"utf-8\")
             print(f\"  [Overflow Rotation] Rotated to {archive_name}. Active file reset.\")
 
-        # Block-aware collapse (STRICTLY block-aware — no blind head/tail fallback)
+        # Block-aware collapse (STRICTLY block-aware  no blind head/tail fallback)
         available = self.hard_limit - self.used
         if available <= 100:
-            self.warnings.append(f\"[Budget] {label}: OVERFLOW — no room available\")
+            self.warnings.append(f\"[Budget] {label}: OVERFLOW  no room available\")
             return f\"\\n[TOKEN BUDGET EXCEEDED: {label} truncated]\\n\"
 
         # Estimate chars-per-token ratio based on text characteristics
@@ -334,7 +334,7 @@ NEW_ADD = """    def add(self, text: str, label: str = \"\") -> str:
         chars_per_token = 3.0 if code_indicators > 0.05 else 4.0
         available_chars = int(available * chars_per_token)
 
-        # ── BLOCK-AWARE COLLAPSE (ONLY truncation path) ──────────────
+        # -- BLOCK-AWARE COLLAPSE (ONLY truncation path) --------------
         truncated = self._block_aware_collapse(text, available_chars)
         self.used += available
         self.warnings.append(f\"[Budget] {label}: truncated {estimated} → {available} tokens (block-aware)\")
@@ -348,19 +348,19 @@ def apply_patch3(content):
         content = content.replace(old, new)
         print("  [Patch3] Confirmed TokenBudget.add() uses block-aware collapse only")
     else:
-        print("  [Patch3] WARNING: Could not match TokenBudget.add() — may already be patched")
+        print("  [Patch3] WARNING: Could not match TokenBudget.add()  may already be patched")
     return content
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # PATCH 4: Rule-Breaker Accommodations for Memory Writes
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # Add synthetic header generation for agents that forget the ### [ModuleName] format.
 # Integrate it into the signal processing / task output handling in run_mesh_pipeline.
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 PATCH4_NEW_CODE = """
-# ── Rule-Breaker Accommodation: Synthetic Ledger Headers ──────────────────────
+# -- Rule-Breaker Accommodation: Synthetic Ledger Headers ----------------------
 # If an agent executes a system modification but forgets the ### [ModuleName] header,
 # the orchestrator auto-generates and prepends a synthetic header based on the
 # current active task string and domain.
@@ -376,10 +376,10 @@ def ensure_ledger_header(output: str, task_spec: str, agent_key: str) -> str:
     Returns the (possibly modified) output.
     \"\"\"
     if LEDGER_HEADER_PATTERN.search(output):
-        # Agent followed the rules — no modification needed
+        # Agent followed the rules  no modification needed
         return output
 
-    # Agent broke the formatting rule — generate synthetic header
+    # Agent broke the formatting rule  generate synthetic header
     # Extract key domain identifier from task_spec
     task_clean = task_spec.strip().rstrip('.')
     # Build a descriptive module name from the task
@@ -410,7 +410,7 @@ def _generate_module_name(task_spec: str, agent_key: str) -> str:
 def apply_patch4(content):
     # Step 1: Insert the new functions after the last ledger-related function
     # Place it right after handle_fetch_signal() and before the checkpoint system
-    marker = "# ── Checkpoint System ──────────────────────────────────────────────────────"
+    marker = "# -- Checkpoint System ------------------------------------------------------"
     if marker in content:
         content = content.replace(marker, PATCH4_NEW_CODE + "\n" + marker)
         print("  [Patch4] Inserted synthetic header generation functions")
@@ -420,7 +420,7 @@ def apply_patch4(content):
     # Step 2: Patch execute_task() to wrap output with ensure_ledger_header
     # Find the line `task.output = output` in execute_task and add wrapping
     old_task_output = "    task.output = output\n    task.signals = extract_signals(output)"
-    new_task_output = """    # ── Ledger Guard: auto-fix missing headers ────────────────
+    new_task_output = """    # -- Ledger Guard: auto-fix missing headers ----------------
     output = ensure_ledger_header(output, task.spec, task.agent)
     task.output = output
     task.signals = extract_signals(output)"""
@@ -433,10 +433,10 @@ def apply_patch4(content):
     return content
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # PATCH 5 (Bonus): Also patch handle_fetch_signal to support reverse-chronological
 # ordering of content within fetched sections.
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def apply_patch5(content):
     """Patch handle_fetch_signal so that within a fetched header, the subsection
@@ -449,7 +449,7 @@ def apply_patch5(content):
             if level <= hdr_lvl:
                 break
         content_lines.append(ln)"""
-    new_lines = """    # ── Reverse-chronological subsection fetch ──────────────
+    new_lines = """    # -- Reverse-chronological subsection fetch --------------
     # Collect sub-sections within the fetched header, then reverse them
     # so the newest architectural decision appears first.
     subsections = []  # list of (header, body_lines) tuples
@@ -486,9 +486,9 @@ def apply_patch5(content):
     return content
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # ENSURE _block_aware_collapse is actually BEING CALLED (not the old head/tail)
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def verify_no_old_truncation(content):
     """Verify that old head/tail truncation code is not present."""
@@ -504,9 +504,9 @@ def verify_no_old_truncation(content):
     print("  [Verify] No old head/tail truncation patterns found")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # MAIN
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 def main():
     print("=" * 60)
@@ -529,7 +529,7 @@ def main():
     content = apply_patch5(content)
 
     if content == original:
-        print("\n  No changes applied — file was already up-to-date?")
+        print("\n  No changes applied  file was already up-to-date?")
     else:
         write_file(content)
         print(f"\n  Patches applied successfully!")

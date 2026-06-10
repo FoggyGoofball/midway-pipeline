@@ -13,7 +13,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 
-# ── Phase 1: Build truth table ──────────────────────────────────────
+# -- Phase 1: Build truth table --------------------------------------
 anchor = (DOCS_DIR / "pipeline_anchor_index.md").read_text("utf-8")
 truth = {}
 
@@ -31,7 +31,7 @@ for m in re.finditer(r'\|\s*L(\d+)\s*\|\s*`([A-Z][A-Z_0-9]+)`', anchor):
 
 print(f"Truth: {len(truth)} code-name entries", file=sys.stderr)
 
-# ── Phase 2: Build correction map ────────────────────────────────────
+# -- Phase 2: Build correction map ------------------------------------
 # For each truth entry, derive all possible "corrupted" forms (digit extension patterns)
 corrections = {}  # corrupted_string → correct_string
 
@@ -226,7 +226,7 @@ def verify(text, truth_table):
                 errors.append((name, found, correct))
     return errors
 
-# ── Process docs ─────────────────────────────────────────────────────
+# -- Process docs -----------------------------------------------------
 for doc_label, doc_path in [("checklist", "pipeline_master_checklist.md"),
                              ("agent_todo", "pipeline_agent_todo.md")]:
     fpath = DOCS_DIR / doc_path

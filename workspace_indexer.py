@@ -8,7 +8,7 @@ from typing import Dict, List, Set
 class FileASTEntry:
     """AST-level index entry for a single source file.
 
-    Captured deterministically via regex — not a full parser, but sufficient
+    Captured deterministically via regex  not a full parser, but sufficient
     for downstream agents to locate symbols and target PAGE_IN precisely.
     """
     rel_path: str
@@ -24,7 +24,7 @@ class FileASTEntry:
         """Return a compact PAGE_IN hint string for the agent's context."""
         parts = [f"`{self.rel_path}` ({self.line_count} lines"]
         if self.is_large:
-            parts[-1] += ", LARGE — use targeted PAGE_IN"
+            parts[-1] += ", LARGE  use targeted PAGE_IN"
         parts[-1] += ")"
         if self.classes:
             parts.append(f"classes: {', '.join(self.classes[:8])}"

@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """
-Midway Pipeline — Generator-Based Streaming HTTP Server
+Midway Pipeline  Generator-Based Streaming HTTP Server
 =========================================================
 Serves the generator-based pipeline as an SSE (Server-Sent Events)
 HTTP endpoint at /stream, plus an OpenAI-compatible /v1/chat/completions
 endpoint so that Continue can connect natively.
 
-Built on http.server (stdlib) — no external dependencies.
+Built on http.server (stdlib)  no external dependencies.
 """
 
 import json
 import sys
 import os
+
+# Ensure stdout/stderr render Unicode correctly on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
@@ -35,7 +41,7 @@ from pipeline_stream import stream_pipeline_generator
 from pipeline_snapshot import SnapshotManager
 import time
 
-# ── Defaults ────────────────────────────────────────────────────────────────
+# -- Defaults ----------------------------------------------------------------
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
@@ -198,7 +204,7 @@ class StreamHandler(BaseHTTPRequestHandler):
 
         print(f"  [StreamServer] Stream ended for '{prompt[:60]}...'")
 
-    # ── POST route: OpenAI-compatible /v1/chat/completions ────────────
+    # -- POST route: OpenAI-compatible /v1/chat/completions ------------
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -234,7 +240,7 @@ class StreamHandler(BaseHTTPRequestHandler):
         stream_mode = req.get("stream", True)
         model = req.get("model", "pipeline")
 
-        print(f"  [OpenAI POST] /v1/chat/completions — prompt='{prompt[:60]}...' stream={stream_mode}")
+        print(f"  [OpenAI POST] /v1/chat/completions  prompt='{prompt[:60]}...' stream={stream_mode}")
 
         raw_id = hashlib.md5((prompt + str(time.time())).encode()).hexdigest()[:12]
         completion_id = f"chatcmpl-{raw_id}"

@@ -1,5 +1,5 @@
 """
-mesh_loops.py — Thin re-export shim
+mesh_loops.py  Thin re-export shim
 =====================================
 This module was refactored below the 1 000-line target by migrating each
 major phase into a dedicated module:

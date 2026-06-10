@@ -1,7 +1,7 @@
 """
 tests/test_paging_kernel.py
 ===========================
-Unit tests for paging_kernel.py — covering detection, I/O, guard logic,
+Unit tests for paging_kernel.py  covering detection, I/O, guard logic,
 overflow-safe VRAM_STUB generation, and PagingController orchestration.
 All tests are pure in-memory; no real filesystem or Ollama calls are made.
 """
@@ -31,7 +31,7 @@ from paging_kernel import (
 )
 
 
-# ── detect_page_tokens ───────────────────────────────────────────────────────
+# -- detect_page_tokens -------------------------------------------------------
 
 class TestDetectPageTokens:
     def test_detects_page_in(self):
@@ -70,7 +70,7 @@ class TestDetectPageTokens:
         assert detect_page_tokens("Nothing special here.") == []
 
 
-# ── detect_vram_stubs ────────────────────────────────────────────────────────
+# -- detect_vram_stubs --------------------------------------------------------
 
 class TestDetectVramStubs:
     def test_detects_stub(self):
@@ -84,7 +84,7 @@ class TestDetectVramStubs:
         assert detect_vram_stubs("No stubs here.") == []
 
 
-# ── PagingBuffer ─────────────────────────────────────────────────────────────
+# -- PagingBuffer -------------------------------------------------------------
 
 class TestPagingBuffer:
     def test_detects_complete_page_in(self):
@@ -120,7 +120,7 @@ class TestPagingBuffer:
         assert buf.page_info is None
 
 
-# ── _resolve_dynamic_page_limit ──────────────────────────────────────────────
+# -- _resolve_dynamic_page_limit ----------------------------------------------
 
 class TestResolveDynamicPageLimit:
     @pytest.mark.parametrize("ctx,expected", [
@@ -133,7 +133,7 @@ class TestResolveDynamicPageLimit:
         assert _resolve_dynamic_page_limit(ctx) == expected
 
 
-# ── _extract_lines_chunk ─────────────────────────────────────────────────────
+# -- _extract_lines_chunk -----------------------------------------------------
 
 class TestExtractLinesChunk:
     CONTENT = "\n".join(f"line {i}" for i in range(1, 101))
@@ -151,7 +151,7 @@ class TestExtractLinesChunk:
         assert ">    50 |" in chunk
 
 
-# ── _extract_search_chunk ────────────────────────────────────────────────────
+# -- _extract_search_chunk ----------------------------------------------------
 
 class TestExtractSearchChunk:
     CONTENT = "\n".join([
@@ -171,7 +171,7 @@ class TestExtractSearchChunk:
         assert _extract_search_chunk(self.CONTENT, "nonexistent_xyz") == ""
 
 
-# ── handle_page_in ───────────────────────────────────────────────────────────
+# -- handle_page_in -----------------------------------------------------------
 
 class TestHandlePageIn:
     def _make_file(self, tmp_path: Path, name: str, content: str) -> Path:
@@ -215,7 +215,7 @@ class TestHandlePageIn:
         assert "recursion limit" in result.lower()
 
 
-# ── handle_page_out ──────────────────────────────────────────────────────────
+# -- handle_page_out ----------------------------------------------------------
 
 class TestHandlePageOut:
     def test_valid_file_target(self):
@@ -239,13 +239,13 @@ class TestHandlePageOut:
         assert "Invalid target" in result or "Generic phrases" in result
 
     def test_rejects_generic_phrase_without_cache(self):
-        # paged_in_cache=None skips validation entirely — no error expected
+        # paged_in_cache=None skips validation entirely  no error expected
         result = handle_page_out("context")
         # Should complete normally (no cache = no validation)
         assert "PAGE_OUT completed" in result or "evicted" in result.lower()
 
 
-# ── inject_paged_content / inject_continuation_prompt ────────────────────────
+# -- inject_paged_content / inject_continuation_prompt ------------------------
 
 class TestContextInjection:
     def test_inject_before_last_user(self):
@@ -278,7 +278,7 @@ class TestContextInjection:
         assert "verdict" in result[-1]["content"].lower() or "PASS/FAIL" in result[-1]["content"]
 
 
-# ── PagingController ─────────────────────────────────────────────────────────
+# -- PagingController ---------------------------------------------------------
 
 class TestPagingController:
     def _make_controller(self, tmp_path: Path) -> PagingController:

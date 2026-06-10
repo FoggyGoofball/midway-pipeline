@@ -30,7 +30,7 @@ class TestSignalParsing:
         assert signals[0]["type"] == "VETO"
 
     def test_extract_fetch_signal_returns_empty(self):
-        """FETCH is deprecated — superseded by PagingKernel <invoke_kernel> schema.
+        """FETCH is deprecated  superseded by PagingKernel <invoke_kernel> schema.
         Legacy FETCH pattern key is removed from SIGNAL_PATTERNS.
         """
         text = "[FETCH:docs/memory/C++_ledger.md#PhysicsSystem]"

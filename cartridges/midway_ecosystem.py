@@ -1,13 +1,13 @@
 """
-midway_ecosystem.py â€” MidwayAgentCartridge
+midway_ecosystem.py  MidwayAgentCartridge
 ==========================================
 Thin orchestrating wrapper.  All large pure-data builders live in
 cartridges/midway_data.py to keep each file under 1 000 lines.
 
 Import direction (no cycles):
     cartridge_loader.py
-        â†’ midway_ecosystem.py   (class definition + small logic)
-                â†’ midway_data.py  (pure-data builders, no pipeline imports)
+        → midway_ecosystem.py   (class definition + small logic)
+                → midway_data.py  (pure-data builders, no pipeline imports)
 """
 import sys
 from pathlib import Path
@@ -19,7 +19,7 @@ _pipeline_dir = _current_dir.parent
 if str(_pipeline_dir) not in sys.path:
     sys.path.insert(0, str(_pipeline_dir))
 
-# Import only kernel shape constants â€” never project-specific prompt content
+# Import only kernel shape constants  never project-specific prompt content
 try:
     from domain_registry import (
         EXECUTION_MODEL,
@@ -36,7 +36,7 @@ except ImportError:
     PRE_SUMMARIZER_MODEL = "phi3.5:latest"
     LIBRARIAN_MODEL = "qwen2.5-coder:7b"
 
-# Import kernel alias map â€” cartridge merges Midway-specific entries on top
+# Import kernel alias map  cartridge merges Midway-specific entries on top
 try:
     from domain_registry import AGENT_ALIAS_MAP as _KERNEL_ALIAS_MAP
 except ImportError:
@@ -72,7 +72,7 @@ class MidwayAgentCartridge:
     def get_domain_registry() -> Dict[str, Dict[str, Any]]:
         """
         Fully self-contained Midway domain registry.
-        All system_prompt strings for Midway agents are defined here â€” the kernel
+        All system_prompt strings for Midway agents are defined here  the kernel
         ALL_DOMAINS fallback stubs are never used when this cartridge is mounted.
         """
         return build_domain_registry(
@@ -120,7 +120,7 @@ class MidwayAgentCartridge:
     @staticmethod
     def get_bridge_contract() -> Dict[str, Any]:
         """
-        Consolidated Engineâ†”Lua bridge contract: globals, modifiers, lifecycle,
+        Consolidated Engine↔Lua bridge contract: globals, modifiers, lifecycle,
         load order, spawn API, object pools, economy, and win banners.
         """
         return build_bridge_contract()
@@ -133,7 +133,7 @@ class MidwayAgentCartridge:
         """
         return build_attraction_specs()
 
-    # â”€â”€ Kernel agnosticism fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Kernel agnosticism fields ─────────────────────────────────────────────
 
     @staticmethod
     def get_reasoning_gate_domains() -> set:
@@ -158,7 +158,7 @@ class MidwayAgentCartridge:
             "V1. SEAM CONTAMINATION: Any Lua attraction script containing teleport "
             "thresholds, Z-axis boundary checks, seam trigger logic, or "
             "OptimizeBroadPhase() calls is an automatic FAIL. The Vicious Cycle seam "
-            "is engine-internal — Lua scripts have zero awareness of it.\n"
+            "is engine-internal  Lua scripts have zero awareness of it.\n"
             "V2. LUA MANUAL PHYSICS: Any Lua script performing raw position arithmetic, "
             "euler/verlet integration, or collision detection in pure Lua is an automatic "
             "FAIL. All physics must go through MidwayPhysics host API calls. "
@@ -169,10 +169,10 @@ class MidwayAgentCartridge:
             "without going through a MidwayPhysics API call.\n"
             "V3. PHANTOM APIS: Any call to a MidwayPhysics, Engine, or sol function "
             "not present in the active bridge contract is an automatic FAIL. "
-            "NAMESPACE RULE: All MidwayPhysics functions MUST be prefixed with `MidwayPhysics.` — "
+            "NAMESPACE RULE: All MidwayPhysics functions MUST be prefixed with `MidwayPhysics.`  "
             "bare calls such as `DestroyBody(handle)` or `MoveKinematic(...)` are PHANTOM APIs. "
             "FILE-PATH OVERLOAD RULE: `SpawnStaticMesh('path/to/file.obj')` and any spawn call "
-            "that passes a file-path string is an UNSUPPORTED overload — treat as a PHANTOM API. "
+            "that passes a file-path string is an UNSUPPORTED overload  treat as a PHANTOM API. "
             "Known confirmed-phantom patterns (NEVER appear in valid code): "
             "GetBody, SpawnBox, SpawnTrigger, SpawnCircle, "
             "RemoveBody, MoveBoundary, SetBoundary, SpawnRectangle, SpawnIsland, "
@@ -207,7 +207,7 @@ class MidwayAgentCartridge:
             "checks, seam triggers, or OptimizeBroadPhase() calls. Engine-internal only. FAIL.\n"
             "8. LUA MANUAL PHYSICS: Lua MUST NOT perform raw position arithmetic, euler/verlet "
             "integration, or pure-Lua collision detection. Use MidwayPhysics host calls. FAIL.\n"
-            "9. PHANTOM APIS — only flag these KNOWN-BAD names: GetBody, SpawnBox, SpawnTrigger, "
+            "9. PHANTOM APIS  only flag these KNOWN-BAD names: GetBody, SpawnBox, SpawnTrigger, "
             "SpawnCircle, RemoveBody, MoveBoundary, SetBoundary, SpawnRectangle, SpawnIsland, "
             "GetLinearVelocity, SetLinearVelocity(handle, vec_obj), CheckCollision, GetEntityHandle, "
             "DestroyEntity, ReleaseHandle, SpawnDynamicBody, SpawnStaticBody (generic), "
@@ -216,10 +216,10 @@ class MidwayAgentCartridge:
             "sol.get_time, sol.get_elapsed_time, sol.bindings.*. "
             "NAMESPACE RULE: All MidwayPhysics functions MUST be called with the full namespace prefix. "
             "A bare call such as `DestroyBody(handle)` or `MoveKinematic(handle, ...)` without "
-            "`MidwayPhysics.` is a PHANTOM API — flag as FAIL. "
+            "`MidwayPhysics.` is a PHANTOM API  flag as FAIL. "
             "FILE-PATH OVERLOAD RULE: `SpawnStaticMesh('path/to/file.obj')` and any other spawn call "
             "that passes a file path string (e.g. mesh paths, texture paths) is an UNSUPPORTED overload "
-            "and is a PHANTOM API — flag as FAIL. Only integer handle-returning spawn functions exist. "
+            "and is a PHANTOM API  flag as FAIL. Only integer handle-returning spawn functions exist. "
             "APPROVED APIs (do NOT flag): MidwayPhysics.SpawnStaticBox, "
             "MidwayPhysics.SpawnKinematicBox, MidwayPhysics.SpawnDynamicBox, "
             "MidwayPhysics.SpawnStaticSphere, MidwayPhysics.SpawnDynamicSphere, "
@@ -252,7 +252,7 @@ class MidwayAgentCartridge:
             "CRITICAL: When citing a phantom API violation, you MUST NOT suggest another API "
             "as a replacement unless you can verify it appears in the APPROVED APIs list above. "
             "Suggesting a phantom API as a correction (e.g. 'replace X with SetGameOver') is "
-            "itself a violation — describe the problem only and let the fix agent consult the "
+            "itself a violation  describe the problem only and let the fix agent consult the "
             "bridge contract for the correct replacement."
 
         )
@@ -261,17 +261,17 @@ class MidwayAgentCartridge:
     def get_director_extra() -> str:
         """Project-specific directives prepended to the Director task-decomposition prompt."""
         return (
-            "ATTRACTION ARCHITECTURE MANDATE — read before decomposing tasks:\n"
+            "ATTRACTION ARCHITECTURE MANDATE  read before decomposing tasks:\n"
             "1. Scoring, win conditions, score display, game reset, and all player-state "
             "tracking are PURE LUA responsibilities. Do NOT create C++ tasks for these.\n"
-            "2. OnLoad/OnStep/OnUnload are Lua callbacks invoked BY the engine — they need "
+            "2. OnLoad/OnStep/OnUnload are Lua callbacks invoked BY the engine  they need "
             "no C++ work unless a NEW physics primitive is required.\n"
             "3. Create a C++ task ONLY if a required primitive is provably absent from the "
             "'Active Bridge Contract' API list shown below.\n"
             "4. DO NOT create tasks for: 'Load Lua script', 'Integrate scoring into C++', "
-            "'Register OnStep with engine', or any variant — these are automatic.\n"
+            "'Register OnStep with engine', or any variant  these are automatic.\n"
             "5. SpawnStaticBox, SpawnDynamicSphere, SpawnKinematicBox, MoveKinematic, "
-            "ApplyImpulse, GetPosition, GetVelocity are ALREADY bridged — no C++ task needed."
+            "ApplyImpulse, GetPosition, GetVelocity are ALREADY bridged  no C++ task needed."
         )
 
     @staticmethod
@@ -290,11 +290,35 @@ class MidwayAgentCartridge:
         )
 
     @staticmethod
+    def get_schema_patterns() -> Dict[str, str]:
+        """Regex patterns for parsing Lua output declarations in agent responses.
+
+        Returned dict must contain these keys (each a raw regex string):
+          "handle_assign"  — captures handle name in group(1), e.g. ``hBall`` from
+                             ``local hBall = MidwayPhysics.SpawnDynamicSphere(...)``
+          "shared_var"     — captures variable name in group(1), e.g. ``score`` from
+                             ``local score = 0``
+          "onstep"         — detects OnStep registration call.
+                             E.g. ``MidwayPhysics.OnStep(myTable)``
+          "onload"         — captures lifecycle hook name in group(1), e.g. ``OnLoad``
+                             from ``function OnLoad()``
+
+        These were previously hardcoded in integration_schema.py; moving them here
+        keeps the kernel project-agnostic via Inversion of Control.
+        """
+        return {
+            "handle_assign": r"\blocal\s+(h[A-Za-z0-9_]+)\s*=\s*MidwayPhysics\.\w+\s*\(",
+            "shared_var": r"^local\s+([a-z][A-Za-z0-9_]+)\s*=\s*(?:0|false|true|\"|\{)",
+            "onstep": r"\bMidwayPhysics\.OnStep\s*\(",
+            "onload": r"\bfunction\s+(OnLoad(?:Static)?)\s*\(\s*\)",
+        }
+
+    @staticmethod
     def get_project_context(prompt: str) -> str:
         """
         Extract relevant project-specific documentation context based on the
         user's prompt. Delegates internally to GDD extractors, API doc scanners,
-        and keyword routers â€” all of which are project-private implementation
+        and keyword routers  all of which are project-private implementation
         details that the kernel must never know about.
 
         Args:
@@ -311,7 +335,7 @@ class MidwayAgentCartridge:
     def get_project_context_scoped(prompt: str,
                                    scope_mode: str = "GENERAL",
                                    attraction_name: str = "") -> str:
-        """Scope-aware variant — prefer this for NEW_ATTRACTION / MODIFY_ATTRACTION."""
+        """Scope-aware variant  prefer this for NEW_ATTRACTION / MODIFY_ATTRACTION."""
         from context_extractor import extract_project_context as _extract
         return _extract(prompt, scope_mode=scope_mode, attraction_name=attraction_name)
 

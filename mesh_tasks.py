@@ -1,5 +1,5 @@
 """
-mesh_tasks.py — Phase 4: Wave-based mesh execution
+mesh_tasks.py  Phase 4: Wave-based mesh execution
 ====================================================
 Extracted from mesh_loops.py to keep individual files under 1 000 lines.
 
@@ -50,7 +50,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
     """
     _ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*70}")
-    print(f"  [{_ts}] Phase 4: Mesh Execution (Omni-Batch DAG) — {len(ctx.tasks_list)} Task(s)")
+    print(f"  [{_ts}] Phase 4: Mesh Execution (Omni-Batch DAG)  {len(ctx.tasks_list)} Task(s)")
     print(f"{'='*70}")
     ctx.output_parts.append(
         f"\n## Phase 4: Mesh Execution ({len(ctx.tasks_list)} tasks)\n"
@@ -65,10 +65,49 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             task_id=f"task_{t['id']}",
             parent=None,
             target_file=t.get("target_file"),
+            anchor_marker=t.get("anchor_marker") or t.get("_anchor_marker"),
         )
         ctx.task_map[task_obj.task_id] = task_obj
 
-    # ── Sort tasks into DAG waves ────────────────────────────────────────
+    # -- Phase A: Deterministic Skeleton Builder (MUST run BEFORE tasks) --
+    # Ensure every .lua target file has a valid canonical skeleton before
+    # any SEARCH/REPLACE patch tries to target its anchor markers.
+    # This fixes the ordering bug where the skeleton was written AFTER task
+    # execution, causing SEARCH blocks to fail against empty/non-existent files.
+    print(f"\n{'='*60}")
+    print(f"  Phase A: Deterministic Skeleton Builder (pre-task)")
+    print(f"{'='*60}")
+    _skeleton_written = 0
+    for _t in ctx.tasks_list:
+        _tf = _t.get("target_file")
+        if _tf and _tf.endswith('.lua'):
+            from _build_skeleton import ensure_skeleton
+            from pathlib import Path as _Path
+            _target_path = (ctx.project_root / _tf).resolve()
+            if ensure_skeleton(_target_path, _target_path.stem):
+                _skeleton_written += 1
+    if _skeleton_written:
+        print(f"  [Skeleton Builder] ✅ Wrote canonical skeleton for {_skeleton_written} new Lua file(s)")
+    else:
+        print(f"  [Skeleton Builder] ✓ All target files already have valid skeleton structure")
+
+    # -- Monolithic Collapse Detection ---------------------------------------
+    # When ALL tasks target the same single .lua file, the anchor-based
+    # per-wave approach creates 17 serial waves with anchor drift and task
+    # clobbering.  Instead, collapse into a single monolithic generation call
+    # that produces the entire file in one shot, then route through the
+    # existing review-fix loop.
+    _single_lua_file = _detect_monolithic_lua_candidate(ctx.tasks_list)
+    if _single_lua_file:
+        print(f"\n  {'='*60}")
+        print(f"  [Monolithic Collapse] All tasks target the same file:")
+        print(f"    Target: {_single_lua_file}")
+        print(f"    Tasks:  {len(ctx.tasks_list)} (collapsing to 1 generation call)")
+        print(f"  {'='*60}")
+        ctx = _run_monolithic_lua_generation(ctx, _single_lua_file)
+        return ctx
+
+    # -- Sort tasks into DAG waves ----------------------------------------
     waves = sort_tasks_into_waves(ctx.tasks_list, ctx=ctx)
     print(f"  [DAG] Sorted {len(ctx.tasks_list)} task(s) into {len(waves)} wave(s):")
     for i, wave in enumerate(waves):
@@ -90,7 +129,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             or CODER_MODEL
         )
 
-    # ── Process each wave ────────────────────────────────────────────────
+    # -- Process each wave ------------------------------------------------
     for wave_idx, wave in enumerate(waves):
         print(f"\n  {'='*60}")
         print(f"  Processing Wave {wave_idx + 1}/{len(waves)} ({len(wave)} task(s))")
@@ -136,7 +175,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             except Exception as e:
                 print(f"  [FileReader] Error: {e}")
 
-            # ── Directive A: Sibling Context Manifest (Anti-Bloat) ────────────
+            # -- Directive A: Sibling Context Manifest (Anti-Bloat) ------------
             # B5: For tasks with explicit DependsOn, inject the actual completed
             # output of each dependency (collapsed to a safe budget) so the agent
             # has a real anchor rather than just a title description.
@@ -172,7 +211,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                         _collapsed = TokenBudget._block_aware_collapse(completed_code, _DEP_CODE_BUDGET)
                         dep_code_parts.append(
                             f"## ❮ DEPENDENCY OUTPUT: {completed_id} [{agent_name}] ❯\n"
-                            f"(collapsed to {_DEP_CODE_BUDGET} chars — use PAGE_IN for full content)\n"
+                            f"(collapsed to {_DEP_CODE_BUDGET} chars  use PAGE_IN for full content)\n"
                             f"```\n{_collapsed}\n```"
                         )
             sibling_context = ""
@@ -191,11 +230,11 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                 sibling_context += (
                     "\n\n## ❮ DEPENDENCY CODE SNAPSHOTS ❯\n"
                     "The following are collapsed snapshots of tasks you depend on.\n"
-                    "Build on this code — do NOT rewrite it from scratch.\n\n"
+                    "Build on this code  do NOT rewrite it from scratch.\n\n"
                     + "\n\n".join(dep_code_parts)
                 )
 
-            # ── Directive B: Pro-Mode Inheritance — cached content ────────────
+            # -- Directive B: Pro-Mode Inheritance  cached content ------------
             _inherited_cache: Dict[str, str] = getattr(task, 'paged_files_cache', {}) or {}
             _paged_inheritance_note = ""
             if _inherited_cache:
@@ -210,13 +249,13 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                 _paged_inheritance_note = (
                     "\n\n## ❮ PAGED-IN REFERENCE FILES (inherited from primary worker) ❯\n"
                     f"({len(_inherited_cache)} files, {total_chars} total chars "
-                    f"— Safe Cache, no disk I/O)\n\n"
+                    f" Safe Cache, no disk I/O)\n\n"
                     + "\n".join(cache_blocks)
                 )
                 print(f"  [Paging Kernel] 📋 Injected {len(_inherited_cache)} cached blocks "
                       f"({total_chars} chars) into '{task.agent}' prompt")
 
-            # ── Pro Mode: Adversarial TDD (per-task) ──────────────────────────────
+            # -- Pro Mode: Adversarial TDD (per-task) ------------------------------
             _task_id_str = getattr(task, 'task_id', '')
             # pro_mode_always only suppresses the prompt; actual enrollment is
             # still gated by whether the task is in math_heavy_tasks.
@@ -227,7 +266,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     task, ctx, _paged_inheritance_note, ollama_params
                 )
 
-            # ── Day 6: Math Analyst Deterministic Sandbox ─────────────────────
+            # -- Day 6: Math Analyst Deterministic Sandbox ---------------------
             _spec_lower = task.spec.lower()
             _is_binding_task = any(kw in _spec_lower for kw in [
                 "bind", "expose", "wrapper", "bridge", "interface", "setup",
@@ -241,7 +280,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                 if math_result:
                     task.context = (task.context or "") + math_result
 
-            # ── Pro Mode: Multi-Draft Generation ─────────────────────────────
+            # -- Pro Mode: Multi-Draft Generation -----------------------------
             if _task_pro_mode and resolve_agent_name(task.agent) == "PHYS":
                 output = _run_tribunal_merge(task, ctx, _paged_inheritance_note, ollama_params)
             else:
@@ -250,7 +289,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                 if resolve_agent_name(task.agent) in ("C++", "PHYS") and hasattr(ctx, 'interface_manifest'):
                     task.context = (task.context or "") + getattr(ctx, 'interface_manifest', '')
 
-                # ── Completed-Work Anchor: inject per-task symbol TOC ─────────
+                # -- Completed-Work Anchor: inject per-task symbol TOC ---------
                 # If this task writes to a file that was already approved in a
                 # prior blueprint iteration, remind the coder agent of every
                 # symbol that is already on disk so it does not re-implement them.
@@ -272,7 +311,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                         if _symbols:
                             _sym_list = ", ".join(f"`{s}`" for s in _symbols)
                             _anchor = (
-                                f"\n\n## ⚠️  ALREADY APPROVED — DO NOT RE-IMPLEMENT\n"
+                                f"\n\n## ⚠️  ALREADY APPROVED  DO NOT RE-IMPLEMENT\n"
                                 f"File `{_tf_norm}` was written and approved in a previous iteration.\n"
                                 f"**Symbols already on disk:** {_sym_list}\n"
                                 f"Your ONLY job is to APPEND new symbols that are absent from this list.\n"
@@ -286,13 +325,13 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                             # File exists but no extractable symbols (data file etc.)
                             _char_count = len(_snap_content)
                             _anchor = (
-                                f"\n\n## ⚠️  ALREADY APPROVED — DO NOT RE-IMPLEMENT\n"
+                                f"\n\n## ⚠️  ALREADY APPROVED  DO NOT RE-IMPLEMENT\n"
                                 f"File `{_tf_norm}` ({_char_count} chars) was written and approved "
-                                f"in a previous iteration. Extend it — do NOT replace it.\n"
+                                f"in a previous iteration. Extend it  do NOT replace it.\n"
                             )
                         task.context = (task.context or "") + _anchor
 
-                # ── Shared Integration Schema + Attraction Design Injection ──
+                # -- Shared Integration Schema + Attraction Design Injection --
                 # Inject once per task so every agent writes compatible code.
                 try:
                     from integration_schema import get_schema_context_block
@@ -314,9 +353,9 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     except Exception:
                         pass
 
-                # ── Economy Mandate (Blueprint-phase enforcement) ─────────────
+                # -- Economy Mandate (Blueprint-phase enforcement) -------------
                 # Injected here so the agent KNOWS the requirements before it
-                # writes a single line — not discovered post-hoc in PhantomAPIGate.
+                # writes a single line  not discovered post-hoc in PhantomAPIGate.
                 _scope_mode = getattr(ctx, 'scope_mode', '')
                 _econ_hooks = []
                 if _design:
@@ -329,11 +368,11 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                         "\n\n## ECONOMY MANDATE (NON-NEGOTIABLE)\n"
                         "Your implementation MUST satisfy ALL of the following or it will be "
                         "rejected by the PhantomAPI Gate:\n"
-                        "1. **Modifier consumption** — inside your `OnStep` callback, read "
+                        "1. **Modifier consumption**  inside your `OnStep` callback, read "
                         "`AttractionConstants.modifiers` (or individual `ENGINE_MOD_*` globals) "
                         "every frame. NEVER cache modifier values at load time.\n"
                         "   Example: `local MOD = AttractionConstants.modifiers`\n"
-                        "2. **Economy hook** — call `Engine.AwardTickets(n, label)` or "
+                        "2. **Economy hook**  call `Engine.AwardTickets(n, label)` or "
                         "`Engine.AwardTokens(n, label)` on every win or score event.\n"
                         "   Use `Engine.GetStreak()` as a multiplier for ticket payouts.\n"
                         "   Example: `Engine.AwardTickets(score * Engine.GetStreak(), 'WIN')`\n"
@@ -347,7 +386,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     ollama_params=ollama_params,
                 )
 
-                # ── VRAM Circuit Breaker ──────────────────────────────────────
+                # -- VRAM Circuit Breaker --------------------------------------
                 from ollama_client import vram_overrun_abort, get_vram_abort_diagnostics
                 if vram_overrun_abort():
                     _diag = get_vram_abort_diagnostics()
@@ -356,7 +395,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     ctx.review_verdict = "BLOCKED"
                     ctx.final_verdict = "VRAM_OVERRUN"
                     ctx.final_output = (
-                        f"## 🚨 Pipeline Aborted — VRAM Overrun\n\n"
+                        f"## 🚨 Pipeline Aborted  VRAM Overrun\n\n"
                         f"Pipeline was aborted because token speed dropped below 2.0 tok/s.\n\n"
                         f"**Triggered in task:** {task.task_id} ({task.agent})\n\n"
                         f"**Diagnostics:**\n{_diag}\n"
@@ -367,9 +406,9 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             ctx.processed_ids.add(task.task_id)
             wave_results[task.task_id] = output
 
-            # ── Register task output into the live integration schema ─────────
+            # -- Register task output into the live integration schema ---------
             # This must run after the output is stored so conflict detection is
-            # cumulative across the full wave.  Errors are non-fatal — a conflict
+            # cumulative across the full wave.  Errors are non-fatal  a conflict
             # just adds a warning to the schema; it will surface in preflight.
             try:
                 from integration_schema import update_schema_from_task
@@ -404,7 +443,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     "depends_on": [],
                 })
 
-        # ── Batch Compilation / Cartridge Validation ─────────────────────
+        # -- Batch Compilation / Cartridge Validation ---------------------
         _cartridge_handled_build = False
         _cartridge_build_obj = getattr(ctx, "mounted_cartridge", None)
         if _cartridge_build_obj is not None and hasattr(_cartridge_build_obj, "validate_wave_output"):
@@ -441,7 +480,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
     return ctx
 
 
-# ── Private phase helpers ────────────────────────────────────────────────────
+# -- Private phase helpers ----------------------------------------------------
 
 def _run_pro_mode_tdd(task, ctx: PipelineContext, paged_note: str, ollama_params):
     """Adversarial TDD: write a failing test then return the injection string."""
@@ -455,7 +494,7 @@ def _run_pro_mode_tdd(task, ctx: PipelineContext, paged_note: str, ollama_params
     _domain = _alias
     _meta = getattr(ctx, 'domain_metadata_registry', {}).get(_domain)
     if _meta is None:
-        print(f"  [Pro Mode] WARNING: No domain metadata for '{_domain}' — pro-mode TDD skipped for this task.")
+        print(f"  [Pro Mode] WARNING: No domain metadata for '{_domain}'  pro-mode TDD skipped for this task.")
         ctx.math_heavy_tasks.discard(getattr(task, 'task_id', ''))
         ctx.pro_mode = bool(ctx.math_heavy_tasks)
         return "", ctx
@@ -624,16 +663,16 @@ def _run_tribunal_merge(task, ctx: PipelineContext, paged_note: str, ollama_para
         "1. Identify and discard hallucinated API calls or impossible physics.\n"
         "2. Cross-validate assertions: if only one draft makes a claim, it's likely a hallucination.\n"
         "3. If two drafts agree on an approach, preserve that consensus.\n"
-        "4. Output ONLY the merged, synthesized code — no commentary, no evaluation report.\n"
+        "4. Output ONLY the merged, synthesized code  no commentary, no evaluation report.\n"
         "5. Use SEARCH/REPLACE diff format if modifying existing files, or full file content for new files."
     )
     tribunal_prompt = (
         f"## Original Task Specification\n{task.spec}\n\n"
         f"## User's Feature Request\n{ctx.canonical_request}\n\n"
         f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
-        f"## Draft A (temperature=0.2 — conservative)\n{drafts['draft_A'][:2000]}\n\n"
-        f"## Draft B (temperature=0.5 — balanced)\n{drafts['draft_B'][:2000]}\n\n"
-        f"## Draft C (temperature=0.8 — creative)\n{drafts['draft_C'][:2000]}\n\n"
+        f"## Draft A (temperature=0.2  conservative)\n{drafts['draft_A'][:2000]}\n\n"
+        f"## Draft B (temperature=0.5  balanced)\n{drafts['draft_B'][:2000]}\n\n"
+        f"## Draft C (temperature=0.8  creative)\n{drafts['draft_C'][:2000]}\n\n"
         f"{paged_note}"
         f"---\n"
         f"Evaluate the three approaches. Discard hallucinations. "
@@ -662,7 +701,7 @@ def _run_cmake_fallback(ctx: PipelineContext, wave_idx: int, wave_results: dict)
     try:
         if sys.platform == "win32":
             if not _cmake_cache.is_file():
-                print(f"  [Batch Compiler] No CMakeCache.txt — skipping wave {wave_idx + 1} build check.")
+                print(f"  [Batch Compiler] No CMakeCache.txt  skipping wave {wave_idx + 1} build check.")
                 return
             cmake_build = subprocess.run(
                 ["cmake", "--build", "."],
@@ -686,7 +725,7 @@ def _run_cmake_fallback(ctx: PipelineContext, wave_idx: int, wave_results: dict)
                 print(f"  [Batch Compiler] Wave {wave_idx + 1} compiles successfully ✅")
         else:
             if not _makefile.is_file():
-                print(f"  [Batch Compiler] No Makefile — skipping wave {wave_idx + 1} build check.")
+                print(f"  [Batch Compiler] No Makefile  skipping wave {wave_idx + 1} build check.")
                 return
             make_process = subprocess.run(
                 ["make", "-j4"], capture_output=True, text=True,
@@ -847,7 +886,7 @@ def _process_task_signals(ctx: PipelineContext, task, work_queue: deque) -> None
         # and EXTRACT_SKELETON have been PURGED. They are entirely superseded
         # by the <invoke_kernel> XML schema in the PagingKernel.
 
-    # ── Double-check unresolved items ─────────────────────────────────────────
+    # -- Double-check unresolved items -----------------------------------------
     if task.double_check and task.double_check["unresolved"]:
         unresolved = task.double_check["unresolved"].strip()
         if unresolved and unresolved.lower() not in ("none", "n/a", "nothing", ""):
@@ -858,7 +897,7 @@ def _process_task_signals(ctx: PipelineContext, task, work_queue: deque) -> None
                 task.completed = False
                 work_queue.appendleft(task)
 
-    # ── Snapshot save ──────────────────────────────────────────────────────────
+    # -- Snapshot save ----------------------------------------------------------
     if ctx.snapshot:
         try:
             _merged_registry = {**ALL_DOMAINS, **getattr(ctx, 'domain_registry', {})}
@@ -866,3 +905,270 @@ def _process_task_signals(ctx: PipelineContext, task, work_queue: deque) -> None
             ctx.snapshot.save_agent_output(persona, len(ctx.processed_ids), task.output)
         except Exception as e:
             print(f"  [Snapshot] Save error: {e}")
+
+
+# ==============================================================================
+#  Monolithic Lua Generation (anti-fragmentation)
+# ==============================================================================
+# When all 17 tasks target the same single .lua file, the per-task anchor-patch
+# approach creates serial waves, anchor drift, and clobbering.  Instead, detect
+# this pattern and issue ONE whole-file generation call, then route the result
+# through the existing Luacheck and review-fix loop.
+#
+# Detection: _detect_monolithic_lua_candidate(tasks_list) -> str | None
+# Execution: _run_monolithic_lua_generation(ctx, target_file) -> PipelineContext
+
+def _detect_monolithic_lua_candidate(tasks_list: list) -> str | None:
+    """Return target_file if ALL tasks write to the same .lua file."""
+    target_files = set()
+    for t in tasks_list:
+        tf = t.get("target_file")
+        if tf is None:
+            return None
+        target_files.add(tf.replace("\\", "/").lower())
+    if len(target_files) == 1:
+        sole = next(iter(target_files))
+        if sole.endswith(".lua"):
+            return sole
+    return None
+
+
+def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> PipelineContext:
+    """Single-shot whole-file generation for a Lua attraction.
+
+    Assembles a comprehensive prompt containing:
+      - The canonical skeleton (already written by Phase A)
+      - All 17 task specs as a consolidated feature list
+      - The GDD extract with economy mandates
+      - The Attraction Design doc (if available)
+      - Bridge contract / Lua rules
+
+    The LLM outputs a COMPLETE replacement file (not SEARCH/REPLACE diffs).
+    The output is validated with luac, and the review-fix loop handles errors.
+    """
+    from _pipeline_helpers import execute_task
+    from _build_skeleton import inject_skeleton
+    from pathlib import Path
+
+    # -- Ensure skeleton exists --
+    _project_root = Path(ctx.project_root)
+    _target_abs = (_project_root / target_file).resolve()
+    inject_skeleton(_target_abs, _target_abs.stem)
+    print(f"  [Monolithic] Skeleton written: {_target_abs}")
+
+    # -- Read current skeleton content --
+    _live_content = _target_abs.read_text(encoding="utf-8") if _target_abs.is_file() else ""
+
+    # -- Build consolidated task spec --
+    _task_lines = []
+    for t in ctx.tasks_list:
+        _id = t.get("id", "?")
+        _domain = t.get("domain", "Lua")
+        _title = t.get("title", "")
+        _hooks = t.get("hooks", "None")
+        _task_lines.append(f"### Task {_id}: [{_domain}] - {_title}")
+        _task_lines.append(f"Hooks: {_hooks}")
+        _task_lines.append("")  # blank line separator
+    _consolidated_spec = "\n".join(_task_lines)
+
+    # -- Gather GDD context --
+    _gdd_block = ctx.gdd_context or ""
+
+    # -- Gather design block --
+    _design_block = ""
+    _design = getattr(ctx, 'attraction_design', None)
+    if _design:
+        try:
+            _design_block = _design.to_context_block()
+        except Exception:
+            _design_block = ""
+
+    # -- Gather economy mandate --
+    _scope_mode = getattr(ctx, 'scope_mode', '')
+    _econ_mandate = ""
+    if _scope_mode in ("NEW_ATTRACTION", "MODIFY_ATTRACTION"):
+        _econ_mandate = (
+            "\n\n## ECONOMY MANDATE (NON-NEGOTIABLE)\n"
+            "Your implementation MUST satisfy ALL of the following:\n"
+            "1. **Modifier consumption** - inside your OnStep callback, read "
+            "AttractionConstants.modifiers every frame. NEVER cache at load time.\n"
+            "2. **Economy hook** - call Engine.AwardTickets(n, label) or "
+            "Engine.AwardTokens(n, label) on every win/score event.\n"
+            "   Use Engine.GetStreak() as a multiplier for ticket payouts.\n"
+        )
+
+    # -- Read bridge contract, Lua rules, and canonical skeleton --
+    _lua_rules = ""
+    _rules_path = _project_root / "docs" / "rules_lua.md"
+    if _rules_path.is_file():
+        _lua_rules = _rules_path.read_text(encoding="utf-8")[:3000]
+
+    _bridge = ""
+    _bridge_path = _project_root / ".." / "midway" / "docs" / "engine_lua_bridge_contract.md"
+    if _bridge_path.is_file():
+        _bridge = _bridge_path.read_text(encoding="utf-8")[:4000]
+
+    # -- Read the canonical skeleton structure --
+    _canonical_skeleton = ""
+    try:
+        from _build_skeleton import SKELETON_TEMPLATE
+        _canonical_skeleton = SKELETON_TEMPLATE
+    except Exception:
+        _canonical_skeleton = ""
+
+    # Extract approved physics API names from the bridge contract
+    _approved_physics_apis = ""
+    _approved_api_patterns = [
+        r'SpawnStaticBox\b', r'SpawnStaticBoxR\b', r'SpawnStaticSphere\b',
+        r'SpawnDynamicSphere\b', r'SpawnDynamicBox\b', r'SpawnDynamicCapsule\b',
+        r'DestroyBody\b', r'ApplyImpulse\b', r'GetVelocity\b',
+        r'MoveKinematic\b', r'CreatePool\b',
+        r'SpawnSharedBooth\b',
+        r'OnStep\b', r'AwardTickets\b', r'AwardTokens\b', r'GetStreak\b',
+        r'AttractionConstants\.modifiers\b', r'Engine\.\w+\b',
+        r'MidwayPhysics\.\w+\b', r'MidwayInput\.\w+\b',
+    ]
+    _found_apis = set()
+    for _pat in _approved_api_patterns:
+        _matches = re.findall(_pat, _bridge)
+        for _m in _matches:
+            _found_apis.add(_m)
+    if _found_apis:
+        _approved_physics_apis = ", ".join(sorted(_found_apis))
+
+    # -- Assemble the improved monolithic prompt --
+    _monolithic_system = (
+        "You are a Lua attraction engineer for a game engine. "
+        "Your ONLY job is to write a COMPLETE, production-ready Lua file "
+        "for a single attraction.  You will receive:\n"
+        "1. The current skeleton file (you MUST fill in every anchor hook)\n"
+        "2. A consolidated list of ALL tasks that must be implemented\n"
+        "3. The GDD extract with economy rules\n"
+        "4. The Lua rules and bridge contract\n\n"
+        "CRITICAL DO-NOT-USE LIST:\n"
+        "You MUST NOT use any of the following APIs, function names, or patterns:\n"
+        "- MidwayPhysics.PoolAcquire\n"
+        "- MidwayPhysics.PoolReturn\n"
+        "- MidwayPhysics.IsSensorTriggered  (use a sensor callback instead)\n"
+        "- SkeeballGame (no global game object)\n"
+        "- OnPlayerAim, OnPlayerPowerUp, OnThrow, OnCollisionWithTarget\n"
+        "- Any function named On* that is NOT OnLoadStatic, OnLoad, or OnUnload\n\n"
+        "APPROVED PHYSICS APIS (use ONLY these):\n"
+        f"{_approved_physics_apis or 'See the bridge contract in the prompt below'}\n\n"
+        "BALL PHYSICS MODEL:\n"
+        "- Balls move via physics simulation (gravity, friction, restitution).\n"
+        "- The engine handles physics; Lua just sets initial impulses via ApplyImpulse().\n"
+        "- Do NOT implement manual velocity arithmetic in Lua.\n"
+        "- Do NOT call SetLinearVelocity, SetGravityFactor, or ApplyForce on balls.\n"
+        "- Do NOT tick ball positions manually in OnStep; let the physics sim move them.\n\n"
+        "SYNTAX & OUTPUT REQUIREMENTS:\n"
+        "- The generated file MUST pass `luac -p` syntax check on first try.\n"
+        "- Wrap the Lua code inside a single ```lua ... ``` code block.\n"
+        "  NO SEARCH/REPLACE blocks, NO explanatory prose outside the fence.\n"
+        "- The fence MUST be at the outermost level (no nested fences).\n"
+        "- Do NOT include any text before or after the code block.\n\n"
+        "CANONICAL SKELETON STRUCTURE (preserve EXACTLY):\n"
+        f"{_canonical_skeleton}\n\n"
+        "STRUCTURAL MANDATES:\n"
+        "- OnLoadStatic() MUST call SpawnSharedBooth() FIRST.\n"
+        "- OnLoad() MUST register MidwayPhysics.OnStep(function(dt) ... end).\n"
+        "- OnUnload() MUST exist for cleanup (print diagnostics only; pools auto-reclaimed).\n"
+        "- OnStep callback MUST read AttractionConstants.modifiers every frame (inner scope).\n"
+        "- OnStep callback MUST call Engine.AwardTickets(n, label) with "
+        "Engine.GetStreak() multiplier on score events.\n"
+        "- Every Lua function must have a matching 'end'.\n"
+        "- Every opened table '{' must have a matching '}'.\n"
+        "- Do NOT use undefined globals. Every non-builtin must be declared with 'local'.\n"
+        "- Global variable SLOT_ID = BOOTH_SLOT_ID or -1 MUST be present at module level.\n"
+        "- local CONST = {} MUST be present at module level (constants table placeholder).\n"
+        "- Module-level state variables (balls table, remainingBalls, currentScore, "
+        "aimAngle, powerLevel) MUST be declared at module scope, not in functions.\n"
+        "- 6 balls (remainingBalls = 6), decremented per throw, round ends when count = 0.\n"
+    )
+
+    _monolithic_prompt = (
+        f"## User's Feature Request\n{ctx.canonical_request}\n\n"
+        f"## Consolidated Task List\n{_consolidated_spec}\n\n"
+        f"## Game Design Document Extract\n{_gdd_block[:5000]}\n\n"
+        f"{_design_block}"
+        f"{_econ_mandate}"
+        f"\n\n## Engine Bridge Contract\n{_bridge}\n\n"
+        f"## Lua Rules\n{_lua_rules}\n\n"
+        f"## CURRENT SKELETON FILE: {target_file}\n"
+        f"```lua\n{_live_content}\n```\n\n"
+        f"---\n"
+        f"Write the COMPLETE implementation for `{target_file}`. "
+        f"Fill in every anchor hook with working code. "
+        f"Output the ENTIRE file inside ONE ```lua code block. "
+        f"Do NOT omit OnLoadStatic, OnLoad, or OnUnload. "
+        f"Do NOT use SEARCH/REPLACE - output the full file."
+    )
+
+    # -- Call the LLM once (not 17 times) --
+    _model = CODER_MODEL
+    # Increase num_predict for monolithic generation: a full attraction file
+    # can exceed the default 4096-token generation limit.
+    _mono_params = {"num_predict": 8192}
+    print(f"  [Monolithic] Calling {_model} for whole-file generation (num_predict=8192)...")
+    raw_output = call_ollama(
+        _monolithic_system,
+        _monolithic_prompt,
+        f"Monolithic Lua ({target_file})",
+        _model,
+        params=_mono_params,
+    )
+
+    # -- Extract code block --
+    _code_match = re.search(r"```lua\s*\n(.*?)```", raw_output, re.DOTALL)
+    _generated_code = _code_match.group(1).strip() if _code_match else raw_output.strip()
+
+    # -- Write to file --
+    _target_abs.write_text(_generated_code, encoding="utf-8")
+    print(f"  [Monolithic] Wrote {len(_generated_code)} chars to {target_file}")
+
+    # -- Run luac for syntax check --
+    import subprocess
+    _luac_proc = subprocess.run(
+        ["luac", "-p", str(_target_abs)],
+        capture_output=True, text=True, timeout=15,
+    )
+    if _luac_proc.returncode == 0:
+        print(f"  [Monolithic] ✅ luac syntax check passed")
+    else:
+        _err = _luac_proc.stderr.strip()
+        print(f"  [Monolithic] ⚠ luac syntax error: {_err[:200]}")
+        ctx.pre_flight_errors += (
+            f"\n## Monolithic Generation Syntax Error ({target_file})\n"
+            f"```\n{_err}\n```\n"
+        )
+
+    # -- Apply deterministic post-processing --
+    try:
+        from _post_process_lua import post_process_lua_file
+        post_process_lua_file(_target_abs)
+    except Exception as e:
+        print(f"  [Monolithic] Post-process error: {e}")
+
+    # -- Store monolithic target for downstream detection (Bugs B/C) --
+    ctx._monolithic_lua_target = target_file
+
+    # -- Populate ctx with a synthetic task result --
+    _synthetic_task_id = "task_monolithic"
+    ctx.all_results_dict[_synthetic_task_id] = _generated_code
+    ctx.processed_ids.add(_synthetic_task_id)
+    ctx.all_results.append({
+        "task_id": _synthetic_task_id,
+        "output": _generated_code,
+    })
+
+    # -- Set review context so Phase 5/6 review-fix loop can validate --
+    ctx.final_output = _generated_code
+    ctx.pre_flight_errors = getattr(ctx, 'pre_flight_errors', "") + (
+        f"\n## Monolithic Generation\n"
+        f"File: {target_file}\n"
+        f"Size: {len(_generated_code)} chars\n"
+        f"luac: {'PASS' if _luac_proc.returncode == 0 else 'FAILED'}\n"
+    )
+
+    print(f"  [Monolithic] Generation complete. Routing to review-fix loop...")
+    return ctx

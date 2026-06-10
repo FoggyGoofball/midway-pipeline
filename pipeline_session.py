@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midway Pipeline — Chat Session Segmentation
+Midway Pipeline  Chat Session Segmentation
 ============================================
 Provides a SessionManager that auto-generates session IDs, stores session
 metadata (model, checkpoint state, phase) alongside the session timeline,
@@ -48,7 +48,7 @@ class SessionManager:
         - message_count:   number of turn exchanges in this session
     """
 
-    # ── Default field values for new sessions ────────────────────────────
+    # -- Default field values for new sessions ----------------------------
     DEFAULT_METADATA = {
         "start_time": None,
         "user_prompt": "",
@@ -80,7 +80,7 @@ class SessionManager:
             self._dirty = True
             self._flush()
 
-    # ── Public API ──────────────────────────────────────────────────────
+    # -- Public API ------------------------------------------------------
 
     def update_phase(self, phase: str) -> None:
         """Update the current pipeline phase."""
@@ -139,7 +139,7 @@ class SessionManager:
         self._dirty = True
         self._flush()
 
-    # ── Private Helpers ─────────────────────────────────────────────────
+    # -- Private Helpers -------------------------------------------------
 
     def _load_index(self) -> dict:
         """Load the session index JSON file."""
@@ -161,7 +161,7 @@ class SessionManager:
                 encoding="utf-8",
             )
         except OSError:
-            pass  # Non-critical — index is advisory
+            pass  # Non-critical  index is advisory
 
     def _ensure_metadata_defaults(self) -> None:
         """Fill in any missing default fields for resumed sessions."""
@@ -237,7 +237,7 @@ class SessionManager:
         return None
 
 
-# ── Standalone Helper ─────────────────────────────────────────────────────
+# -- Standalone Helper -----------------------------------------------------
 
 def get_or_create_session(
     user_prompt: str = "",

@@ -1,5 +1,5 @@
 """
-runtime_sim.py — Headless Lua Tick Simulator
+runtime_sim.py  Headless Lua Tick Simulator
 
 Runs a lightweight synthetic Lua environment against generated attraction scripts
 to surface runtime errors (nil-handle access, undefined globals, missing API
@@ -35,7 +35,7 @@ import textwrap
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# ── Known API surfaces ─────────────────────────────────────────────────────────
+# -- Known API surfaces ---------------------------------------------------------
 # Keys: function name (lowercase). Values: expected arity range (min, max).
 # Keep in sync with docs/engine_lua_bridge_contract.md §7.
 _MIDWAY_PHYSICS_API: Dict[str, Tuple[int, int]] = {
@@ -75,7 +75,7 @@ _MIDWAY_PHYSICS_API: Dict[str, Tuple[int, int]] = {
     "getrotation":                 (1, 1),
     "isactive":                    (1, 1),
     "issensortriggered":           (1, 1),
-    "issenortriggered":            (1, 1),  # common misspelling — accept both
+    "issenortriggered":            (1, 1),  # common misspelling  accept both
     # Impulses / velocity
     "setlinearvelocity":           (4, 4),
     "addlinearvelocity":           (4, 4),
@@ -100,7 +100,7 @@ _MIDWAY_PHYSICS_API: Dict[str, Tuple[int, int]] = {
     "onstep":                      (1, 1),
 }
 
-# Economy API — Engine.* (not economy:). Keep in sync with bridge contract §11.
+# Economy API  Engine.* (not economy:). Keep in sync with bridge contract §11.
 _ECONOMY_API: Dict[str, Tuple[int, int]] = {
     "awardtickets":      (1, 2),
     "awardtokens":       (1, 2),
@@ -109,7 +109,7 @@ _ECONOMY_API: Dict[str, Tuple[int, int]] = {
     "getstreak":         (0, 0),
 }
 
-# ── Regex helpers ──────────────────────────────────────────────────────────────
+# -- Regex helpers --------------------------------------------------------------
 
 # local hFoo = MidwayPhysics.SpawnXxx(...)
 _HANDLE_CREATE_RE = re.compile(
@@ -171,7 +171,7 @@ def _count_args(call_text: str) -> int:
     return len(_TOP_LEVEL_COMMA_RE.split(args_str))
 
 
-# ── Static analysis core ──────────────────────────────────────────────────────
+# -- Static analysis core ------------------------------------------------------
 
 def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
     """
@@ -199,7 +199,7 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
             h = um.group(1)
             if h not in handles_created_in_load:
                 errors.append(
-                    f"[{task_id}] Handle `{h}` used in OnStep but not declared in OnLoad — "
+                    f"[{task_id}] Handle `{h}` used in OnStep but not declared in OnLoad  "
                     "likely nil-reference at runtime."
                 )
 
@@ -208,7 +208,7 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
         fn = pm.group(1).lower()
         if fn not in _MIDWAY_PHYSICS_API:
             errors.append(
-                f"[{task_id}] Unknown MidwayPhysics API: `MidwayPhysics.{pm.group(1)}` — "
+                f"[{task_id}] Unknown MidwayPhysics API: `MidwayPhysics.{pm.group(1)}`  "
                 "verify spelling against the bridge contract."
             )
         else:
@@ -219,7 +219,7 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
             if nargs < lo or nargs > hi:
                 errors.append(
                     f"[{task_id}] `MidwayPhysics.{pm.group(1)}` called with {nargs} arg(s) "
-                    f"(expected {lo}–{hi})."
+                    f"(expected {lo}{hi})."
                 )
 
     # 4. Check economy API calls (Engine.* flat namespace).
@@ -228,23 +228,23 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
         fn = em.group(1).lower()
         if fn not in _ECONOMY_API:
             errors.append(
-                f"[{task_id}] Unknown economy API: `Engine.{em.group(1)}` — "
+                f"[{task_id}] Unknown economy API: `Engine.{em.group(1)}`  "
                 "verify against the economy bridge contract (§11)."
             )
-    # Legacy colon-method economy calls are phantom APIs — flag them.
+    # Legacy colon-method economy calls are phantom APIs  flag them.
     for em in _ECONOMY_CALL_RE.finditer(lua_text):
         pass  # handled above
     _COLON_ECONOMY_RE = re.compile(r"\beconomy:([A-Za-z][A-Za-z0-9_]*)\s*\(", re.MULTILINE)
     for em in _COLON_ECONOMY_RE.finditer(lua_text):
         errors.append(
-            f"[{task_id}] Phantom API: `economy:{em.group(1)}` — "
+            f"[{task_id}] Phantom API: `economy:{em.group(1)}`  "
             "use Engine.AwardTickets / Engine.AwardTokens (flat namespace, no colon)."
         )
 
     # 5b. Forward-reference check: local function helpers used by OnStep/OnLoad
     # callbacks must be declared BEFORE those callbacks in file order.
     # Pattern: OnStep registers a closure at line N that calls helper Foo;
-    # Foo is declared as `local function Foo` at line M > N — crash at load time.
+    # Foo is declared as `local function Foo` at line M > N  crash at load time.
     _LOCAL_FN_RE = re.compile(
         r"^local\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
         re.MULTILINE,
@@ -270,7 +270,7 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
                 errors.append(
                     f"[{task_id}] Forward reference: `{fn_name}` is called inside "
                     f"MidwayPhysics.OnStep but its `local function {fn_name}` declaration "
-                    "appears AFTER the OnStep registration — nil at load time. "
+                    "appears AFTER the OnStep registration  nil at load time. "
                     "Move the declaration above the MidwayPhysics.OnStep call."
                 )
 
@@ -289,14 +289,14 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
                     and varname not in {"true", "false", "nil", "self"}
                     and len(varname) > 2):
                 errors.append(
-                    f"[{task_id}] Possible accidental global write `{varname}` inside OnStep — "
+                    f"[{task_id}] Possible accidental global write `{varname}` inside OnStep  "
                     "declare with `local` if intended as a loop variable."
                 )
 
     return errors
 
 
-# ── Live Lua harness (when lua binary is present) ──────────────────────────────
+# -- Live Lua harness (when lua binary is present) ------------------------------
 
 _LUA_TICK_HARNESS = textwrap.dedent("""\
     -- Minimal MidwayPhysics / economy stub harness for headless tick test
@@ -488,12 +488,12 @@ def _run_live_harness(task_id: str, lua_text: str, tmp_dir: Path) -> List[str]:
     except FileNotFoundError:
         pass  # lua not installed; fall back to static analysis only
     except Exception as e:
-        return [f"[{task_id}] Live harness: unexpected error — {e}"]
+        return [f"[{task_id}] Live harness: unexpected error  {e}"]
 
     return []
 
 
-# ── Code extraction ────────────────────────────────────────────────────────────
+# -- Code extraction ------------------------------------------------------------
 
 _LUA_FENCE_RE = re.compile(r"```(?:lua)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
@@ -507,7 +507,7 @@ def _extract_lua(text: str) -> str:
     return text.strip()
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+# -- Public entry point --------------------------------------------------------
 
 def run_runtime_sim(ctx) -> List[str]:
     """
@@ -574,7 +574,7 @@ def run_runtime_sim(ctx) -> List[str]:
     return errors
 
 
-# ── Final Phantom-API Gate ──────────────────────────────────────────────────
+# -- Final Phantom-API Gate --------------------------------------------------
 # Called AFTER observability, immediately before the consensus gate.
 # This is intentionally separate from run_runtime_sim so it runs on the
 # *final* (post-observability) content rather than the pre-review draft.
@@ -597,7 +597,7 @@ _REQUIRED_MODIFIER_GLOBALS: Tuple[str, ...] = (
     "ENGINE_MOD_HEAT", "ENGINE_MOD_SLEIGHT_OF_HAND", "ENGINE_MOD_NERVE",
 )
 
-# Preferred accessor pattern — AttractionConstants.modifiers.*
+# Preferred accessor pattern  AttractionConstants.modifiers.*
 _MODIFIER_ACCESSOR_RE = re.compile(
     r"AttractionConstants\.modifiers\b",
     re.MULTILINE,
@@ -625,9 +625,9 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
       1. Any MidwayPhysics.* call not in the approved _MIDWAY_PHYSICS_API whitelist.
       2. Any Engine.* call not in the approved _ECONOMY_API whitelist.
       3. Any legacy `economy:` colon-method call (always phantom).
-      4. Missing engine modifier consumption — every attraction must read from
+      4. Missing engine modifier consumption  every attraction must read from
          AttractionConstants.modifiers or at least one ENGINE_MOD_* global.
-      5. Missing economy hook — every attraction must call Engine.AwardTickets
+      5. Missing economy hook  every attraction must call Engine.AwardTickets
          or Engine.AwardTokens at least once.
 
     Returns a (possibly empty) list of error strings.
@@ -639,7 +639,7 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
 
     _LUA_DOMAINS = {"Lua", "lua", "PHYS", "phys"}
 
-    # ── Pre-build: merged Lua content grouped by target file ─────────────────
+    # -- Pre-build: merged Lua content grouped by target file -----------------
     # Checks 4 & 5 (modifier consumption, economy hook) must be evaluated
     # against the *complete* merged content for each output file, not against
     # each individual task chunk.  A task that handles physics setup need not
@@ -694,7 +694,7 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
                 if not lua_code:
                     continue
 
-                # ── 1. MidwayPhysics.* whitelist check ─────────────────────────
+                # -- 1. MidwayPhysics.* whitelist check -------------------------
                 for pm in _PHYSICS_CALL_RE_FINAL.finditer(lua_code):
                     fn = pm.group(1).lower()
                     if fn not in _MIDWAY_PHYSICS_API:
@@ -704,7 +704,7 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
                             "contract. Remove or replace before approval."
                         )
 
-                # ── 2. Engine.* whitelist check ─────────────────────────────────
+                # -- 2. Engine.* whitelist check ---------------------------------
                 for em in _ENGINE_CALL_RE.finditer(lua_code):
                     fn = em.group(1).lower()
                     if fn not in _ECONOMY_API:
@@ -714,41 +714,41 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
                             "contract (§11). Remove or replace before approval."
                         )
 
-                # ── 3. Legacy economy: colon-method check ───────────────────────
+                # -- 3. Legacy economy: colon-method check -----------------------
                 for cm in _COLON_ECONOMY_RE_FINAL.finditer(lua_code):
                     errors.append(
                         f"[{task_id}][PhantomAPIGate] Phantom colon-method: "
-                        f"`economy:{cm.group(1)}` — use Engine.AwardTickets / "
+                        f"`economy:{cm.group(1)}`  use Engine.AwardTickets / "
                         "Engine.AwardTokens (flat namespace, no colon)."
                     )
 
                 # Checks 4 & 5 (modifier consumption, economy hook) are evaluated
-                # on the merged per-file content below — not per task.
+                # on the merged per-file content below  not per task.
 
-        # ── Checks 4 & 5: per-file merged content ─────────────────────────
+        # -- Checks 4 & 5: per-file merged content -------------------------
         # A single OnStep with modifier reads + a single AwardTickets call is
         # sufficient for the entire file; we must not flag every task that
         # doesn't individually duplicate those lines.
         for _tgt_file, (_merged_lua, _task_ids) in _file_merged.items():
             _repr_task = _task_ids[0] if _task_ids else "unknown"
 
-            # ── 4. Modifier consumption check ───────────────────────────────
+            # -- 4. Modifier consumption check -------------------------------
             has_modifier_access = (
                 _MODIFIER_ACCESSOR_RE.search(_merged_lua) is not None
                 or _DIRECT_MOD_RE.search(_merged_lua) is not None
             )
             if not has_modifier_access:
                 errors.append(
-                    f"[{_repr_task}][PhantomAPIGate] Missing modifier consumption — "
+                    f"[{_repr_task}][PhantomAPIGate] Missing modifier consumption  "
                     "attraction must read AttractionConstants.modifiers (or at least "
                     "one ENGINE_MOD_* global) inside OnStep to respect the live "
                     "modifier system (heat, luck, sleight_of_hand, etc.)."
                 )
 
-            # ── 5. Economy hook check ────────────────────────────────────────
+            # -- 5. Economy hook check ----------------------------------------
             if not _AWARD_RE.search(_merged_lua):
                 errors.append(
-                    f"[{_repr_task}][PhantomAPIGate] Missing economy hook — "
+                    f"[{_repr_task}][PhantomAPIGate] Missing economy hook  "
                     "attraction must call Engine.AwardTickets(...) or "
                     "Engine.AwardTokens(...) on win/score events."
                 )

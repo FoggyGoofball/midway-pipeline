@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 color 0B
 echo =======================================================
 echo     MIDWAY PIPELINE :: STREAM SERVER
@@ -8,6 +9,7 @@ echo.
 :: Set the absolute path for the target game repository
 :: %~dp0 gets the current directory of this batch script (midway-pipeline\)
 set "MIDWAY_PROJECT_ROOT=%~dp0..\midway"
+set "PYTHONUTF8=1"
 
 echo [System] Target locked: midway
 echo [System] Binding MIDWAY_PROJECT_ROOT = %MIDWAY_PROJECT_ROOT%

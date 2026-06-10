@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midway Pipeline — Generator-Based Sequential Streaming Layer
+Midway Pipeline  Generator-Based Sequential Streaming Layer
 ==============================================================
 Replaces the old thread + callback + monkey-patch approach with a clean
 generator-based pattern. The pipeline runs in a background daemon thread
@@ -23,7 +23,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
 
-# ── Internal queue worker ───────────────────────────────────────────────────
+# -- Internal queue worker ---------------------------------------------------
 
 def _run_pipeline_worker(prompt: str, checkpoint_id: str,
                          session_id: str, event_queue: queue.Queue):
@@ -49,7 +49,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
             pass
     _pipeline.register_progress_listener(_phase_listener)
 
-    # ── Shared Telemetry State ──────────────────────────────────────────────
+    # -- Shared Telemetry State ----------------------------------------------
     class TelemetryState:
         start_time = None
         first_token_time = None
@@ -59,7 +59,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
 
     telemetry = TelemetryState()
 
-    # ── Intercept Interactive Prompts (Y/N visibility in Continue) ──────────
+    # -- Intercept Interactive Prompts (Y/N visibility in Continue) ----------
     _original_input = builtins.input
     def _stream_aware_input(prompt_text=""):
         # Push announcement to the stream so the VS Code user sees the prompt
@@ -72,7 +72,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
     
     builtins.input = _stream_aware_input
 
-    # ── Wrap Generator to Measure TTFT & TPM/TPS Telemetry ──────────────────
+    # -- Wrap Generator to Measure TTFT & TPM/TPS Telemetry ------------------
     import ollama_client as _ollama_client
     _original_call_streamed = getattr(_ollama_client, 'call_ollama_streamed', None)
 
@@ -95,7 +95,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
                 ttft = telemetry.first_token_time - telemetry.start_time
                 streaming_tps = telemetry.token_count / gen_duration if gen_duration > 0 else 0.0
                 tpm = streaming_tps * 60.0
-                # Effective TPS includes TTFT — gives a true speed metric including model load time
+                # Effective TPS includes TTFT  gives a true speed metric including model load time
                 effective_tps = telemetry.token_count / total_elapsed if total_elapsed > 0 else 0.0
 
                 # Flag extreme TTFT
@@ -110,7 +110,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
                 )
                 event_queue.put(("announce", stat_msg))
                 print(
-                    f"  [Telemetry] {telemetry.label} ({telemetry.model_name}) — "
+                    f"  [Telemetry] {telemetry.label} ({telemetry.model_name})  "
                     f"TTFT: {ttft:.2f}s{ttft_flag} | "
                     f"Speed: {streaming_tps:.1f} tok/s ({tpm:.0f} TPM) | "
                     f"Effective: {effective_tps:.1f} tok/s{low_tps_flag}",
@@ -131,7 +131,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
 
     _ollama_client._stream_callback = _token_callback
 
-    # ── Execute Pipeline Worker ─────────────────────────────────────────────
+    # -- Execute Pipeline Worker ---------------------------------------------
     try:
         result = _pipeline.run_pipeline(prompt, checkpoint_id, session_id)
         event_queue.put(("done", result))
@@ -151,7 +151,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
         event_queue.put(("close", None))
 
 
-# ── Public Generator API ────────────────────────────────────────────────────
+# -- Public Generator API ----------------------------------------------------
 
 def stream_pipeline_generator(prompt: str, checkpoint_id: str = None,
                               session_id: str = None):
@@ -193,7 +193,7 @@ def stream_pipeline_generator(prompt: str, checkpoint_id: str = None,
             continue
 
 
-# ── Standalone CLI (for testing) ──────────────────────────────────────────
+# -- Standalone CLI (for testing) ------------------------------------------
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

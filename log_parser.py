@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-log_parser.py — Extensible Compiler Log Pre-Processor
+log_parser.py  Extensible Compiler Log Pre-Processor
 
 Implements a deterministic Strategy Registry pattern for processing
 multiline diagnostic blocks from compiler/linter output. Provides
@@ -8,7 +8,7 @@ domain-scoped log truncation to protect VRAM freshness while preserving
 critical error context.
 
 Exported:
-    LOG_PROCESSOR — global DiagnosticRegistry instance
+    LOG_PROCESSOR  global DiagnosticRegistry instance
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ class CppCompilerStrategy:
         ]
 
         if not starts:
-            # No diagnostic blocks found — check for cmake/build-system config
+            # No diagnostic blocks found  check for cmake/build-system config
             # errors that are not real compiler diagnostics and should be suppressed.
             _infra_kws = (
                 "could not load cache", "no cmake_cache", "run cmake first",
@@ -60,7 +60,7 @@ class CppCompilerStrategy:
                 "error: could not",
             )
             if any(kw in raw_logs.lower() for kw in _infra_kws):
-                return ""  # Not a compiler error — suppress entirely
+                return ""  # Not a compiler error  suppress entirely
             # Guarantee fresh errors are visible
             return raw_logs[-1500:]
 
@@ -100,7 +100,7 @@ class LuaLinterStrategy:
         ]
 
         if not blocks:
-            # No diagnostic blocks found — guarantee fresh errors are visible
+            # No diagnostic blocks found  guarantee fresh errors are visible
             return raw_logs[-1000:]
 
         # Return the most recent 3 blocks
@@ -141,6 +141,6 @@ class DiagnosticRegistry:
         return strategy.extract_relevant_blocks(raw_logs)
 
 
-# Global singleton instance — importable as:
+# Global singleton instance  importable as:
 #   from log_parser import LOG_PROCESSOR
 LOG_PROCESSOR = DiagnosticRegistry()

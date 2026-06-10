@@ -72,5 +72,19 @@
 - [ ] **Print statements:** Use `print()` for debug output. It appears in `midway.log`.
 - [ ] **F1 panel:** Live modifier sliders. Changes sync to Lua globals immediately.
 
+
+### ANTI-PATTERNS (NEVER DO THESE)
+- [ ] **ANTI-PATTERN: Code at module root level.** `MidwayPhysics.SpawnDynamicSphere(...)` must NEVER appear outside a function body. Code at root level crashes the engine because the MidwayPhysics API is not yet initialized.
+
+- [ ] **ANTI-PATTERN: `function OnStep(dt)` at module level.** You MUST use `MidwayPhysics.OnStep(function(dt) ... end)` inside `OnLoad()`. A bare `OnStep(dt)` function will never be called by the engine.
+
+- [ ] **ANTI-PATTERN: Creating multiple `OnLoadStatic()` / `OnLoad()` / `OnUnload()` functions.** Each lifecycle hook must appear exactly once in the file. Duplicate definitions cause Lua parse errors at load time.
+
+- [ ] **ANTI-PATTERN: Caching `AttractionConstants.modifiers` at load time.** Always read `local MOD = AttractionConstants.modifiers` inside the `OnStep` callback every frame. Cache-invalidation is handled by the engine; caching at module level reads stale values.
+
+- [ ] **ANTI-PATTERN: Using `sol.*` APIs from Lua.** `sol` is a C++ binding layer and does not exist at Lua runtime. Never call `sol.set_function`, `sol.state`, etc. from Lua scripts.
+
+- [ ] **ANTI-PATTERN: Spawning static geometry for gameplay objects.** Use `SpawnStaticBox/Sphere/Capsule` ONLY for permanent cabinet geometry (walls, ramps, shelves). Use `SpawnDynamicSphere/Box/Capsule` for any body that moves during gameplay (balls, projectiles, tokens).
+
 ### Module Export & Sandbox Safety (Critical)
 - [ ] **No top-level execution loops.** Modules MUST only return their public table interface. You are strictly forbidden from including top-level synchronous loops, sample invocations, or active "Example Usage" execution blocks at the base of the file. All operational loops must reside exclusively inside registered callbacks (e.g., `OnStep`).

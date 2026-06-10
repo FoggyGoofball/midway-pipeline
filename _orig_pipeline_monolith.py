@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midway to Nowhere — Mesh Consensus Pipeline Orchestrator
+Midway to Nowhere  Mesh Consensus Pipeline Orchestrator
 ========================================================
 Multi-agent mesh with full inter-agent communication, recursive sub-task
 decomposition, dissent protocol (VETO/OBJECT/RECOURSE), double-check loops,
@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from collections import deque
 
-# Import snapshot manager (optional — pipeline works without it)
+# Import snapshot manager (optional  pipeline works without it)
 try:
     from pipeline_snapshot import SnapshotManager
     HAS_SNAPSHOT = True
@@ -102,7 +102,7 @@ class TokenBudget:
         # Need to truncate: keep first 10% as framing, then skip, then last 30%
         available = self.hard_limit - self.used
         if available <= 100:
-            self.warnings.append(f"[Budget] {label}: OVERFLOW — no room available")
+            self.warnings.append(f"[Budget] {label}: OVERFLOW  no room available")
             return f"\n[TOKEN BUDGET EXCEEDED: {label} truncated]\n"
 
         # Keep head (framing context) + tail (latest content)
@@ -244,7 +244,7 @@ def ledger_toc(domain_key: str = None) -> str:
         # Check if adding file header would exceed limit
         candidate = label
         if len("".join(parts)) + len(candidate) > HARD_LIMIT:
-            parts.append(f"  - [... remaining ledgers omitted — use [FETCH] to retrieve ...]\n")
+            parts.append(f"  - [... remaining ledgers omitted  use [FETCH] to retrieve ...]\n")
             break
         
         parts.append(candidate)
@@ -255,7 +255,7 @@ def ledger_toc(domain_key: str = None) -> str:
             if is_sub and not is_own:
                 continue
             if len("".join(parts)) + len(entry_text) > HARD_LIMIT:
-                parts.append(f"  - [... deeper subsections omitted — use [FETCH] to retrieve ...]\n")
+                parts.append(f"  - [... deeper subsections omitted  use [FETCH] to retrieve ...]\n")
                 break
             parts.append(entry_text)
     
@@ -327,7 +327,7 @@ ALL_DOMAINS = {
         "system_prompt": (
             "You are the CODE DOCUMENTARIAN for 'Midway to Nowhere'. "
             "You are the ultimate arbiter of API truth. "
-            "You are also the MEMORY ORACLE — you validate [FETCH] requests and resolve the correct "
+            "You are also the MEMORY ORACLE  you validate [FETCH] requests and resolve the correct "
             "memory content for agents whose context has been truncated.\n\n"
             "YOUR FUNCTIONS:\n"
             "A. API DOCUMENTATION ORACLE:\n"
@@ -475,20 +475,20 @@ MESH_AGENT_SYSTEM_EXTENSION = (
     "\n\n---\n"
     "MESH COMMUNICATION PROTOCOL:\n"
     "You may communicate with other agents by embedding signals in your output:\n"
-    "- [QUERY:<target_agent>:<question>] — Ask another agent for information. "
+    "- [QUERY:<target_agent>:<question>]  Ask another agent for information. "
     "The orchestrator will pause you, route the query, and inject the answer back.\n"
-    "- [DELEGATE:<target_agent>:<sub_task_spec>] — Break off a sub-task (max 5 total). "
+    "- [DELEGATE:<target_agent>:<sub_task_spec>]  Break off a sub-task (max 5 total). "
     "The orchestrator will execute it and return the result.\n"
-    "- [RESULT:<summary>] — Summarize your output for other agents.\n"
-    "- [APPROVE] — Signal you are satisfied with the current state.\n"
-    "- [REVISE:<target_agent>:<reason>] — Request changes from another agent.\n"
-    "- [VETO:<target_agent>:<reason>] — HARD BLOCK. Another agent modified your code "
+    "- [RESULT:<summary>]  Summarize your output for other agents.\n"
+    "- [APPROVE]  Signal you are satisfied with the current state.\n"
+    "- [REVISE:<target_agent>:<reason>]  Request changes from another agent.\n"
+    "- [VETO:<target_agent>:<reason>]  HARD BLOCK. Another agent modified your code "
     "in a way that breaks feature intent. This triggers conflict resolution.\n"
-    "- [OBJECT:<target_agent>:<concern>] — Soft flag. Another agent's change has issues "
+    "- [OBJECT:<target_agent>:<concern>]  Soft flag. Another agent's change has issues "
     "but is not blocking.\n"
-    "- [RECOURSE:Director:<appeal>] — Appeal a VETO override to the Director.\n"
-    "- [CONSULT:<target_agent>:<query>] — Request peer review.\n\n"
-    "- [FETCH:<filepath>#<HeaderName>] — Recall context from your disk-based memory ledger. Does NOT count against iteration limit.\n"
+    "- [RECOURSE:Director:<appeal>]  Appeal a VETO override to the Director.\n"
+    "- [CONSULT:<target_agent>:<query>]  Request peer review.\n\n"
+    "- [FETCH:<filepath>#<HeaderName>]  Recall context from your disk-based memory ledger. Does NOT count against iteration limit.\n"
     "DOUBLE-CHECK REQUIREMENT:\n"
     "At the end of your output, include:\n"
     "## Double-Check\n"
@@ -648,8 +648,8 @@ def build_director_prompt() -> str:
         "UNAVAILABLE DOMAINS (do NOT use these):\n"
         f"{unavailable}\n\n"
         "RULES:\n"
-        "- Do NOT use [NET] — there is no networking code in the project.\n"
-        "- Do NOT use [SHADER] — shader effects are not yet implemented.\n"
+        "- Do NOT use [NET]  there is no networking code in the project.\n"
+        "- Do NOT use [SHADER]  shader effects are not yet implemented.\n"
         "- Do NOT assign [Lua] tasks that write network code.\n"
         "- Only assign a domain if the project actually has code for it.\n\n"
         "Order by dependency: [C++] first, then [PHYS], then [Lua].\n\n"
@@ -973,7 +973,7 @@ def get_verdict(review_text: str) -> str:
     Returns 'PASS', 'FAIL', or 'UNKNOWN'.
     FAIL is checked first (higher priority) to avoid false PASS on negative commentary.
     """
-    # Check FAIL first — bold or bare
+    # Check FAIL first  bold or bare
     if re.search(r"\*\*FAIL\*\*", review_text):
         return "FAIL"
     if re.search(r"(?m)^FAIL$", review_text):
@@ -1206,10 +1206,10 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
     run_id = f"{feature_slug}_{timestamp}"
 
     print(f"\n{'='*70}")
-    print(f"  Midway Mesh Pipeline — Run: {run_id}")
+    print(f"  Midway Mesh Pipeline  Run: {run_id}")
     print(f"{'='*70}")
 
-    output_parts.append(f"# Midway Mesh Pipeline — {run_id}\n")
+    output_parts.append(f"# Midway Mesh Pipeline  {run_id}\n")
     output_parts.append(f"**Request:** {user_prompt}\n")
     output_parts.append(f"**Started:** {datetime.now().isoformat()}\n---\n")
 
@@ -1280,9 +1280,9 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
 
     # ── Phase 3: Director ─────────────────────────────────────────────────
     print(f"\n{'='*70}")
-    print(f"  Phase 3: Director — Task Decomposition")
+    print(f"  Phase 3: Director  Task Decomposition")
     print(f"{'='*70}")
-    output_parts.append("\n## Phase 3: Director — Task Decomposition\n")
+    output_parts.append("\n## Phase 3: Director  Task Decomposition\n")
 
     director_prompt = build_director_prompt()
     director_input = f"{director_prompt}\n\n---\nUSER REQUEST:\n{user_prompt}"
@@ -1290,7 +1290,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
     output_parts.append(director_output + "\n")
 
     # Parse tasks from Director output
-    task_regex = r"### Task (\d+): \[([^\]]+)\] — (.+)"
+    task_regex = r"### Task (\d+): \[([^\]]+)\]  (.+)"
     tasks = []
     for match in re.finditer(task_regex, director_output):
         tasks.append({
@@ -1308,7 +1308,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
 
     # ── Phase 4: Mesh Execution ───────────────────────────────────────────
     print(f"\n{'='*70}")
-    print(f"  Phase 4: Mesh Execution — {len(tasks)} Task(s)")
+    print(f"  Phase 4: Mesh Execution  {len(tasks)} Task(s)")
     print(f"{'='*70}")
     output_parts.append(f"\n## Phase 4: Mesh Execution ({len(tasks)} tasks)\n")
 
@@ -1340,7 +1340,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
         # Check for query results to inject
         context_extra = ""
         if task.is_query:
-            # This is a query being answered — just execute it
+            # This is a query being answered  just execute it
             pass
         elif task.parent and task.parent in query_results:
             context_extra = f"## Answer from Query\n{query_results[task.parent]}"
@@ -1509,7 +1509,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
                 )
                 doc_fetch_task._fetch_depth = fetch_depth + 1
                 
-                # Store original task — will be re-queued AFTER DOC answers
+                # Store original task  will be re-queued AFTER DOC answers
                 pending_fetches[doc_fetch_task.task_id] = task
                 
                 work_queue.appendleft(doc_fetch_task)
@@ -1668,7 +1668,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
             issues_text = issues_match.group(1).strip() if issues_match else review_output[:1000]
 
             # Call each domain architect to fix their code
-            print(f"  [Review-Fix] Review failed — architect fixing...")
+            print(f"  [Review-Fix] Review failed  architect fixing...")
             fix_input = (
                 f"## Original Feature Request\n{user_prompt}\n\n"
                 f"## Review Issues (Cycle {review_cycle})\n{issues_text}\n\n"
@@ -1758,7 +1758,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
 
         # ── Phase 8b: Lead Producer Scope Post-Mortem ──────────────────────
         print(f"\n{'='*70}")
-        print(f"  Phase 8b: Lead Producer — Scope Post-Mortem")
+        print(f"  Phase 8b: Lead Producer  Scope Post-Mortem")
         print(f"{'='*70}")
         output_parts.append("\n## Phase 8b: Lead Producer Scope Post-Mortem\n")
 
@@ -1767,9 +1767,9 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
             f"## Director's Task Breakdown\n{director_output}\n\n"
             f"## Failure Report\n{failure_report}\n\n"
             f"Analyze the failure above. Determine:\n"
-            f"1. **TOO_BROAD** — was the original prompt too wide for sub-agents "
+            f"1. **TOO_BROAD**  was the original prompt too wide for sub-agents "
             f"(requiring >{SCOPE_FILE_LIMIT} files or >{SCOPE_LINE_LIMIT} lines across multiple domains)?\n"
-            f"2. **NARROW** — scope was fine, failure was technical "
+            f"2. **NARROW**  scope was fine, failure was technical "
             f"(model misinterpretation, real code bug, Ollama issue)?\n\n"
             f"If TOO_BROAD, suggest a narrower version of the prompt the user "
             f"could run instead.\n"
@@ -1797,7 +1797,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
                     next_step = next_match.group(1)
                     output_parts.append(
                         f"\n### Next Blueprint Step\n"
-                        f"**{next_step}** — run with:\n"
+                        f"**{next_step}**  run with:\n"
                         f"`python pipeline.py \"{next_step}\"`\n"
                     )
                 else:
@@ -1824,7 +1824,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None) -> str:
             print(f"  [Snapshot] Apply error: {e}")
 
     print(f"\n{'='*70}")
-    print(f"  Pipeline Complete — {'APPROVED' if all_checks_pass else 'FAILED'}")
+    print(f"  Pipeline Complete  {'APPROVED' if all_checks_pass else 'FAILED'}")
     print(f"{'='*70}")
 
     return final_output
@@ -1904,11 +1904,11 @@ def generate_failure_report(user_prompt: str, consensus_checks: dict,
         parts.append(f"{cmd}\n")
 
     parts.append("\n### Cross-Reference\n")
-    parts.append("- docs/rules_cpp.md — C++ engine rules\n")
-    parts.append("- docs/rules_lua.md — Lua scripting rules\n")
-    parts.append("- docs/rules_phys.md — Physics integration rules\n")
-    parts.append("- docs/rules_shader.md — Shader development rules\n")
-    parts.append("- docs/engine_lua_bridge_contract.md — C++/Lua API contract\n")
+    parts.append("- docs/rules_cpp.md  C++ engine rules\n")
+    parts.append("- docs/rules_lua.md  Lua scripting rules\n")
+    parts.append("- docs/rules_phys.md  Physics integration rules\n")
+    parts.append("- docs/rules_shader.md  Shader development rules\n")
+    parts.append("- docs/engine_lua_bridge_contract.md  C++/Lua API contract\n")
 
     return "\n".join(parts)
 
@@ -2101,7 +2101,7 @@ def detect_cross_agent_edits(agent_a_code: str, agent_b_code: str) -> list:
                 conflict_lines_b.append((i, line[2:]))
         else:
             if conflict_start is not None:
-                # We ended a diff region — check if both sides modified
+                # We ended a diff region  check if both sides modified
                 if conflict_lines_a and conflict_lines_b:
                     conflicts.append({
                         "region_start": conflict_start,

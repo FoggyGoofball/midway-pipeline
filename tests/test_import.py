@@ -1,5 +1,5 @@
 """
-Step 2.1: Import verification — ensure pipeline.py loads without errors.
+Step 2.1: Import verification  ensure pipeline.py loads without errors.
 """
 
 from pathlib import Path
@@ -39,7 +39,7 @@ def test_signal_patterns_exist():
     """Verify all signal pattern keys are present (legacy FETCH superseded by PagingKernel)."""
     import pipeline
     # Keys observed in the actual pipeline.py SIGNAL_PATTERNS dict.
-    # NOTE: FETCH, READ_OFFLOADED, MATH_EVAL are PURGED — superseded by
+    # NOTE: FETCH, READ_OFFLOADED, MATH_EVAL are PURGED  superseded by
     # the <invoke_kernel> XML schema in the PagingKernel. Legacy handlers
     # are commented out in signals.py but the keys remain in SIGNAL_PATTERNS
     # for APPEAL, MERGE, REJECT, FLUSH, REQUEST_API.

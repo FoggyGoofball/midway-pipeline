@@ -1,9 +1,9 @@
 """
-GDD Extractor — structured block extraction from the unabridged 16-chapter Master GDD v19.0.
+GDD Extractor  structured block extraction from the unabridged 16-chapter Master GDD v19.0.
 Parses the Game Design Document using comprehensive regular expression headers
 to dynamically locate and extract relevant sections without hardcoded line numbers.
 
-No async/await — purely synchronous regex scanning and text extraction.
+No async/await  purely synchronous regex scanning and text extraction.
 """
 
 import re
@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
-# ── VRAM Stub Threshold ─────────────────────────────────────────────────────
+# -- VRAM Stub Threshold -----------------------------------------------------
 # Sections exceeding this char count are replaced with <VRAM_STUB> pointers.
 VRAM_STUB_CHAR_THRESHOLD: int = 2000
 
 
-# ── 16-Chapter Master GDD Section Map ──────────────────────────────────────
+# -- 16-Chapter Master GDD Section Map --------------------------------------
 # Each entry maps a canonical section key to its chapter number, title label,
 # and a list of regex header patterns used to locate the section boundaries
 # within the raw GDD markdown document.
@@ -189,6 +189,61 @@ GDD_SECTION_MAP: Dict[str, Dict] = {
             r"^##\s+Expansion",
         ],
     },
+    # -- Section 9 individual attractions (each has its own ### heading) --
+    "skeeball": {
+        "chapter": 9,
+        "label": "9. Skeeball (Expansion Catalog)",
+        "patterns": [
+            r"^###\s+Skeeball\b",
+            r"^##\s+Skeeball\b",
+        ],
+    },
+    "duck pond": {
+        "chapter": 9,
+        "label": "9. Sunk Costs (The Duck Pond)",
+        "patterns": [
+            r"^###\s+Sunk\s+Costs",
+            r"^###\s+Duck\s+Pond",
+        ],
+    },
+    "haunted house": {
+        "chapter": 9,
+        "label": "9. The Guilt Trip (Haunted House)",
+        "patterns": [
+            r"^###\s+Guilt\s+Trip",
+            r"^###\s+Haunted\s+House",
+        ],
+    },
+    "frog bog": {
+        "chapter": 9,
+        "label": "9. The Frog Bog (Parabolic Launching)",
+        "patterns": [
+            r"^###\s+Frog\s+Bog",
+        ],
+    },
+    "high striker": {
+        "chapter": 9,
+        "label": "9. The Strongman High Striker",
+        "patterns": [
+            r"^###\s+Strongman\s+High\s+Striker",
+            r"^###\s+High\s+Striker",
+        ],
+    },
+    "penny arcade": {
+        "chapter": 9,
+        "label": "9. The Penny Arcade (Mini-Slots)",
+        "patterns": [
+            r"^###\s+Penny\s+Arcade",
+        ],
+    },
+    "coin ski jump": {
+        "chapter": 9,
+        "label": "9. The Coin Ski Jump (A.K.A. The Disc of Damnation)",
+        "patterns": [
+            r"^###\s+Coin\s+Ski\s+Jump",
+            r"^###\s+Disc\s+of\s+Damnation",
+        ],
+    },
     "boss": {
         "chapter": 10,
         "label": "10. Identity Loadouts & Climactic Encounters (Final Bosses)",
@@ -268,7 +323,7 @@ GDD_SECTION_MAP: Dict[str, Dict] = {
 }
 
 
-# ── Keyword-to-Section Routing ──────────────────────────────────────────────
+# -- Keyword-to-Section Routing ----------------------------------------------
 # Maps user-facing keywords to canonical GDD_SECTION_MAP keys for librarian routing.
 KEYWORD_TO_SECTION: Dict[str, str] = {
     # Chapter 1: Executive Summary
@@ -306,8 +361,17 @@ KEYWORD_TO_SECTION: Dict[str, str] = {
     "bumper cars": "bumper cars", "roulette": "roulette", "globe": "globe of death",
     "globe of death": "globe of death", "attraction": "coin cascade",
     "attractions": "coin cascade",
-    # Chapter 9: Future/Expansion
+    # Chapter 9: Future/Expansion  catalog-level
     "future": "future", "expansion": "future", "catalog": "future",
+    # Chapter 9: Individual future attractions
+    "skeeball": "skeeball", "skee ball": "skeeball", "skee-ball": "skeeball",
+    "duck pond": "duck pond", "sunk costs": "duck pond", "rubber duck": "duck pond",
+    "haunted house": "haunted house", "guilt trip": "haunted house",
+    "frog bog": "frog bog", "frog": "frog bog", "parabolic": "frog bog",
+    "high striker": "high striker", "strongman": "high striker", "striker": "high striker",
+    "penny arcade": "penny arcade", "mini-slots": "penny arcade", "mini slots": "penny arcade",
+    "coin ski jump": "coin ski jump", "ski jump": "coin ski jump",
+    "disc of damnation": "coin ski jump",
     # Chapter 10: Bosses
     "boss": "boss", "bosses": "boss", "encounter": "boss",
     "loadout": "boss", "final boss": "boss",

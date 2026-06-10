@@ -1,3 +1,1599 @@
+## Session Event  2026-06-06T20:59:38.676905
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define Skeeball Attraction Lifecycle Hooks in OnLoadStatic() - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+
+### Task 1: [Lua] - Initialize Ball Count (DependsOn: None)
+Inputs: ball_count
+Outputs: None
+Hooks: OnLoadStatic, OnLoad
+File: skeeball.lua
+
+### Task 2: [Lua] - Create Object Pools (DependsOn: Task 1)
+Inputs: ball_pool_handle
+Outputs: pool_objects
+Hooks: OnLoad
+File: skeeball.lua
+
+### Task 3: [Lua] - Register MidwayPhysics.OnStep Callback (DependsOn: Task 2)
+Inputs: game_logic_fn
+Outputs: None
+Hooks: OnStep
+File: skeeball.lua
+
+### Task 4: [Lua] - Implement User Input Handling for Ball Launches (DependsOn: Task 3)
+Inputs: aiming, power_inputs
+Outputs: ball_launch_handle
+Hooks: OnLoad
+File: skeeball.lua
+
+### Task 5: [Lua] - Apply Realistic Physics Interactions using MidwayPhysics API (DependsOn: Task 4)
+Inputs: body_type_spawn_functions
+Outputs: None
+Hooks: OnLoad, OnStep
+File: skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball game where players aim and power up balls to knock over targets and score points.
+
+### Declared Handles
+  SkeeballBall (Entity)  Represents a skeeball ball. [owner: physics, lifecycle: OnLoadStatic]
+  PlayerScore (Number)  Tracks the player's score. [owner: economy, lifecycle: runtime]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(...)
+  2. SkeeballGame.OnLoad(...)
+  3. SkeeballGame.OnPlayerAim(...)
+  4. SkeeballGame.OnPlayerPowerUp(...)
+  5. SkeeballBall.OnThrow(...)
+  6. SkeeballGame.OnCollisionWithTarget(...)
+
+### Event Flow
+  SkeeballBall.Position == Target.Position → SkeeballGame.UpdateScore(PlayerScore, Target.Value)
+  PlayerScore >= MaxScore → SkeeballGame.EndGame()
+
+### Pool Requirements
+  SkeeballBall: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket/token payouts
+
+
+## Phase 4: Mesh Execution (12 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Issue 1: The code directly computes positions/velocities using raw arithmetic, which violates **LUA MANUAL PHYSICS** (Rule V2). Specifically, the line `local vx = powerLevel * math.sin(aimAngle)` and others perform direct velocity calculations without going through a MidwayPhysics API call.
+- Issue 2: The code uses unsupported file-path ove
+[... output truncated ...]
+---
+## Session Event  2026-06-06T10:23:15.116492
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Implement OnLoadStatic() - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction Implementation
+
+### Task 1: [Lua] - Define module-level state (balls/objects table, globals)
+(DependsOn: None)
+
+- Inputs: None
+- Outputs: balls/table, globals/object
+- Hooks: OnLoadStatic
+- File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Set up shared constants table (geometry, physics, gameplay values)
+(DependsOn: Task 1)
+
+- Inputs: None
+- Outputs: CONST/table
+- Hooks: OnLoadStatic
+- File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Define attraction lifecycle methods within "skeebal.lua"
+(DependsOn: Task 2)
+
+- Inputs: None
+- Outputs: Skeeball attraction lifecycle methods
+- Hooks: OnLoadStatic, OnLoad, OnStep, OnUnload
+- File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Implement object pool creation (MidwayPhysics.CreatePool with shape/mass/restitution)
+(DependsOn: Task 3)
+
+- Inputs: None
+- Outputs: Object pool handles
+- Hooks: OnLoad
+- File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Initialize round state (ball counters, timers, round variables)
+(DependsOn: Task 4)
+
+- Inputs: None
+- Outputs: Round state tables
+- Hooks: OnLoad
+- File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball attraction where players aim and set power on balls to knock over targets, with scoring based on accuracy and power.
+
+### Declared Handles
+  skeeballPhysics (table)  Contains physics-related constants and parameters for the skeeball game. [owner: physics, lifecycle: OnLoadStatic]
+  playerInputHandler (function)  Handles player input for aiming and setting power on the balls. [owner: input, lifecycle: runtime]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(skeeballPhysics)
+  2. SkeeballLogic.InitGame()
+
+### Event Flow
+  playerInputHandler() == 'throw' → SkeeballLogic.ThrowBall()
+  SkeeballLogic.IsLastBallThrown() → SkeeballLogic.EndGame()
+
+### Pool Requirements
+  balls: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+## Phase 4: Mesh Execution (12 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+
+### Issues
+- **Issue 1:** The code contains a static pattern violation
+[... output truncated ...]
+---
+## Session Event  2026-06-05T15:29:40.467608
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define game constants and parameters in OnLoadStatic() with a scaffold of TODOs - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(CONF), file_context(Lua), ledger_toc(CONF), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction Implementation
+### Task 1: [Lua] - Define game constants and parameters (DependsOn: None)
+Inputs: AttractionConstants.modifiers, TODOs for variables (e.g., ball radius, speed, gravity)
+Outputs: Constants table with game parameters
+Hooks: OnLoadStatic()
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Create object pools and register MidwayPhysics.OnStep(fn) during OnLoad() (DependsOn: Task 1)
+Inputs: AttractionConstants.modifiers, pool creation settings
+Outputs: Pools table with ball handles, active physics body flags
+Hooks: OnLoad()
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Implement input handling for aiming and setting power on the balls in AttractionInit() (DependsOn: Task 2)
+Inputs: Mouse/x/y coordinates, button states
+Outputs: Ball position and velocity vectors
+Hooks: OnLoad()
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Spawn balls dynamically using MidwayPhysics.SpawnDynamicSphere(lx, ly, lz, radius) inside OnLoad() (DependsOn: Task 3)
+Inputs: Ball count, pool creation settings
+Outputs: Ball handles and object pools
+Hooks: OnLoad()
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Track remaining balls with a Lua counter that resets after each round in OnStep(), read AttractionConstants.modifiers every frame to adjust scores and rewards (DependsOn: Task 4)
+Inputs: Remaining ball count, modifier values
+Outputs: Ball count, score multiplier, streak value
+Hooks: OnStep()
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball game where players aim and set power on balls to knock over pins, earning points for each successful shot.
+
+### Declared Handles
+  skeeballPhysics (table)  Contains physics-related constants and functions for the skeeball game. [owner: physics, lifecycle: OnLoadStatic]
+  playerState (table)  Tracks player state such as aiming angle, power level, and ball count. [owner: economy, lifecycle: OnLoadStatic]
+
+### OnLoad Registration Order
+  1. SkeeballPhysics.OnInit(...)
+  2. PlayerState.OnInit(...)
+
+### Event Flow
+  playerState.ballCount <= 0 → AttractionManager.TransitionToNextRound()
+
+### Pool Requirements
+  ball: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+#
+[... output truncated ...]
+---
+## Session Event  2026-06-04T22:22:46.185666
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Implement starting round with six balls - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+
+### Task 1: [Lua] - Initialize Game State (DependsOn: None)
+Inputs: 
+Outputs: 
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Define Player Input Handling for Aiming and Power Setting (DependsOn: Task 1)
+Inputs: 
+Outputs: 
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Register MidwayPhysics.OnStep Callback in OnLoad() (DependsOn: Task 2)
+Inputs: 
+Outputs: 
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Create Object Pools for Skeeball Balls and Projectiles during OnLoad() (DependsOn: Task 3)
+Inputs: 
+Outputs: 
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Implement Ball Launch on Player Input using SpawnDynamicSphere and ApplyImpulse (DependsOn: Task 4)
+Inputs: 
+Outputs: 
+Hooks: OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 6: [Lua] - Track Remaining Balls with a Lua Counter for the Game State Management (DependsOn: Task 5)
+Inputs: 
+Outputs: 
+Hooks: None
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball game where players aim, set power on balls, and shoot them at targets to score points.
+
+### Declared Handles
+  SkeeballPhysics (table)  Contains physics-related constants and initializations for the skeeball game. [owner: physics, lifecycle: OnLoadStatic]
+  SkeeballGraphics (table)  Handles rendering of the skeeball machines, balls, and targets. [owner: graphics, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(...)
+  2. SkeeballGraphics.OnStep(dt)
+
+### Event Flow
+  player.ready_to_shoot → MidwayPhysics.ShootBall(player.selected_ball, player.aim_angle, player.power)
+  ball.landed_on_target(target) → Engine.AwardTickets(player, target.value * Engine.GetStreak())
+
+### Pool Requirements
+  balls: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+## Phase 4: Mesh Execution (12 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Issue 1: The `MOD` variable is statically cached at the module level, which means it does not reflect any changes
+[... output truncated ...]
+---
+## Session Event  2026-06-03T15:58:09.450464
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define OnLoadStatic() - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction Implementation
+
+### Task 1: [Lua] - Initialize skeeball game state and setup attraction lifecycle (DependsOn: None)
+### Task 2: [Lua] - Define OnLoad() logic, initialize game state with 6 balls (DependsOn: Task 1)
+### Task 3: [Lua] - Implement aiming mechanism for player input (DependsOn: Task 1, Task 2)
+### Task 4: [Lua] - Define scoring system using Engine.AwardTickets(n, label) or Engine.AwardTokens(n, label), leveraging Engine.GetStreak() as multiplier (DependsOn: Task 1, Task 2, Task 3)
+
+Inputs: skeeballConstants, attractionConstants
+Outputs: none
+Hooks: OnLoadStatic, OnLoad, OnStep, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+Note: These tasks follow the single-file consolidation rule, with all logic and state contained within a single .lua file.
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball game where players aim and set power on balls to knock over targets.
+
+### Declared Handles
+  skeeballPhysics (table)  Stores the physics properties for skeeballs. [owner: physics, lifecycle: OnLoadStatic]
+  playerInput (table)  Handles player input for aiming and setting power. [owner: input, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(skeeballPhysics)
+  2. SkeeballLogic.OnPlayerInput(playerInput)
+
+### Event Flow
+  playerInput.isAiming and playerInput.powerSet → SkeeballLogic.LaunchBall(playerInput.target, playerInput.power)
+  not SkeeballLogic.HasBallsLeft() → SkeeballLogic.EndGame()
+
+### Pool Requirements
+  skeeballs: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket/token payouts
+
+
+## Phase 4: Mesh Execution (9 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Issue 1: **Rule:** static cache of modifiers at module/OnLoad scope (`MOD`)
+**Why this is always wrong:** AttractionConstants.modifiers was cached into local variable `MOD` at module level or inside OnLoad(). Modifier values change every frame based on the player's Karma, streak, and NPC interactions. Caching them once at load time means the attraction will read stale values for the entire session. MUST read AttractionConstants.modifiers insid
+[... output truncated ...]
+---
+## Session Event  2026-06-03T13:16:58.272807
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define Skeeball game initialization logic including booth geometry, hole layouts, and starting conditions - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(CONF), file_context(Lua), ledger_toc(CONF), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+### Task 1: [Lua] - Define attraction lifecycle methods (DependsOn: None)
+Inputs: None
+Outputs: attractions/skeeball/skeeball.lua
+Hooks: OnLoadStatic, OnLoad, OnStep, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Define Skeeball game initialization logic including booth geometry, hole layouts, and starting conditions (DependsOn: Task 1)
+Inputs: None
+Outputs: attractions/skeeball/skeeball.lua
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Implement ball launch with power setting options using SpawnDynamicSphere() in OnLoadStatic() (DependsOn: Task 2)
+Inputs: None
+Outputs: attractions/skeeball/skeeball.lua
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Create object pools for balls and projectiles while adhering to Skeeball gameplay rules (DependsOn: Task 3)
+Inputs: None
+Outputs: attractions/skeeball/skeeball.lua
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Implement player input handling for ball launching with aim and power setting options in OnLoad() (DependsOn: Task 4)
+Inputs: None
+Outputs: attractions/skeeball/skeeball.lua
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+[MATH_HEAVY]
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball game where users aim and power shots at targets to score points. Each round starts with 6 balls, and gameplay ends when all balls are thrown.
+
+### Declared Handles
+  skeeballPhysics (PhysicsSystem)  Handles physics calculations for ball movement and collisions. [owner: physics, lifecycle: OnLoadStatic]
+  skeeballScoreboard (ScoreboardManager)  Manages scorekeeping and awarding tickets/token rewards based on player performance. [owner: economy, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. skeeballPhysics.OnInitialize(...)
+  2. skeeballScoreboard.OnInitialize()
+
+### Event Flow
+  player.shoot_button_pressed → skeeballPhysics.OnShotFired(player, power)
+  skeeballPhysics.OnBallCollision(ball) → skeeballScoreboard.OnBallHit(target, ball)
+
+### Pool Requirements
+  balls: 6
+  targets: 10
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - Aim and power system implemented for balls
+  - Game starts with 6 balls and ends when all balls are thrown
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+
+
+## Phase 4: Mesh Execution (11
+[... output truncated ...]
+---
+## Session Event  2026-06-03T01:59:46.506084
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define skeeball game rules and scoring system - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction Implementation
+
+### Task 1: [Lua] - Define Skeeball Game Rules and Scoring System (DependsOn: None)
+Inputs: nil
+Outputs: game rules, scoring system
+Hooks: OnLoadStatic, OnStep, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Implement Ball Launch on Player Input using SpawnDynamicSphere() (DependsOn: Task 1)
+Inputs: player input, physics settings
+Outputs: dynamic spheres representing balls
+Hooks: OnLoadStatic, OnStep, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Create Object Pools for Balls, Projectiles, and Magnets (DependsOn: Task 2)
+Inputs: physics settings, pool parameters
+Outputs: object pools for balls, projectiles, and magnets
+Hooks: OnLoadStatic, OnStep, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Register MidwayPhysics.OnStep(function(dt) ... end) inside OnLoad() (DependsOn: Task 3)
+Inputs: physics settings, game loop parameters
+Outputs: registered OnStep callback
+Hooks: OnLoad, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Track Remaining Balls with a Lua Counter in the Game Loop (DependsOn: Task 4)
+Inputs: game loop parameters, physics settings
+Outputs: remaining balls counter
+Hooks: OnLoadStatic, OnStep, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball game where players aim and set power on balls to knock over pins and earn points.
+
+### Declared Handles
+  skeeball_game (Game)  Handles the overall game logic and state. [owner: game_logic, lifecycle: OnLoadStatic]
+  skeeball_ball (Object)  Represents a ball in the skeeball game. [owner: physics, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. SkeeballGame.OnStep(...)
+
+### Event Flow
+  skeeball_ball.onHit(pins) → SkeeballGame.updateScore(pins)
+  skeeball_game.allBallsThrown() → SkeeballGame.endRound()
+
+### Pool Requirements
+  skeeball_ball: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+## Phase 4: Mesh Execution (7 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Issue 1: Static cache of modifiers at module/On
+[... output truncated ...]
+---
+## Session Event  2026-06-02T16:16:31.021197
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Implement ball spawn system using SpawnDynamicSphere - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+### Task 1: [Lua] - Define Initial Skeeball State and Setup (DependsOn: None)
+Inputs: None
+Outputs: skeeballState, ballCount
+Hooks: OnLoadStatic, OnLoad, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Implement Ball Spawn System using SpawnDynamicSphere (DependsOn: Task 1)
+Inputs: skeeballState, ballCount
+Outputs: balls
+Hooks: OnStep
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic arcade game where players aim and launch skeeballs into a series of targets to score points.
+
+### Declared Handles
+  GameManager (table)  Handles the game state and logic. [owner: logic, lifecycle: OnLoad]
+  BallSpawner (table)  Respawns balls when all are thrown in a round. [owner: logic, lifecycle: runtime]
+  PhysicsController (table)  Manages the physics for the skeeballs and targets. [owner: physics, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. GameManager.OnLoad(...)
+  2. PhysicsController.OnLoad(...)
+
+### Event Flow
+  GameManager.IsAllBallsThrown() == false → BallSpawner.SpawnBall()
+  GameManager.IsGameOver() → GameManager.EndGame()
+
+### Pool Requirements
+  skeeballs: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+## Phase 4: Mesh Execution (14 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Issue 1: Duplicate function definition 'OnLoadStatic' (4×) in tasks task_1, task_2, task_3, and task_14.
+- Issue 2: Missing `OnUnload` implementation for tasks task_1 and task_5.
+- Issue 3: Lua syntax errors near '`' at line 2 of skeeball.lua.
+- Issue 4: Lua syntax error near '#' at line 7 of skeeball.lua.
+
+### Verdict
+[VERDICT: FAIL]
+
+### Domain Agent Fix Cycle 1
+
+### Lua Fix (task_1)
+<fix-plan>
+1 → skeeball.lua:2 → Remove invalid character '`'
+2 → skeeball.lua:7 → Remove invalid character '#'
+3 → skeeball.lua:4 → Ensure `OnUnload` is implemented for task_1 and task_5
+4 → skeeball.lua:4 → Correctly define `OnLoadStatic` as a function
+</fix-plan>
+
+```
+luac: ...dmin\source\repos\midway-pipeline\..\midway\skeeball.lua:2: unexpected symbol near '`'
+```
+
+
+<SEARCH>
+function OnLoadStatic()
+  
+[... output truncated ...]
+---
+## Session Event  2026-06-01T21:44:06.827660
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define AttractionConstants table - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director  Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+### Task 1: [Lua] - Define Attraction Constants Table (DependsOn: None)
+Inputs: None
+Outputs: attractions/skeeball/Constants.lua, AttractionConstants table
+Hooks: OnLoadStatic
+File: attractions/skeeball/Constants.lua
+
+### Task 2: [Lua] - Implement OnLoadStatic() to Spawn Shared Booth and Permanent Geometry (DependsOn: Task 1)
+Inputs: attractions/skeeball/Constants.lua, AttractionConstants table
+Outputs: attractions/skeeball/skeeball.lua, shared booth and permanent geometry bodies
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Register MidwayPhysics.OnStep() Inside OnLoad() to Hook into Physics Simulation Updates (DependsOn: Task 2)
+Inputs: attractions/skeeball/Constants.lua, AttractionConstants table, shared booth and permanent geometry bodies
+Outputs: attractions/skeeball/skeeball.lua, OnStep function hooked into physics simulation updates
+Hooks: OnLoad, OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Spawn Dynamic Spheres for Balls with Initial Positions, Velocities and Masses Set by User Input Controls (DependsOn: Task 3)
+Inputs: attractions/skeeball/Constants.lua, AttractionConstants table, OnStep function hooked into physics simulation updates
+Outputs: attractions/skeeball/skeeball.lua, dynamic sphere bodies for balls
+Hooks: OnLoad, OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Define a Ball Counter to Track Remaining Balls per Round (DependsOn: Task 4)
+Inputs: attractions/skeeball/Constants.lua, AttractionConstants table, dynamic sphere bodies for balls
+Outputs: attractions/skeeball/skeeball.lua, ball counter variable
+Hooks: OnLoad, OnStep
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball Attraction
+The Skeeball attraction allows players to aim and set power on each skeeball for an arcade-style game experience, with a scoring system that rewards streaks.
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep
+
+### Event Flow
+  {SkeeballAttraction:BallDropped} → physics:Call(SkeeballHitPin, Engine.AwardTickets)
+
+### Pool Requirements
+  MidwayPhysicsPool: 0
+
+### Economy Hooks: AttractionConstants, Engine:AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets or Engine.AwardTokens called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket/token payouts
+
+
+## Phase 4: Mesh Execution (13 tasks)
+
+
+## Phase 5: Conflic
+[... output truncated ...]
+---
+## Session Event  2026-06-01T19:07:40.797374
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define game rules, local dimensions, and scoring - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director  Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+
+### Task 1: [Lua] - Define game rules, local dimensions, and scoring (DependsOn: None)
+Inputs: AttractionConstants.modifiers
+Outputs: scoreTable
+Hooks: OnLoadStatic, OnLoad, OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Implement ball launch on player input using SpawnDynamicSphere and ApplyImpulse (DependsOn: Task 1)
+Inputs: playerInput, AttractionConstants.modifiers
+Outputs: ballHandles
+Hooks: OnLoad, OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Create object pools for game objects such as balls, gutters, etc. (DependsOn: Task 2)
+Inputs: poolParamsTable, AttractionConstants.modifiers
+Outputs: ballPool, gutterPool
+Hooks: OnLoadStatic, OnLoad
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Register MidwayPhysics.OnStep(function(dt) ... end) to track physics updates (DependsOn: Task 3)
+Inputs: dt, AttractionConstants.modifiers
+Outputs: None
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Initialize game state with 6 balls per round, tracking ball count and score (DependsOn: Task 4)
+Inputs: AttractionConstants.modifiers
+Outputs: initialBallCount, scoreTable
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: SkeeballAttraction
+This attraction simulates a game of skeeball, allowing players to aim and set power for each ball throw within a single round of six balls.
+
+### Declared Handles
+  InitializeBalls (userdata)  Initializes the game with six balls [owner: physics, lifecycle: OnLoadStatic]
+  ThrowBall (runtime)  Determines if a player throws the next ball, initializes and sends it [owner: , lifecycle: MidwayPhysics.OnStep(...)]
+  BallRollsOutOfTown ()  Checks if a ball has rolled out of the town and resets its state [owner: physics, lifecycle: MidwayPhysics.OnStep(...)]
+  BallInPinballMachine ()  Checks if a ball is still in the pinball machine and handles scoring [owner: physics, lifecycle: MidwayPhysics.OnStep(...)]
+
+### OnLoad Registration Order
+  1. InitializeBalls
+  2. ThrowBall
+  3. BallRollsOutOfTown
+  4. BallInPinballMachine
+
+### Pool Requirements
+  MidwayPhysics: 1
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets, Engine.AwardTokens
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets or Engine.AwardTokens called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket/token payouts
+
+
+
+[... output truncated ...]
+---
+## Session Event — 2026-05-29T23:59:42.065022
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define game rules and implement scoring system in attractions/skeeball/skeeball.lua - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer — NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director — Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+
+### Task 1: [Lua] - Define Game Rules and Scoring System (DependsOn: None)
+Inputs: gameRules, scoringSystem
+Outputs: gameRules, scoringSystem
+Hooks: OnLoadStatic, OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Initialize Ball Count to Six and Setup Player Input Controls (DependsOn: Task 1)
+Inputs: ballCount, playerInputControls
+Outputs: ballCount, playerInputControls
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+The Skeeball attraction simulates a classic skeeball game, where players aim and set power for each ball throw within rounds that start with six balls.
+
+### Declared Handles
+  StartRound (runtime) — Initiates a new round of skeeball with six balls. [owner: gameplay, lifecycle: OnLoad | OnStep]
+  ThrowBall (runtime) — Throws a ball towards the pins with user-defined aim and power. [owner: gameplay, lifecycle: OnStep]
+  EndRound (runtime) — Completes the current round when all balls are thrown. [owner: gameplay, lifecycle: OnStep]
+  CalculateScore (runtime) — Determines the score based on pin hits and bonuses. [owner: gameplay, lifecycle: OnStep]
+  ManageBalls (runtime) — Tracks the number of remaining balls in a round. [owner: gameplay, lifecycle: OnStep]
+  UpdateGameState (runtime) — Updates the game state after each throw or round completion. [owner: gameplay, lifecycle: OnStep]
+
+### OnLoad Registration Order
+  1. AttractionConstants.Initialize()
+  2. MidwayPhysics.LoadStatic()
+  3. StartRound
+  4. ThrowBall
+  5. CalculateScore
+  6. ManageBalls
+  7. EndRound
+  8. UpdateGameState
+
+### Event Flow
+  'ballCount < AttractionConstants.BALLS_PER_ROUND' → Engine.AwardTickets('skeeball', '1')
+  roundComplete() → Engine.AwardTokens('SkeeballVictory', '50')
+
+### Pool Requirements
+  AttractionConstants: 1
+  MidwayPhysics: 2
+  Engine: 3
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets or Engine.AwardTokens called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket/token payouts
+
+
+## Phase 4: Mesh Execution (6 tasks)
+
+
+## Phase 5: Conflict Resolution
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## [VERDICT: FAIL] due to the following issues:
+1. **Static Pattern Violation** - Task task_1 [Lua]: References to undefined booth global (BUTTON / SLOT_X/Y/Z / SharedBooth). Rep
+[... output truncated ...]
+---
 ## Session Event — 2026-05-27T17:55:53.630068
 **Agent Assigned:** Lua, Lua, Lua, Lua, Lua
 **User Input:** <execution_environment>

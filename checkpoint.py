@@ -1,8 +1,8 @@
 """
-Pipeline checkpoint system — save and load pipeline state to/from disk JSON files.
+Pipeline checkpoint system  save and load pipeline state to/from disk JSON files.
 Provides checkpoint round-trip, listing, and overwrite detection.
 
-No async/await — purely synchronous file I/O.
+No async/await  purely synchronous file I/O.
 """
 
 from __future__ import annotations

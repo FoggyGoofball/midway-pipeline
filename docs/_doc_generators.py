@@ -1,5 +1,5 @@
 """
-_doc_generators.py — API documentation generators for fetch_api_docs.py
+_doc_generators.py  API documentation generators for fetch_api_docs.py
 =========================================================================
 Extracted from fetch_api_docs.py to keep that file under 1 000 lines.
 
@@ -26,7 +26,7 @@ from _doc_parsers import RAW_DIR, parse_cpp_header, parse_box2d_api
 DOCS_DIR = Path(__file__).parent.resolve()
 
 
-# ── Jolt ─────────────────────────────────────────────────────────────────────
+# -- Jolt ---------------------------------------------------------------------
 
 def generate_jolt_doc(sources: dict) -> str:
     """Generate docs/jolt_api.md from raw headers."""
@@ -65,10 +65,10 @@ def generate_jolt_doc(sources: dict) -> str:
     return "\n".join(parts)
 
 
-# ── Box2D ─────────────────────────────────────────────────────────────────────
+# -- Box2D ---------------------------------------------------------------------
 
 def generate_box2d_doc() -> str:
-    """Generate docs/box2d_api.md from raw headers — uses Box2D C API parser."""
+    """Generate docs/box2d_api.md from raw headers  uses Box2D C API parser."""
     parts = [
         "# Box2D API Reference <a name=\"box2d-api\"></a>",
         f"> Source: Box2D GitHub | Generated: {datetime.now().strftime('%Y-%m-%d')}",
@@ -98,10 +98,10 @@ def generate_box2d_doc() -> str:
     return "\n".join(parts)
 
 
-# ── sol2 ─────────────────────────────────────────────────────────────────────
+# -- sol2 ---------------------------------------------------------------------
 
 def generate_sol2_doc() -> str:
-    """Generate docs/sol2_api.md — sol2 API reference with hand-curated content."""
+    """Generate docs/sol2_api.md  sol2 API reference with hand-curated content."""
     parts = [
         "# sol2 API Reference <a name=\"sol2-api\"></a>",
         f"> Source: sol2 GitHub | Generated: {datetime.now().strftime('%Y-%m-%d')}",
@@ -285,21 +285,21 @@ player_type["damage"] = &Player::damage;
 sol2 provides several ownership models for C++ objects exposed to Lua:
 
 ```cpp
-// 1. unique_ptr (default for new_usertype) — Lua owns the object
+// 1. unique_ptr (default for new_usertype)  Lua owns the object
 lua.new_usertype<Player>("Player",
     sol::constructors<Player()>()
 );
 // Player created in Lua is destroyed when Lua GC runs
 
-// 2. shared_ptr — shared ownership between C++ and Lua
+// 2. shared_ptr  shared ownership between C++ and Lua
 auto player = std::make_shared<Player>();
 lua["player"] = player;
 
-// 3. raw pointer — no ownership transfer (caller manages lifetime)
+// 3. raw pointer  no ownership transfer (caller manages lifetime)
 Player p;
 lua["player"] = &p;  // Ensure p outlives Lua usage!
 
-// 4. reference — no ownership, lightweight
+// 4. reference  no ownership, lightweight
 lua["player"] = std::ref(p);
 
 // 5. lua_State* access for manual stack operations
@@ -315,7 +315,7 @@ lua_State* L = lua.lua_state();
     return "\n".join(parts)
 
 
-# ── OpenGL / SDL2 ─────────────────────────────────────────────────────────────
+# -- OpenGL / SDL2 -------------------------------------------------------------
 
 def generate_opengl_sdl_doc() -> str:
     """Generate docs/opengl_sdl_api.md."""
@@ -494,10 +494,10 @@ def generate_opengl_sdl_doc() -> str:
     return "\n".join(parts)
 
 
-# ── C++17 ─────────────────────────────────────────────────────────────────────
+# -- C++17 ---------------------------------------------------------------------
 
 def generate_cpp17_doc() -> str:
-    """Generate docs/cpp17_api.md — curated C++17 standard library reference."""
+    """Generate docs/cpp17_api.md  curated C++17 standard library reference."""
     parts = [
         "# C++17 Standard Library Reference <a name=\"cpp17-api\"></a>",
         f"> Source: ISO C++17 Standard (cppreference.com) | Generated: {datetime.now().strftime('%Y-%m-%d')}",
@@ -713,10 +713,10 @@ def generate_cpp17_doc() -> str:
     return "\n".join(parts)
 
 
-# ── API Index ─────────────────────────────────────────────────────────────────
+# -- API Index -----------------------------------------------------------------
 
 def generate_api_index() -> str:
-    """Generate docs/api_index.md — cross-reference lookup table."""
+    """Generate docs/api_index.md  cross-reference lookup table."""
     parts = [
         "# API Documentation Index <a name=\"api-index\"></a>",
         f"> Auto-generated: {datetime.now().strftime('%Y-%m-%d')}",

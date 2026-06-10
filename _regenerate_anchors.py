@@ -7,7 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 DOCS_DIR = PROJECT_ROOT / "docs"
 
-# ── Read pipeline.py as UTF-8 ──────────────────────────────────────────────
+# -- Read pipeline.py as UTF-8 ----------------------------------------------
 src_path = PROJECT_ROOT / "pipeline.py"
 raw = src_path.read_bytes()
 # Try to decode, handling encoding errors
@@ -19,7 +19,7 @@ except UnicodeDecodeError:
 lines = text.splitlines()
 print(f"pipeline.py: {len(lines)} lines", file=sys.stderr)
 
-# ── Helper: find first line matching pattern starting from a base ──────────
+# -- Helper: find first line matching pattern starting from a base ----------
 def find_line(pattern, start=0):
     """Return 1-indexed line number of first match at or after start."""
     for i in range(start, len(lines)):
@@ -35,7 +35,7 @@ def find_lines(pattern, start=0):
             results.append((i + 1, lines[i]))
     return results
 
-# ── 1. Extract ALL function/class definitions (def, class) ─────────────────
+# -- 1. Extract ALL function/class definitions (def, class) -----------------
 defs = []
 for i, line in enumerate(lines):
     m = re.match(r'^(async\s+)?(def |class )(\w+)', line)
@@ -46,7 +46,7 @@ print(f"\nAll definitions ({len(defs)}):", file=sys.stderr)
 for ln, name, kind in defs:
     print(f"  L{ln}: {kind} {name}", file=sys.stderr)
 
-# ── 2. Section comments / phase markers ────────────────────────────────────
+# -- 2. Section comments / phase markers ------------------------------------
 sections = []
 for i, line in enumerate(lines):
     stripped = line.strip()
@@ -60,7 +60,7 @@ for i, line in enumerate(lines):
     if m:
         sections.append((i + 1, f"# {'='*5} {m.group(1)}"))
 
-# ── 3. Named constants (UPPER_CASE = value pattern at module level) ────────
+# -- 3. Named constants (UPPER_CASE = value pattern at module level) --------
 constants = []
 for i, line in enumerate(lines):
     stripped = line.strip()
@@ -73,22 +73,22 @@ for i, line in enumerate(lines):
     if m:
         constants.append((i + 1, m.group(1)))
 
-# ── 4. ALL_DOMAINS entries if it's a dict ──────────────────────────────────
+# -- 4. ALL_DOMAINS entries if it's a dict ----------------------------------
 all_domains_start = find_line(r'ALL_DOMAINS\s*=\s*\{')
 if all_domains_start:
     print(f"\nALL_DOMAINS starts at L{all_domains_start}", file=sys.stderr)
 
-# ── 5. PERSONA_MAP ─────────────────────────────────────────────────────────
+# -- 5. PERSONA_MAP ---------------------------------------------------------
 persona_start = find_line(r'PERSONA_MAP\s*=\s*\{')
 if persona_start:
     print(f"PERSONA_MAP starts at L{persona_start}", file=sys.stderr)
 
-# ── 6. Signal types ────────────────────────────────────────────────────────
+# -- 6. Signal types --------------------------------------------------------
 signal_start = find_line(r'class SignalType')
 if signal_start:
     print(f"SignalType at L{signal_start}", file=sys.stderr)
 
-# ── 7. System prompts ──────────────────────────────────────────────────────
+# -- 7. System prompts ------------------------------------------------------
 system_prompts = []
 for pattern in ['DIRECTOR_SYSTEM', 'REVIEW_SYSTEM', 'REVIEW_PROMPT', 'FINAL_APPROVAL_SYSTEM',
                 'SELF_CORRECT_SYSTEM', 'ARCHITECT_FIX_SYSTEM', 'LIBRARIAN_SYSTEM',
@@ -100,82 +100,82 @@ for pattern in ['DIRECTOR_SYSTEM', 'REVIEW_SYSTEM', 'REVIEW_PROMPT', 'FINAL_APPR
         system_prompts.append((ln, pattern))
         print(f"  {pattern} at L{ln}", file=sys.stderr)
 
-# ── 8. REASONING_GATE_DOMAINS ──────────────────────────────────────────────
+# -- 8. REASONING_GATE_DOMAINS ----------------------------------------------
 reasoning_gate = find_line(r'REASONING_GATE_DOMAINS\s*=')
 if reasoning_gate:
     print(f"REASONING_GATE_DOMAINS at L{reasoning_gate}", file=sys.stderr)
 
-# ── 9. AGENT_ALIAS_MAP ────────────────────────────────────────────────────
+# -- 9. AGENT_ALIAS_MAP ----------------------------------------------------
 alias_map = find_line(r'AGENT_ALIAS_MAP\s*=')
 if alias_map:
     print(f"AGENT_ALIAS_MAP at L{alias_map}", file=sys.stderr)
 
-# ── 10. Checkpoint-related ─────────────────────────────────────────────────
+# -- 10. Checkpoint-related -------------------------------------------------
 checkpoint_save = find_line(r'def save_checkpoint')
 checkpoint_load = find_line(r'def load_checkpoint')
 checkpoint_list = find_line(r'def list_checkpoints')
 if checkpoint_save: print(f"save_checkpoint at L{checkpoint_save}", file=sys.stderr)
 
-# ── 11. Mesh pipeline ──────────────────────────────────────────────────────
+# -- 11. Mesh pipeline ------------------------------------------------------
 run_mesh = find_line(r'def run_mesh_pipeline')
 run_entry = find_line(r'def run_pipeline\(')
 if run_mesh: print(f"run_mesh_pipeline at L{run_mesh}", file=sys.stderr)
 if run_entry: print(f"run_pipeline (entry) at L{run_entry}", file=sys.stderr)
 
-# ── 12. Key phases in run_mesh_pipeline ────────────────────────────────────
+# -- 12. Key phases in run_mesh_pipeline ------------------------------------
 # Find phase comments
 phase_lines = find_lines(r'# Phase\s+\d')
 print(f"\nPhase markers ({len(phase_lines)}):", file=sys.stderr)
 for ln, txt in phase_lines:
     print(f"  L{ln}: {txt.strip()}", file=sys.stderr)
 
-# ── 13. OffloadStore and related ───────────────────────────────────────────
+# -- 13. OffloadStore and related -------------------------------------------
 offload_store = find_line(r'class OffloadStore')
 read_offloaded = find_line(r'def read_offloaded_file')
 page_out = find_line(r'def _page_out_context')
 handle_read_offload = find_line(r'def handle_read_offloaded_signal')
 if offload_store: print(f"OffloadStore at L{offload_store}", file=sys.stderr)
 
-# ── 14. TokenBudget class ──────────────────────────────────────────────────
+# -- 14. TokenBudget class --------------------------------------------------
 token_budget = find_line(r'class TokenBudget')
 if token_budget: print(f"TokenBudget at L{token_budget}", file=sys.stderr)
 
-# ── 15. LRU doc cache ──────────────────────────────────────────────────────
+# -- 15. LRU doc cache ------------------------------------------------------
 doc_cache = find_line(r'_DOC_CACHE_TTL')
 if doc_cache: print(f"_DOC_CACHE_TTL at L{doc_cache}", file=sys.stderr)
 
-# ── 16. Session timeline ──────────────────────────────────────────────────
+# -- 16. Session timeline --------------------------------------------------
 session_timeline = find_line(r'SESSION_TIMELINE_PATH')
 log_timeline = find_line(r'def log_to_session_timeline')
 if session_timeline: print(f"SESSION_TIMELINE_PATH at L{session_timeline}", file=sys.stderr)
 
-# ── 17. TagSuggester ───────────────────────────────────────────────────────
+# -- 17. TagSuggester -------------------------------------------------------
 tag_suggester = find_line(r'class TagSuggester')
 if tag_suggester: print(f"TagSuggester at L{tag_suggester}", file=sys.stderr)
 
-# ── 18. Consensus / conflict resolution ────────────────────────────────────
+# -- 18. Consensus / conflict resolution ------------------------------------
 detect_cross = find_line(r'def detect_cross_agent_edits')
 resolve_conflict_fn = find_line(r'def resolve_conflict\b')
 consensus_result = find_line(r'class ConsensusResult')
 mesh_signal = find_line(r'class MeshSignal')
 if consensus_result: print(f"ConsensusResult at L{consensus_result}", file=sys.stderr)
 
-# ── 19. Mesh work queue API ────────────────────────────────────────────────
+# -- 19. Mesh work queue API ------------------------------------------------
 submit_task = find_line(r'def submit_mesh_task')
 list_mesh_tasks = find_line(r'def list_mesh_tasks\(\)')
 if submit_task: print(f"submit_mesh_task at L{submit_task}", file=sys.stderr)
 
-# ── 20. Failure report ─────────────────────────────────────────────────────
+# -- 20. Failure report -----------------------------------------------------
 fail_report = find_line(r'def generate_failure_report\b')
 fail_report_rest = find_line(r'def _generate_failure_report_rest')
 if fail_report: print(f"generate_failure_report at L{fail_report}", file=sys.stderr)
 
-# ── 21. Progressive output ─────────────────────────────────────────────────
+# -- 21. Progressive output -------------------------------------------------
 progress_listener = find_line(r'def register_progress_listener')
 emit_progress = find_line(r'def _emit_progress')
 if progress_listener: print(f"register_progress_listener at L{progress_listener}", file=sys.stderr)
 
-# ── 22. Other helper functions ─────────────────────────────────────────────
+# -- 22. Other helper functions ---------------------------------------------
 helpers = [
     'get_available_domains_text', 'get_unavailable_domains_text', 'build_anchor_toc',
     'resolve_agent_name', 'get_agent_system', 'ensure_ledger_header',
@@ -199,15 +199,15 @@ for h in helpers:
     if ln:
         helper_lines.append((ln, h))
 
-# ── 23. SIGNAL_PATTERNS ────────────────────────────────────────────────────
+# -- 23. SIGNAL_PATTERNS ----------------------------------------------------
 signal_patterns = find_line(r'SIGNAL_PATTERNS\s*=')
 if signal_patterns: print(f"SIGNAL_PATTERNS at L{signal_patterns}", file=sys.stderr)
 
-# ── 24. Entry point ────────────────────────────────────────────────────────
+# -- 24. Entry point --------------------------------------------------------
 entry_main = find_line(r'if __name__\s*==\s*["\']__main__["\']')
 if entry_main: print(f"__main__ at L{entry_main}", file=sys.stderr)
 
-# ── 25. Model constants ────────────────────────────────────────────────────
+# -- 25. Model constants ----------------------------------------------------
 model_constants_patterns = [
     'CODER_MODEL', 'REVIEWER_MODEL', 'FALLBACK_REVIEWER_MODEL', 'DIRECTOR_MODEL',
     'EXECUTION_MODEL', 'REASONING_MODEL', 'LIBRARIAN_MODEL', 'SYNTAX_GATE_MODEL',
@@ -348,7 +348,7 @@ for ln, name in sorted(constants, key=lambda x: x[0]):
 
 output.append("")
 output.append("---")
-output.append(f"\n*Generated by `_regenerate_anchors.py` — {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M')}*\n")
+output.append(f"\n*Generated by `_regenerate_anchors.py`  {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M')}*\n")
 
 anchor_text = '\n'.join(output)
 

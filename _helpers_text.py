@@ -1,9 +1,9 @@
 """
-_helpers_text.py — Text parsing & formatting for the mesh consensus pipeline.
+_helpers_text.py  Text parsing & formatting for the mesh consensus pipeline.
 Contains: chat pattern detection, file context formatting, failure report
 generation, syntax normalization.
 
-No async/await — purely synchronous.
+No async/await  purely synchronous.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from _helpers_exec import MAX_CONSENSUS_ITERATIONS, _ALL_DOMAINS
 
 
-# ── Chat Intent Detection — Fast-Path Regexes ─────────────────────────────────
+# -- Chat Intent Detection  Fast-Path Regexes ---------------------------------
 
 def is_likely_chat(prompt: str) -> bool:
     """Fast-path regex check for conversational prompts before LLM classifier runs."""
@@ -39,13 +39,13 @@ CHAT_PATTERNS = [
 ]
 
 
-# ── File Context Formatting ──────────────────────────────────────────────────
+# -- File Context Formatting --------------------------------------------------
 
 def format_file_context(files: list, domain_key: str = None,
                         ledger_toc_func=None) -> str:
     """Format discovered files into a context block for the model.
 
-    ── Fix C: Cumulative Context Pre-Filter ─────────────────────────────
+    -- Fix C: Cumulative Context Pre-Filter -----------------------------
     When multiple tasks in a wave each call find_relevant_files() and
     format_file_context(), the combined file context can easily exceed
     50% of the model's 8192-token context window.
@@ -60,9 +60,9 @@ def format_file_context(files: list, domain_key: str = None,
     comfortably within the remaining 50%.
 
     Returns:
-        Formatted file context block, capped at ~12,000 characters.
+        Formatted file context block, capped at ~24,000 characters.
     """
-    _FILE_CTX_CHAR_BUDGET: int = 12000  # ~8000 tokens at 1.5 chars/token
+    _FILE_CTX_CHAR_BUDGET: int = 24000  # ~16000 tokens at 1.5 chars/token (32K ctx)
 
     if not files:
         return ""
@@ -88,7 +88,7 @@ def format_file_context(files: list, domain_key: str = None,
         if toc:
             parts.insert(0, toc + "\n")
 
-    # ── Fix C: Cumulative Context Budget Enforcement ────────────────
+    # -- Fix C: Cumulative Context Budget Enforcement ----------------
     # Build the full context and check if it exceeds the character budget.
     # If it does, drop the largest files first (bottom-of-stack eviction)
     # until the combined result fits within _FILE_CTX_CHAR_BUDGET.
@@ -96,7 +96,7 @@ def format_file_context(files: list, domain_key: str = None,
     if len(candidate) <= _FILE_CTX_CHAR_BUDGET:
         return candidate
 
-    # Budget exceeded — rebuild with only the header + first N files
+    # Budget exceeded  rebuild with only the header + first N files
     # that fit within the budget. The ledger_toc_func result (parts[0])
     # is always preserved if present.
     header_count = 1 if (ledger_toc_func and parts[0].startswith("##")) else 0
@@ -121,7 +121,7 @@ def format_file_context(files: list, domain_key: str = None,
     return "\n".join(trimmed_parts)
 
 
-# ── Failure Report ─────────────────────────────────────────────────────────
+# -- Failure Report ---------------------------------------------------------
 
 
 def generate_failure_report(user_prompt: str, consensus_checks: dict,
@@ -194,25 +194,25 @@ def generate_failure_report(user_prompt: str, consensus_checks: dict,
         parts.append(f"{cmd}\n")
 
     parts.append("\n### Cross-Reference\n")
-    parts.append("- docs/rules_cpp.md — C++ engine rules\n")
-    parts.append("- docs/rules_lua.md — Lua scripting rules\n")
-    parts.append("- docs/rules_phys.md — Physics integration rules\n")
-    parts.append("- docs/rules_shader.md — Shader development rules\n")
-    parts.append("- docs/rules_logging.md — C++/Lua logging rules\n")
-    parts.append("- docs/engine_lua_bridge_contract.md — C++/Lua API contract\n")
+    parts.append("- docs/rules_cpp.md  C++ engine rules\n")
+    parts.append("- docs/rules_lua.md  Lua scripting rules\n")
+    parts.append("- docs/rules_phys.md  Physics integration rules\n")
+    parts.append("- docs/rules_shader.md  Shader development rules\n")
+    parts.append("- docs/rules_logging.md  C++/Lua logging rules\n")
+    parts.append("- docs/engine_lua_bridge_contract.md  C++/Lua API contract\n")
 
     parts.append("\n### External Agent SOS Prompt\n")
     parts.append("Copy-paste the block below into a fresh agent session to recover from this deadlock:\n\n")
     parts.append("```\n")
-    parts.append("## SOS — Pipeline Deadlock Recovery\n")
+    parts.append("## SOS  Pipeline Deadlock Recovery\n")
     parts.append(f"**Original User Prompt:** {user_prompt}\n")
     parts.append(f"**Deadlock Context:** Consensus iterations exhausted ({MAX_CONSENSUS_ITERATIONS}); ")
     parts.append("VETOs/OBJECTs blocked final approval.\n")
 
-    # ── SOS FORMATTING MANDATE ──────────────────────────────────
+    # -- SOS FORMATTING MANDATE ----------------------------------
     parts.append("\n## 🚨 FORMATTING REQUIREMENTS (MANDATORY)\n")
     parts.append("As the external AI recovering this deadlock, you MUST adhere to the following:\n\n")
-    parts.append("### 1. Output Format — Memory Ledger Headers\n")
+    parts.append("### 1. Output Format  Memory Ledger Headers\n")
     parts.append("You MUST format your response using our standard `### [Feature_Name]` headers.\n")
     parts.append("Each new feature, system, or fix you propose MUST start with:\n")
     parts.append("  `### [YourFeatureName]`\n")
@@ -221,7 +221,7 @@ def generate_failure_report(user_prompt: str, consensus_checks: dict,
     parts.append("### 2. Engine Constraint Compliance\n")
     parts.append("This is a custom C++17 engine. You MUST adhere to:\n")
     parts.append("- **Rendering:** SDL2 + OpenGL 3.3+ only. No Unreal, Unity, Godot.\n")
-    parts.append("- **Physics:** Jolt Physics SDK for ALL rigid bodies (Unified Jolt Standard). Box2D is fully deprecated — do NOT use it. 2D planar attractions use Jolt DOF constraints.\n")
+    parts.append("- **Physics:** Jolt Physics SDK for ALL rigid bodies (Unified Jolt Standard). Box2D is fully deprecated  do NOT use it. 2D planar attractions use Jolt DOF constraints.\n")
     parts.append("- **Scripting:** Lua 5.4 via sol2. Do NOT invent custom scripting languages.\n")
     parts.append("- **Networking:** NONE. There is no multiplayer/networking code.\n")
     parts.append("- **Shader:** GLSL 3.3 only. No HLSL, no Metal.\n")
@@ -263,7 +263,56 @@ def generate_failure_report(user_prompt: str, consensus_checks: dict,
     return "\n".join(parts)
 
 
-# ── Code Block Extraction (Directives A & B) ──────────────────────────────
+# -- Pipeline Artifact Stripping --------------------------------------------
+
+_PIPELINE_FIX_PLAN_RE = re.compile(
+    r'<fix-plan>.*?</fix-plan>',
+    re.DOTALL,
+)
+_PIPELINE_ANCHOR_HEADER_RE = re.compile(
+    r'^#{1,6}\s*\[.*?\].*$',
+    re.MULTILINE,
+)
+_PIPELINE_FENCEWRAP_RE = re.compile(
+    r'^```\w*\n(.*?)\n```\s*$',
+    re.DOTALL,
+)
+
+
+def strip_pipeline_artifacts(text: str) -> str:
+    """Strip all pipeline reasoning artifacts from generated output.
+
+    Removes:
+      1. <fix-plan>...</fix-plan> blocks  LLM reasoning tags from the
+         Architect Syntax Fix cycle that leak into final file output.
+      2. ### [Anchor_Name] memory-ledger headers  hallucinated section
+         headers that are not valid Lua/C++ syntax.
+      3. Outer code-fence wrappers  triple-backtick fences that the LLM
+         sometimes wraps around its entire response.
+
+    Stripping is idempotent: calling this multiple times is safe.
+
+    Args:
+        text: Raw generated output that may contain pipeline artifacts.
+
+    Returns:
+        Clean text suitable for writing to a source file.
+    """
+    result = text
+    # 1. Strip <fix-plan> reasoning blocks
+    result = _PIPELINE_FIX_PLAN_RE.sub("", result).strip()
+    # 2. Strip ### [Anything] memory-ledger headers
+    result = _PIPELINE_ANCHOR_HEADER_RE.sub("", result).strip()
+    # 3. Unwrap outer code fences if the entire remaining content is wrapped
+    #    (i.e. the first non-whitespace character is ``` and the last is ```)
+    stripped = result.strip()
+    fence_match = _PIPELINE_FENCEWRAP_RE.match(stripped)
+    if fence_match:
+        result = fence_match.group(1).strip()
+    return result
+
+
+# -- Code Block Extraction (Directives A & B) ------------------------------
 
 def extract_code_blocks(text: str, lang: Optional[str] = None) -> List[str]:
     """Extract all fenced code blocks from LLM output, stripping conversational prose.
@@ -285,7 +334,7 @@ def extract_code_blocks(text: str, lang: Optional[str] = None) -> List[str]:
     else:
         pattern = r"```(?:\w+)?\s*\n(.*?)```"
     blocks = re.findall(pattern, text, re.DOTALL)
-    # Reject any block containing conflict/diff markers — these are broken
+    # Reject any block containing conflict/diff markers  these are broken
     # merge-conflict fragments or SEARCH/REPLACE diffs, not valid code.
     _CONFLICT_MARKERS = ("<<<<<<< ", "=======", ">>>>>>> ")
     clean: list[str] = []
@@ -320,13 +369,13 @@ def strip_to_code_artifacts(text: str, fallback_truncation: int = 800) -> str:
         for block in blocks:
             summary_parts.append(block)
         return "\n\n".join(summary_parts)
-    # No code blocks found — fall back to aggressive truncation
+    # No code blocks found  fall back to aggressive truncation
     if len(text) > fallback_truncation:
         return text[:fallback_truncation] + "\n[... truncated (no code artifacts found) ...]"
     return text
 
 
-# ── Syntax Normalization ──────────────────────────────────────────────────────
+# -- Syntax Normalization ------------------------------------------------------
 
 def get_normalized_syntax(code: str) -> str:
     """Strip comments and normalize whitespace for functional code comparison."""

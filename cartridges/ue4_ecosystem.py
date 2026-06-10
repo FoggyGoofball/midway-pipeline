@@ -29,9 +29,9 @@ class UE4AgentCartridge:
     # Human-readable project name for prompts
     ECOSYSTEM_NAME = "Unreal Engine 4"
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     #  Domain Registry
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def get_domain_registry() -> Dict[str, DomainConfig]:
@@ -181,9 +181,9 @@ class UE4AgentCartridge:
             },
         }
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     #  Agent Alias Map
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def get_alias_map() -> Dict[str, str]:
@@ -258,9 +258,9 @@ class UE4AgentCartridge:
             "doc_expert": "DOC_EXPERT",
         }
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     #  Environment Metadata
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def get_environment_metadata() -> Dict[str, EnvironmentMetadata]:
@@ -295,9 +295,9 @@ class UE4AgentCartridge:
             ),
         }
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     #  Project-Specific Prompt Content
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def get_reasoning_gate_domains() -> Set[str]:
@@ -326,7 +326,7 @@ CRITICAL UE4 CODING MANDATES:
    - Use TArray, TMap, TSet instead of std::vector, std::map, std::set
    - Mark classes as UCLASS(), structs as USTRUCT() if they need reflection
    - Use weak pointers (TWeakObjectPtr) to avoid circular references
-   - Never use raw "new" or "delete" for UObjects — use the reflection system
+   - Never use raw "new" or "delete" for UObjects  use the reflection system
 
 2. NAMING CONVENTIONS & PREFIXES
    - Classes: prefix with U (UCharacter, UActor, UComponent)
@@ -352,11 +352,11 @@ CRITICAL UE4 CODING MANDATES:
    - DO NOT cast AActor* to derived class without IsA<DerivedClass>() check
    - DO NOT call virtual functions in constructors (vtable not set yet)
    - DO NOT store raw pointers to transient objects (they can be GC'd)
-   - DO NOT use printf() — use UE_LOG(LogTemp, Warning, TEXT("..."))
+   - DO NOT use printf()  use UE_LOG(LogTemp, Warning, TEXT("..."))
 
 6. ASSET REFERENCES & LOADING
    - Use TSoftObjectPtr<T> for lazy-loaded assets, then LoadSynchronous() when needed
-   - Never hard-code asset paths in code — use asset specifiers or data tables
+   - Never hard-code asset paths in code  use asset specifiers or data tables
    - Always check IsValid(Asset) before use
    - Use FStreamableManager for async asset loading in production
 
@@ -400,7 +400,7 @@ CRITICAL UE4 CODING MANDATES:
 
 8. Performance & Scalability
    - Tick functions only used where necessary? Consider event-driven alternatives?
-   - Heavy operations not in Tick or event handlers — use timers or async tasks?
+   - Heavy operations not in Tick or event handlers  use timers or async tasks?
    - Array allocations reasonable for typical project scope?
    - Any unbounded loops or recursive calls that could cause frame hitches?
 """
@@ -469,9 +469,9 @@ PERFORMANCE CONSIDERATIONS:
 - Streaming: Loading/unloading assets dynamically to manage memory.
 """
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     #  Cartridge Interface (required methods for dynamic loading)
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def get_domain_rules() -> Dict[str, dict]:
@@ -481,9 +481,9 @@ PERFORMANCE CONSIDERATIONS:
         return {domain: cfg.get("rules", {}) for domain, cfg in registry.items()}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 #  CARTRIDGE INITIALIZATION STUB
-# ═════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
 if __name__ == "__main__":
     print("UE4 Agent Cartridge Loaded")

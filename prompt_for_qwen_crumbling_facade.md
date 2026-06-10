@@ -52,7 +52,6 @@ All physics calls go through `MidwayPhysics.*`. Here is the COMPLETE API:
 - `MidwayPhysics.SetFriction(handle, f)`
 - `MidwayPhysics.SetRestitution(handle, r)`
 - `MidwayPhysics.SetGravityFactor(handle, f)`
-- `MidwayPhysics.SetMass(handle, kg)`
 - `MidwayPhysics.SetLinearDamping(handle, d)`
 - `MidwayPhysics.SetAngularDamping(handle, d)`
 

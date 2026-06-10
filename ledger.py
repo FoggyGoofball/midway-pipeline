@@ -1,9 +1,9 @@
 """
-Memory ledger management — fingerprint normalization, TOC building, header
+Memory ledger management  fingerprint normalization, TOC building, header
 enforcement, ledger entry collection, and disk-write interceptor for agent
 memory persistence.
 
-No async/await — purely synchronous file I/O and regex processing.
+No async/await  purely synchronous file I/O and regex processing.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple
 from models import SignalType, MeshSignal
 
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# -- Constants ----------------------------------------------------------------
 # Import domain registry constants needed for ledger operations.
 # Lazy-imported to avoid circular imports at module level.
 PROJECT_ROOT = Path(__file__).parent.resolve()
@@ -31,7 +31,7 @@ BOILERPLATE_TITLES: set = {"Table of Contents", "Memory Bank", "Persistent memor
 LEDGER_HEADER_PATTERN = re.compile(r'^#{2,4}\s*\[.*?\]', re.MULTILINE)
 
 
-# ── LRU Doc Cache ───────────────────────────────────────────────────────────
+# -- LRU Doc Cache -----------------------------------------------------------
 _DOC_CACHE: Dict[str, Tuple[str, float]] = {}
 _DOC_CACHE_TTL: int = 300
 _DOC_CACHE_MAX: int = 8
@@ -66,7 +66,7 @@ def _get_doc_cached(rel_path: str) -> str:
     return content
 
 
-# ── Session Timeline ────────────────────────────────────────────────────────
+# -- Session Timeline --------------------------------------------------------
 
 def _normalize_fix_fingerprint(fix_input: str) -> str:
     """Compute a deterministic fingerprint of a 'fix' request BEFORE context truncation.
@@ -136,7 +136,7 @@ def log_to_session_timeline(user_input: str, agent_assigned: str,
         display_output += "\n[... output truncated ...]"
 
     new_entry = (
-        f"## Session Event — {timestamp}\n"
+        f"## Session Event  {timestamp}\n"
         f"**Agent Assigned:** {agent_assigned}\n"
         f"**User Input:** {user_input}\n"
         f"**Tools/Files Accessed:** {tools_accessed}\n"
@@ -176,7 +176,7 @@ def log_to_session_timeline(user_input: str, agent_assigned: str,
     print(f"  [SessionTimeline] Logged: {agent_assigned} @ {timestamp}")
 
 
-# ── Doc Format: Anchor-TOC Builder ──────────────────────────────────────────
+# -- Doc Format: Anchor-TOC Builder ------------------------------------------
 
 def build_anchor_toc(doc_path: str) -> str:
     """Build a Table of Contents with line anchors for a doc file."""
@@ -195,7 +195,7 @@ def build_anchor_toc(doc_path: str) -> str:
     return "\n".join(toc_lines[:20])
 
 
-# ── Memory Ledger: Table of Contents Builder ───────────────────────────────
+# -- Memory Ledger: Table of Contents Builder -------------------------------
 
 def _collect_ledger_entries(mem_file: Path) -> List[Tuple[bool, str]]:
     """Parse a ledger file into header-anchored chunks, then REVERSE so newest
@@ -244,7 +244,7 @@ def _collect_ledger_entries(mem_file: Path) -> List[Tuple[bool, str]]:
     if current_chunk is not None:
         chunks.append(current_chunk)
 
-    # Phase 2: Reverse chunks — newest first
+    # Phase 2: Reverse chunks  newest first
     for chunk in reversed(chunks):
         text = (
             f"  - [{chunk['title']}]({chunk['rel']}#{chunk['anchor']}) "
@@ -298,7 +298,7 @@ def ledger_toc(domain_key: str = None) -> str:
         candidate = label
         if len("".join(parts)) + len(candidate) > HARD_LIMIT:
             parts.append(
-                f"  - [... remaining ledgers omitted — use [FETCH] to retrieve ...]\n"
+                f"  - [... remaining ledgers omitted  use [FETCH] to retrieve ...]\n"
             )
             break
 
@@ -310,7 +310,7 @@ def ledger_toc(domain_key: str = None) -> str:
                 continue
             if len("".join(parts)) + len(entry_text) > HARD_LIMIT:
                 parts.append(
-                    f"  - [... deeper subsections omitted — use [FETCH] to retrieve ...]\n"
+                    f"  - [... deeper subsections omitted  use [FETCH] to retrieve ...]\n"
                 )
                 break
             parts.append(entry_text)
@@ -318,7 +318,7 @@ def ledger_toc(domain_key: str = None) -> str:
     return "".join(parts)
 
 
-# ── Rule-Breaker Accommodation: Synthetic Ledger Headers ────────────────────
+# -- Rule-Breaker Accommodation: Synthetic Ledger Headers --------------------
 
 def _generate_module_name(task_spec: str, agent_key: str) -> str:
     """Generate a descriptive module name from task spec and agent domain."""
@@ -391,15 +391,15 @@ def _append_to_ledger(output: str, agent_key: str, task_spec: str) -> None:
         print(f"  [LedgerWrite] ✓ {domain_name}: entry appended to {ledger_rel}")
 
 
-# ── Internal API Ledger: Cross-Domain Ground Truth ──────────────────────────
+# -- Internal API Ledger: Cross-Domain Ground Truth --------------------------
 #
 # Two complementary functions:
-#   extract_api_signatures() — scrapes new function/method signatures from
+#   extract_api_signatures()  scrapes new function/method signatures from
 #     an agent's raw output text (C++, Lua, or generic).
-#   update_internal_api_ledger() — persists those signatures to
+#   update_internal_api_ledger()  persists those signatures to
 #     docs/internal_api_ledger.md so all subsequent agents see the exact
 #     names that were actually implemented.
-#   read_internal_api_ledger() — returns the live ledger content, capped to
+#   read_internal_api_ledger()  returns the live ledger content, capped to
 #     a safe budget for injection into agent prompts.
 #
 # Why this matters:
@@ -445,7 +445,7 @@ def reset_internal_api_ledger() -> None:
     header = (
         "# Internal API Ledger\n\n"
         "Auto-generated by the pipeline.  "
-        "Do not edit manually — cleared at the start of every run.\n\n"
+        "Do not edit manually  cleared at the start of every run.\n\n"
     )
     try:
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
@@ -466,7 +466,7 @@ def extract_api_signatures(output: str, agent_key: str) -> list[str]:
     for pat in _SIG_PATTERNS:
         for m in pat.finditer(output):
             name = m.group(1)
-            # Skip C++ keyword / control-flow noise only — NOT Lua lifecycle hooks
+            # Skip C++ keyword / control-flow noise only  NOT Lua lifecycle hooks
             if name in {"if", "for", "while", "return", "else", "switch",
                         "case", "do", "new", "delete", "try", "catch"}:
                 continue
@@ -481,7 +481,7 @@ def extract_api_signatures(output: str, agent_key: str) -> list[str]:
             full_line = output[line_start: line_end if line_end != -1 else len(output)].strip()
             # Truncate very long lines
             if len(full_line) > 160:
-                full_line = full_line[:160] + "…"
+                full_line = full_line[:160] + ""
             hits.append(f"| `{name}` | `{agent_key}` | `{full_line}` |")
     return hits
 
@@ -490,7 +490,7 @@ def update_internal_api_ledger(output: str, agent_key: str) -> None:
     """Extract new API signatures from output and append them to
     docs/internal_api_ledger.md under a timestamped run section.
 
-    Safe to call on every completed task — duplicates are suppressed by
+    Safe to call on every completed task  duplicates are suppressed by
     the in-memory _DUPLICATE_CACHE so the file does not bloat.
     """
     sigs = extract_api_signatures(output, agent_key)
@@ -504,7 +504,7 @@ def update_internal_api_ledger(output: str, agent_key: str) -> None:
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header = f"\n### [{agent_key} — {timestamp}]\n| Function | Domain | Signature |\n|---|---|---|\n"
+    header = f"\n### [{agent_key}  {timestamp}]\n| Function | Domain | Signature |\n|---|---|---|\n"
     rows = "\n".join(sigs) + "\n"
 
     with open(ledger_path, "a", encoding="utf-8") as f:
@@ -516,7 +516,7 @@ def update_internal_api_ledger(output: str, agent_key: str) -> None:
 def retract_ledger_entries(phantom_names: set[str]) -> None:
     """Strike out any ledger rows whose function name appears in *phantom_names*.
 
-    Rows are not deleted — they are prefixed with ``~~`` so the table stays
+    Rows are not deleted  they are prefixed with ``~~`` so the table stays
     valid Markdown and the retraction is auditable.  Already-struck rows are
     left unchanged.  The in-memory ``_DUPLICATE_CACHE`` is also purged for each
     retracted name so the corrected version can be re-added cleanly.
@@ -588,6 +588,6 @@ def read_internal_api_ledger(max_chars: int = 3000) -> str:
 
     if len(content) > max_chars:
         content = content[-max_chars:]  # keep the NEWEST entries (appended at end)
-        content = "…[older entries omitted]\n" + content
+        content = "[older entries omitted]\n" + content
 
     return f"\n## Live Internal API Ledger (confirmed implemented functions)\n{content}\n"

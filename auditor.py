@@ -1,11 +1,11 @@
 """
-auditor.py — Active Rule Auditor (Governance)
+auditor.py  Active Rule Auditor (Governance)
 ==============================================
 Scans all .md files in docs/memory/ and extracts markdown headers into
 a list of Approved Tags. Provides conflict scanning and reconciliation
 functions for the mesh pipeline governance system.
 
-No async/await — purely synchronous.
+No async/await  purely synchronous.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 
-# ── Tag Harvester ──────────────────────────────────────────────────────────
+# -- Tag Harvester ----------------------------------------------------------
 
 def harvest_approved_tags(memory_dir: Optional[Path] = None) -> Dict[str, List[str]]:
     """Scan all .md files in docs/memory/ and extract markdown headers.
@@ -54,7 +54,7 @@ def harvest_approved_tags(memory_dir: Optional[Path] = None) -> Dict[str, List[s
     return tags
 
 
-# ── Conflict Scanner ──────────────────────────────────────────────────────
+# -- Conflict Scanner ------------------------------------------------------
 
 def scan_for_conflicts(memory_dir: Optional[Path] = None) -> List[Dict[str, str]]:
     """Cross-reference all memory ledgers and find conflicting logic.
@@ -99,7 +99,7 @@ def scan_for_conflicts(memory_dir: Optional[Path] = None) -> List[Dict[str, str]
     return conflicts
 
 
-# ── Audit Report ──────────────────────────────────────────────────────────
+# -- Audit Report ----------------------------------------------------------
 
 def generate_audit_report(memory_dir: Optional[Path] = None) -> str:
     """Generate a full audit report for the pipeline output.
@@ -140,7 +140,7 @@ def generate_audit_report(memory_dir: Optional[Path] = None) -> str:
     return "\n".join(lines)
 
 
-# ── CLI Entry Point ───────────────────────────────────────────────────────
+# -- CLI Entry Point -------------------------------------------------------
 
 if __name__ == "__main__":
     report = generate_audit_report()

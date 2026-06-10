@@ -1,19 +1,19 @@
 """
-contract_validator.py — Universal Contract-Driven Code Validator
+contract_validator.py - Universal Contract-Driven Code Validator
 =================================================================
 Validates generated code against a structured API contract rather than
 maintaining an ever-growing blacklist of known-bad names.
 
 Design goals
 ------------
-* **Positive-match only** — if you call an engine-namespaced symbol and it is
+* **Positive-match only** - if you call an engine-namespaced symbol and it is
   not in the contract, it is wrong.  No list of bad names is needed.
-* **Bare-call detection** — if a symbol that belongs to a namespace is called
+* **Bare-call detection** - if a symbol that belongs to a namespace is called
   without that namespace prefix, flag it as a missing-namespace violation.
-* **Codebase-agnostic** — the validator accepts any ``contract`` dict that
+* **Codebase-agnostic** - the validator accepts any ``contract`` dict that
   maps namespace names to sets of approved symbols.  The Midway cartridge
   passes its own bridge contract; a future project passes its own.
-* **No pipeline imports** — this module is intentionally import-free so it
+* **No pipeline imports** - this module is intentionally import-free so it
   can be unit-tested and reused outside the pipeline with zero side-effects.
 
 Contract dict shape (as produced by ``build_bridge_contract()``)
@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, List, NamedTuple, Optional, Set, Tuple
 
 
-# ── Data structures ──────────────────────────────────────────────────────────
+# -- Data structures ----------------------------------------------------------
 
 class ContractViolation(NamedTuple):
     """A single detected violation."""
@@ -70,7 +70,7 @@ class LuaContract:
         e.g. ``{"midwayphysics.spawnstaticbox", "engine.awardtickets", ...}``.
 
     bare_name_to_namespace
-        Maps a lowercase bare symbol name → its required namespace prefix
+        Maps a lowercase bare symbol name to its required namespace prefix
         (original case), e.g. ``{"destroybody": "MidwayPhysics", ...}``.
         Used to detect bare calls like ``DestroyBody(handle)`` without the
         ``MidwayPhysics.`` prefix.
@@ -86,30 +86,30 @@ class LuaContract:
     approved_names_hint: str = ""
 
 
-# ── Contract builder ─────────────────────────────────────────────────────────
+# -- Contract builder ---------------------------------------------------------
 
-# Lua standard library namespaces — never flagged as phantom APIs.
+# Lua standard library namespaces - never flagged as phantom APIs.
 _LUA_STDLIB_NAMESPACES: FrozenSet[str] = frozenset({
     "math", "string", "table", "io", "os", "coroutine",
     "package", "debug", "utf8", "bit", "bit32",
 })
 
 # Regex that splits a raw contract key like
-#   "SpawnStaticBox(lx, ly, lz, w, h, d) → handle"
+#   "SpawnStaticBox(lx, ly, lz, w, h, d) -> handle"
 # or "Engine.AwardTickets(n, label)"
 # into at most the function-name part before the first '(' or whitespace.
-_KEY_NAME_RE = re.compile(r'^([A-Za-z_][\w.]*?)(?:\s*\(|$|\s+→)')
+_KEY_NAME_RE = re.compile(r'^([A-Za-z_][\w.]*?)(?:\s*\(|$|\s+>)')
 
 
 def _extract_symbol_name(raw_key: str) -> Optional[str]:
     """Return the bare function/symbol name from a raw contract key string.
 
     Handles:
-    * ``"SpawnStaticBox(lx, ly, lz, w, h, d) → handle"``  → ``"SpawnStaticBox"``
-    * ``"Engine.AwardTickets(n, label)"``                  → ``"Engine.AwardTickets"``
-    * ``"SetFriction/Restitution/GravityFactor/..."``      → skipped (returns None)
-    * ``"Naming convention"``                              → skipped (returns None)
-    * ``"OnLoadStatic"``                                   → ``"OnLoadStatic"``
+    * ``"SpawnStaticBox(lx, ly, lz, w, h, d) -> handle"``  -> ``"SpawnStaticBox"``
+    * ``"Engine.AwardTickets(n, label)"``                  -> ``"Engine.AwardTickets"``
+    * ``"SetFriction/Restitution/GravityFactor/..."``      -> skipped (returns None)
+    * ``"Naming convention"``                              -> skipped (returns None)
+    * ``"OnLoadStatic"``                                   -> ``"OnLoadStatic"``
     """
     m = _KEY_NAME_RE.match(raw_key.strip())
     if not m:
@@ -136,7 +136,7 @@ def build_lua_contract(
         inspects keys at every depth level that look like function signatures.
 
     namespace_map
-        Maps a contract section name → the namespace prefix used in Lua code.
+        Maps a contract section name to the namespace prefix used in Lua code.
         Defaults to the Midway-specific mapping below; callers can override
         for different cartridges.
 
@@ -157,7 +157,7 @@ def build_lua_contract(
         or other injected namespaces that have no approved symbols but
         should still cause phantom-API errors if called from Lua.
     """
-    # ── Default namespace map for the Midway cartridge ───────────────────────
+    # -- Default namespace map for the Midway cartridge -----------------------
     if namespace_map is None:
         namespace_map = {
             "midwayphysics_spawn_api": "MidwayPhysics",
@@ -170,7 +170,7 @@ def build_lua_contract(
         }
 
     approved_calls: Set[str] = set()
-    bare_name_to_ns: Dict[str, str] = {}          # lowercase bare → original-case namespace
+    bare_name_to_ns: Dict[str, str] = {}          # lowercase bare -> original-case namespace
     engine_namespaces: Set[str] = set()
 
     # Collect engine namespaces from the map
@@ -187,7 +187,7 @@ def build_lua_contract(
         approved_calls.add(f"{ns_lower}.{sym_lower}")
         bare_name_to_ns[sym_lower] = namespace  # original case for error messages
 
-    # ── Walk every section of the bridge contract ────────────────────────────
+    # -- Walk every section of the bridge contract ----------------------------
     for section_key, section_value in bridge_contract.items():
         namespace = namespace_map.get(section_key)
 
@@ -209,17 +209,17 @@ def build_lua_contract(
             elif namespace:
                 # Bare symbol name under a known-namespace section
                 _register(extracted, namespace)
-            # else: no namespace context — register as a known global but don't
+            # else: no namespace context - register as a known global but don't
             # add to bare_name_to_ns (globals don't need a prefix)
 
-    # ── Also register Lua stdlib as approved so they are never flagged ────────
+    # -- Also register Lua stdlib as approved so they are never flagged --------
     # (belt-and-suspenders: the engine_namespaces check already excludes them,
     #  but being explicit avoids future surprises)
     for _stdlib_ns in _LUA_STDLIB_NAMESPACES:
         # Ensure stdlib namespaces are NOT in engine_namespaces
         engine_namespaces.discard(_stdlib_ns)
 
-    # ── Build the human-readable hint string ─────────────────────────────────
+    # -- Build the human-readable hint string ---------------------------------
     ns_groups: Dict[str, List[str]] = {}
     for full_call in sorted(approved_calls):
         ns, sym = full_call.split(".", 1)
@@ -239,7 +239,7 @@ def build_lua_contract(
     )
 
 
-# ── Lua content validator ────────────────────────────────────────────────────
+# -- Lua content validator ----------------------------------------------------
 
 # Matches any `Identifier.Method(` call in Lua source.
 _NAMESPACED_CALL_RE = re.compile(r'\b([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*\(')
@@ -258,11 +258,11 @@ def validate_lua_content(
 
     Performs two independent passes:
 
-    1. **Phantom API pass** — finds every ``Namespace.Symbol(`` call where
+    1. **Phantom API pass** - finds every ``Namespace.Symbol(`` call where
        ``namespace`` is a known engine namespace but ``namespace.symbol`` is
        NOT in the approved contract.
 
-    2. **Bare-call pass** — finds every ``Symbol(`` call (without a namespace
+    2. **Bare-call pass** - finds every ``Symbol(`` call (without a namespace
        prefix) where ``symbol`` is a known contract function that *requires*
        a namespace prefix.
 
@@ -279,14 +279,14 @@ def validate_lua_content(
     seen_phantoms: Set[str] = set()
     seen_bare: Set[str] = set()
 
-    # ── Pass 1: phantom API (unknown namespaced call) ─────────────────────────
+    # -- Pass 1: phantom API (unknown namespaced call) -------------------------
     for m in _NAMESPACED_CALL_RE.finditer(stripped):
         call_text = m.group(1)           # e.g. "MidwayPhysics.SetDensity"
         call_lower = call_text.lower()
         ns_lower = call_lower.split(".")[0]
 
         if ns_lower not in lua_contract.engine_namespaces:
-            continue  # not an engine call — user-defined table method, skip
+            continue  # not an engine call - user-defined table method, skip
         if ns_lower in _LUA_STDLIB_NAMESPACES:
             continue
         if call_lower in lua_contract.approved_calls:
@@ -300,7 +300,7 @@ def validate_lua_content(
         violations.append(ContractViolation(
             kind="phantom_api",
             call_text=call_text,
-            label=f"phantom API '{call_text}' — not in bridge contract",
+            label=f"phantom API '{call_text}' - not in bridge contract",
             explanation=(
                 f"'{call_text}' is not registered in the engine bridge contract. "
                 f"Any call not on the approved list will crash at runtime. "
@@ -314,7 +314,7 @@ def validate_lua_content(
             ),
         ))
 
-    # ── Pass 2: bare call (missing namespace prefix) ─────────────────────────
+    # -- Pass 2: bare call (missing namespace prefix) -------------------------
     # Build an exemption set: symbols that appear as Lua function *definitions*
     # (local or global) are valid bare names in their own file and must never be
     # flagged as missing a namespace prefix, even if the engine has a same-named
@@ -336,7 +336,7 @@ def validate_lua_content(
         bare_lower = bare_name.lower()
 
         if bare_lower not in lua_contract.bare_name_to_namespace:
-            continue  # not a known engine symbol — skip
+            continue  # not a known engine symbol - skip
 
         # If the same name is defined as a local/global function in this file,
         # the call is a valid intra-file call, not a missing-namespace API call.
@@ -351,7 +351,7 @@ def validate_lua_content(
         violations.append(ContractViolation(
             kind="bare_call",
             call_text=bare_name,
-            label=f"bare '{bare_name}()' — missing {required_ns}. namespace prefix",
+            label=f"bare '{bare_name}()' - missing {required_ns}. namespace prefix",
             explanation=(
                 f"'{bare_name}' is not a global function. "
                 f"It belongs to the {required_ns} namespace. "
@@ -359,32 +359,209 @@ def validate_lua_content(
             ),
         ))
 
+    # -- Pass 3: business logic violation - static modifier caching ----------
+    # Detect module-level or OnLoad-scoped caching of AttractionConstants.modifiers.
+    # Modifiers change every frame and MUST be read inside the OnStep closure.
+    # Pattern: ``local <name> = AttractionConstants.modifiers``
+    # outside an ``function(<dt>)`` / ``OnStep(function(dt)`` context.
+    if "AttractionConstants.modifiers" in stripped:
+        # First, find all OnStep closure boundaries
+        # A valid OnStep closure looks like:
+        #   OnStep(function(dt) ... end)    or
+        #   MidwayPhysics.OnStep(function(dt) ... end)
+        # Extract the text inside the closure body for each match.
+        onstep_ranges: List[Tuple[int, int]] = []
+        for _os_m in re.finditer(
+            r'(?:MidwayPhysics\.)?OnStep\s*\(\s*function\s*\([^)]*\)\s*',
+            stripped,
+        ):
+            # Find the matching ``end`` for this closure by counting nesting depth
+            _start = _os_m.end()
+            _depth = 0
+            _pos = _start
+            while _pos < len(stripped):
+                _ch = stripped[_pos]
+                if _ch == '\n':
+                    _pos += 1
+                    continue
+                # Skip comments and strings (simplified - enough for generated code)
+                if stripped[_pos:_pos+2] == '--':
+                    _next_newline = stripped.find('\n', _pos)
+                    if _next_newline == -1:
+                        break
+                    _pos = _next_newline + 1
+                    continue
+                if _ch == 't' and stripped[_pos:_pos+3] == 'end':
+                    if _depth == 0:
+                        onstep_ranges.append((_os_m.start(), _pos + 3))
+                        break
+                    _depth -= 1
+                    _pos += 3
+                    continue
+                if _ch == 'f' and stripped[_pos:_pos+8] == 'function':
+                    _depth += 1
+                    _pos += 8
+                    continue
+                # Handle nested ``if ... end``, ``for ... end`` etc. so depth
+                # tracking stays correct
+                # Simpler approach: just track 'function' entries
+                _pos += 1
+            else:
+                # Unclosed function - skip this match
+                pass
+
+        # -- Extend OnStep ranges to cover called helper functions ----------
+        # If OnStep calls a named helper (e.g. ``GameLogic(dt)``), the local
+        # MOD = ... inside that helper is semantically "inside" OnStep even
+        # though it's not syntactically within the closure body.
+        # Scan for function definitions whose names appear as function calls
+        # inside any OnStep range, and extend the range to cover those defs.
+        _onstep_called_funcs: set = set()
+        for _range_start, _range_end in onstep_ranges:
+            _onstep_body = stripped[_range_start:_range_end]
+            for _call_m in re.finditer(
+                r'\b([A-Za-z_]\w*)\s*\(',
+                _onstep_body,
+            ):
+                _fn_name = _call_m.group(1)
+                if _fn_name.lower() in (
+                    'if', 'for', 'while', 'function', 'local', 'return',
+                    'end', 'then', 'else', 'elseif', 'do', 'in', 'not',
+                    'and', 'or', 'nil', 'true', 'false', 'repeat',
+                    'until', 'break', 'print', 'type', 'pairs', 'ipairs',
+                    'next', 'select', 'tonumber', 'tostring', 'pcall',
+                    'xpcall', 'rawget', 'rawset', 'setmetatable',
+                    'getmetatable', 'assert', 'error', 'require', 'dofile',
+                    'loadfile', 'load', 'math', 'string', 'table', 'os',
+                    'io', 'debug', 'coroutine', 'Engine', 'MidwayPhysics',
+                    'AttractionConstants',
+                ):
+                    continue
+                _onstep_called_funcs.add(_fn_name)
+        # Find definitions of called functions and extend ranges
+        if _onstep_called_funcs:
+            _called_pattern = '|'.join(re.escape(f) for f in _onstep_called_funcs)
+            for _def_m in re.finditer(
+                r'(?:local\s+)?function\s+(' + _called_pattern + r')\s*\(',
+                stripped,
+            ):
+                _def_start = _def_m.start()
+                _depth = 0
+                _pos = _def_m.end()
+                while _pos < len(stripped):
+                    _ch = stripped[_pos]
+                    if _ch == '\n':
+                        _pos += 1
+                        continue
+                    if stripped[_pos:_pos+2] == '--':
+                        _next_newline = stripped.find('\n', _pos)
+                        if _next_newline == -1:
+                            break
+                        _pos = _next_newline + 1
+                        continue
+                    if _ch == 'e' and stripped[_pos:_pos+3] == 'end':
+                        if _depth == 0:
+                            onstep_ranges.append((_def_start, _pos + 3))
+                            break
+                        _depth -= 1
+                        _pos += 3
+                        continue
+                    if _ch == 'f' and stripped[_pos:_pos+8] == 'function':
+                        _depth += 1
+                        _pos += 8
+                        continue
+                    _pos += 1
+
+        # Detect static caching: ``local <name> = AttractionConstants.modifiers``
+        # This regex matches patterns like:
+        #   local mods = AttractionConstants.modifiers
+        #   local MOD = AttractionConstants.modifiers
+        #   local _m = AttractionConstants.modifiers
+        for _cache_m in re.finditer(
+            r'local\s+([A-Za-z_]\w*)\s*=\s*AttractionConstants\.modifiers\b',
+            stripped,
+        ):
+            _cache_pos = _cache_m.start()
+            _variable_name = _cache_m.group(1)
+
+            # Check if this caching is inside an OnStep closure body
+            # (now includes extended ranges for called helper functions)
+            _inside_onstep = any(
+                _range_start <= _cache_pos <= _range_end
+                for _range_start, _range_end in onstep_ranges
+            )
+
+            if not _inside_onstep:
+                # Also check if it's inside a ``function(dt)`` that might be
+                # the OnStep callback argument (belt-and-suspenders)
+                # Look for the nearest enclosing function:
+                # Walk backward to find if there's an OnStep(function(dt) before
+                # this position at a lower nesting depth.
+                _pre_text = stripped[:_cache_pos]
+                _pre_onstep_count = len(list(re.finditer(
+                    r'(?:MidwayPhysics\.)?OnStep\s*\(\s*function\s*\([^)]*\)',
+                    _pre_text,
+                )))
+                _pre_function_count = len(list(re.finditer(
+                    r'\bfunction\s*\([^)]*\)',
+                    _pre_text,
+                )))
+                # Simple heuristic: if the number of function(...) before this
+                # point exceeds the number of OnStep(function(...), it is
+                # outside any OnStep closure (e.g. inside OnLoad or module-level).
+                if _pre_function_count <= _pre_onstep_count:
+                    # Edge case: could be inside a nested inside OnStep closure
+                    # but with no extra functions between. Fall through to check
+                    # the range-based check.
+                    pass  # already handled by range check above
+
+                if not _inside_onstep:
+                    violations.append(ContractViolation(
+                        kind="business_logic_violation",
+                        call_text=f"local {_variable_name} = AttractionConstants.modifiers",
+                        label=(
+                            f"static cache of modifiers at module/OnLoad scope "
+                            f"(`{_variable_name}`)"
+                        ),
+                        explanation=(
+                            f"AttractionConstants.modifiers was cached into local "
+                            f"variable `{_variable_name}` at module level or inside "
+                            f"OnLoad(). Modifier values change every frame based on "
+                            f"the player's Karma, streak, and NPC interactions. "
+                            f"Caching them once at load time means the attraction "
+                            f"will read stale values for the entire session. "
+                            f"MUST read AttractionConstants.modifiers inside the "
+                            f"MidwayPhysics.OnStep(function(dt) ... end) closure "
+                            f"every frame instead."
+                        ),
+                    ))
+
     return violations
 
 
-# ── Convenience: approved-hint string from an existing contract ──────────────
+# -- Convenience: approved-hint string from an existing contract --------------
 
 def approved_api_hint(lua_contract: LuaContract) -> str:
     """Return the human-readable approved-API hint string."""
     return lua_contract.approved_names_hint
 
 
-# ── Self-test (run directly: python contract_validator.py) ───────────────────
+# -- Self-test (run directly: python contract_validator.py) -------------------
 
 if __name__ == "__main__":
-    # Minimal smoke test — no pytest dependency required.
+    # Minimal smoke test - no pytest dependency required.
     _sample_contract = {
         "midwayphysics_spawn_api": {
-            "SpawnStaticBox(lx, ly, lz, w, h, d) → handle": "static box",
-            "SpawnDynamicSphere(lx, ly, lz, radius [, mass]) → handle": "dynamic sphere",
+            "SpawnStaticBox(lx, ly, lz, w, h, d) -> handle": "static box",
+            "SpawnDynamicSphere(lx, ly, lz, radius [, mass]) -> handle": "dynamic sphere",
             "DestroyBody(handle)": "remove body",
-            "IsSensorTriggered(handle) → bool": "sensor state",
+            "IsSensorTriggered(handle) -> bool": "sensor state",
             "ApplyImpulse(handle, ix, iy, iz)": "impulse",
-            "GetPosition(handle) → lx, ly, lz": "position",
+            "GetPosition(handle) -> lx, ly, lz": "position",
         },
         "economy_api": {
             "Engine.AwardTickets(n, label)": "award tickets",
-            "Engine.GetStreak() → int": "get streak",
+            "Engine.GetStreak() -> int": "get streak",
         },
     }
 

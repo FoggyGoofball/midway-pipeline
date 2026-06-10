@@ -1,9 +1,9 @@
 """
-Signal parsing — extract mesh communication signals, double-check sections,
+Signal parsing  extract mesh communication signals, double-check sections,
 and verdicts from agent output text. Used throughout the pipeline to parse
 inter-agent messaging defined in the engine-lua bridge contract.
 
-No async/await — purely synchronous regex parsing.
+No async/await  purely synchronous regex parsing.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from typing import Dict, List, Optional, Any
 from models import SignalType, MeshSignal
 
 
-# ── Signal Patterns ──────────────────────────────────────────────────────────
-# Mesh inter-agent signal patterns — regexes that match strict markdown
+# -- Signal Patterns ----------------------------------------------------------
+# Mesh inter-agent signal patterns  regexes that match strict markdown
 # bracket-tag syntax in LLM agent output. The regex captures the three
 # sections: target agent, content payload, and optional source/hash tag.
 
@@ -32,19 +32,17 @@ SIGNAL_PATTERNS: Dict[str, str] = {
     "MERGE": r"\[\s*\*?\*?\s*MERGE\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
     "REJECT": r"\[\s*\*?\*?\s*REJECT\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
     "REQUEST_API": r"\[REQUEST_API:\s*(.*?)\s*\|\s*(https?://.*?)\s*\]",
-    "FETCH": r"\[\s*\*?\*?\s*FETCH\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
-    "READ_OFFLOADED": r"\[\s*\*?\*?\s*READ_OFFLOADED\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
-    "EXTRACT_SKELETON": r"\[\s*\*?\*?\s*EXTRACT_SKELETON\s*\*?\*?\s*:\s*([^\]]+)\s*\]",
-    "MATH_EVAL": r"\[\s*\*?\*?\s*MATH_EVAL\s*\*?\*?\s*:\s*(.*?)\]",
+    # Deprecated signal patterns removed:
+    # FETCH, READ_OFFLOADED, EXTRACT_SKELETON, MATH_EVAL — no callers in active pipeline
 
-    # ── Phase III: LangGraph AST Patch Signals ─────────────────────────────
+    # -- Phase III: LangGraph AST Patch Signals -----------------------------
     # Captures discrete AST modification chunks in agent output streams.
     # Format: [AST_PATCH:src/Engine.cpp] ... code ... [/AST_PATCH]
     "AST_PATCH": r"\[\s*\*?\*?\s*AST_PATCH\s*\*?\*?\s*:\s*([^\]]+)\s*\]\s*\n?```\w*\n(.*?)\n?```\s*\n?\[/\s*AST_PATCH\s*\]",
 
 }
 
-# ── Phase III: AST Patch Extraction Pattern (LangGraph Alignment) ──────
+# -- Phase III: AST Patch Extraction Pattern (LangGraph Alignment) ------
 # Optimized for capturing discrete AST modification chunks within agent output.
 # Matches file path + code replacement blocks with optional diff-style line markers.
 AST_PATCH_BLOCK_PATTERN: str = (
@@ -58,7 +56,7 @@ AST_PATCH_BLOCK_PATTERN: str = (
 
 
 
-# Double-check pattern — captures a structured agent self-review section
+# Double-check pattern  captures a structured agent self-review section
 # containing the three marked sections, allowing bullet items across lines.
 # Highly permissive of markdown variations: missing hyphens, extra hashes,
 # bolded headers, varied capitalization, asterisk vs dash bullets.
@@ -68,13 +66,13 @@ DOUBLE_CHECK_PATTERN: str = (
     r"(?:\*\*)?(?:[Ww]hat\s+[Tt]his\s+[Aa]ddresses"
     r"|[Mm]y\s+[Oo]utput\s+[Aa]ddresses"
     r"|[Aa]ddresses):?\*{0,2}\s*"
-    r"(.*?)"  # Addresses content — any text up to next section header
+    r"(.*?)"  # Addresses content  any text up to next section header
     r"\n?"
     r"(?:\*\*)?(?:[Ww]hat\s+[Rr]emains\s+[Uu]nresolved"
     r"|[Uu]nresolved\s+[Ii]tems"
     r"|[Uu]nresolved"
     r"|[Rr]emaining\s+[Ii]ssues):?\*{0,2}\s*"
-    r"(.*?)\s*$"  # Unresolved content — any remaining text
+    r"(.*?)\s*$"  # Unresolved content  any remaining text
 )
 
 
@@ -95,7 +93,7 @@ def extract_signals(text: str) -> List[Dict[str, Any]]:
             if signal_type == "APPROVE":
                 signal["target"] = None
                 signal["content"] = None
-            elif signal_type in ("RESULT", "FETCH", "READ_OFFLOADED"):
+            elif signal_type == "RESULT":
                 signal["target"] = None
                 signal["content"] = groups[0].strip()
             else:

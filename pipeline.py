@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midway to Nowhere — Mesh Consensus Pipeline Orchestrator
+Midway to Nowhere  Mesh Consensus Pipeline Orchestrator
 ========================================================
 Thin orchestrator (~800 lines). System prompts, helpers, and mesh API
 have been extracted to _prompts.py, _pipeline_helpers.py, and _mesh_api.py.
@@ -30,7 +30,7 @@ from collections import deque
 import hashlib
 import contextlib
 
-# ── Snapshot Manager (optional) ────────────────────────────────────────────
+# -- Snapshot Manager (optional) --------------------------------------------
 try:
     from pipeline_snapshot import SnapshotManager
     HAS_SNAPSHOT = True
@@ -38,7 +38,7 @@ except ImportError:
     SnapshotManager = None
     HAS_SNAPSHOT = False
 
-# ── Extracted Module Imports ───────────────────────────────────────────────
+# -- Extracted Module Imports -----------------------------------------------
 import models
 import signals
 import domain_registry
@@ -117,7 +117,7 @@ GDD_SECTION_MAP = gdd_extractor.GDD_SECTION_MAP
 KEYWORD_TO_SECTION = gdd_extractor.KEYWORD_TO_SECTION
 extract_gdd_sections = gdd_extractor.extract_gdd_sections
 
-# ── Mesh Loops — lazy-imported to break circular imports ───────────────────
+# -- Mesh Loops  lazy-imported to break circular imports -------------------
 # mesh_loops.py imports from pipeline, so we use __getattr__.
 _mesh_loops_lazy = None
 
@@ -130,7 +130,7 @@ def __getattr__(name):
         return getattr(_mesh_loops_lazy, name)
     raise AttributeError(f"module 'pipeline' has no attribute {name!r}")
 
-# ── PipelineContext Singleton ──────────────────────────────────────────────
+# -- PipelineContext Singleton ----------------------------------------------
 _CTX = PipelineContext(
     project_root=Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway"))),
     memory_dir=Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway"))) / "docs" / "memory",
@@ -139,16 +139,16 @@ _CTX = PipelineContext(
     global_signals=[],
 )
 
-# ── Configuration ──────────────────────────────────────────────────────────
+# -- Configuration ----------------------------------------------------------
 OLLAMA_HOST = "http://192.168.0.16:11434"
 
-# Qwen Coder 3.5 profile (9B) — uncomment when backend hardware supports it
+# Qwen Coder 3.5 profile (9B)  uncomment when backend hardware supports it
 # CODER_MODEL = "qwen3.5:9b"
 CODER_MODEL = "qwen2.5-coder:7b"
-REVIEWER_MODEL = "phi3:14b"
+REVIEWER_MODEL = "qwen2.5-coder:7b"
 ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
-PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini — compresses large context before phi3:14b review
+PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
 LIBRARIAN_MODEL = "llama3.1:8b-instruct-q4_K_M"
 SYNTAX_GATE_MODEL = "qwen2.5-coder:1.5b"
 INTENT_CLASSIFIER_MODEL = "llama3.2:1b"
@@ -175,14 +175,14 @@ OLLAMA_TIMEOUT = 420
 # Set True to skip all intermediate human-in-the-loop gates (blueprint, architect,
 # wireframe, reconciliation, memory archive).  The final merge/integrate gate in
 # mesh_finalize.py is intentionally excluded and always requires explicit authorisation.
-AUTO_APPROVE_GATES = False
+AUTO_APPROVE_GATES = True
 # Hardened global context ceiling aligned to 16GB host RAM / 12GB dedicated safety margin
 OLLAMA_NUM_CTX = 16384
 MAX_TOKENS = 12000
 CHECKPOINT_DIR = PROJECT_ROOT / ".pipeline_checkpoints"
 MEMORY_DIR = PROJECT_ROOT / "docs" / "memory"
 
-# ── System Prompts ─────────────────────────────────────────────────────────
+# -- System Prompts ---------------------------------------------------------
 # Imported from _prompts.py. These are identical to the originals.
 from _prompts import (
     DIRECTOR_SYSTEM, REVIEW_SYSTEM, REVIEW_PROMPT,
@@ -194,7 +194,7 @@ from _prompts import (
     ANALYST_SYSTEM, AUDITOR_SYSTEM,
 )
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
+# -- Helpers -----------------------------------------------------------------
 from _pipeline_helpers import (
     atomic_write_text,
     is_likely_chat, classify_intent,
@@ -209,7 +209,7 @@ from _pipeline_helpers import (
     search_memory,
 )
 
-# ── Mesh API ───────────────────────────────────────────────────────────────
+# -- Mesh API ---------------------------------------------------------------
 from _mesh_api import (
     submit_mesh_task, get_mesh_task_status, list_mesh_tasks,
     cancel_mesh_task, get_mesh_work_queue, get_mesh_results,
@@ -217,7 +217,7 @@ from _mesh_api import (
     register_progress_listener, _emit_progress,
 )
 
-# ── Session Timeline ───────────────────────────────────────────────────────
+# -- Session Timeline -------------------------------------------------------
 def _get_session_timeline_path() -> Path:
     if _CTX.session_timeline_path is None:
         _CTX.session_timeline_path = PROJECT_ROOT / "docs" / "memory" / "session_timeline.md"
@@ -227,15 +227,15 @@ SESSION_TIMELINE_PATH = _get_session_timeline_path()
 _MAX_OUTPUT_CHARS = 4000
 
 
-# ══════════════════════════════════════════════════════════════════════════
-#  run_mesh_pipeline — Main orchestration
+# ==========================================================================
+#  run_mesh_pipeline  Main orchestration
 #  Delegates to mesh_loops.run_fetches / run_tasks and
 #  mesh_finalize.run_code_merge.
-# ══════════════════════════════════════════════════════════════════════════
+# ==========================================================================
 
 def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
                       session_mgr=None) -> str:
-    """Run the full mesh consensus pipeline. Synchronous — no async/await."""
+    """Run the full mesh consensus pipeline. Synchronous  no async/await."""
     from mesh_loops import run_fetches, run_tasks
     from mesh_finalize import run_code_merge
 
@@ -247,7 +247,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     from ledger import reset_internal_api_ledger
     reset_internal_api_ledger()
     
-    # ── Mount the selected Cartridge (kernel/cartridge separation) ────────────
+    # -- Mount the selected Cartridge (kernel/cartridge separation) ------------
     # Use cartridge_loader to discover and load the configured cartridge.
     # On first run, defaults to Midway. After that, respects .pipeline_config.json.
     try:
@@ -263,10 +263,10 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
             return ctx.final_output
     except Exception as e:
         print(f"  [Kernel] ERROR loading cartridge: {e}")
-        ctx.final_output = f"Error: Cartridge load failed — {e}"
+        ctx.final_output = f"Error: Cartridge load failed  {e}"
         return ctx.final_output
 
-    # ── Cartridge-Driven Constant Override ────────────────────────────────────
+    # -- Cartridge-Driven Constant Override ------------------------------------
     # Dynamically pull and overwrite primary top-level constants from the mounted
     # cartridge context. Reads OrchestrationConfig fields (and cartridge metadata)
     # and applies them to the module-level globals that downstream modules import.
@@ -303,7 +303,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         _g['OLLAMA_NUM_CTX'] = cfg.ollama_num_ctx
         _g['MAX_TOKENS'] = cfg.max_tokens
         
-        # ── Propagate model overrides into domain_registry module ──────
+        # -- Propagate model overrides into domain_registry module ------
         # ALL_DOMAINS in domain_registry.py is evaluated at import time
         # with static constants. After cartridge override, we must update
         # both the module-level constants and the ALL_DOMAINS dict entries
@@ -316,7 +316,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         domain_registry.PRE_SUMMARIZER_MODEL = _g['PRE_SUMMARIZER_MODEL']
         domain_registry.LIBRARIAN_MODEL = _g['LIBRARIAN_MODEL']
 
-        # ── Propagate into ollama_client and _pipeline_helpers ──────────
+        # -- Propagate into ollama_client and _pipeline_helpers ----------
         # mesh_tasks.py re-exports model constants from _pipeline_helpers
         # which in turn re-exports from ollama_client.  Those module-level
         # names are bound at import time, so we must patch them in-place
@@ -363,7 +363,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     if getattr(ctx, 'config', None) is not None:
         _overwrite_constants_from_config(ctx.config)
         print("  [Kernel] Module-level constants overwritten from cartridge context.")
-        # ── Patch ctx.domain_registry model fields ──────────────────────
+        # -- Patch ctx.domain_registry model fields ----------------------
         # get_domain_registry() was called during mount_cartridge (before this
         # override ran), so ctx.domain_registry may have pre-override model
         # strings.  Re-apply the same _model_map so fix routing reads live values.
@@ -384,9 +384,9 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
                 if _dk in _live_dr and isinstance(_live_dr[_dk], dict):
                     _live_dr[_dk]["model"] = _mn
     else:
-        print("  [Kernel] No cartridge config present — using built-in defaults.")
+        print("  [Kernel] No cartridge config present  using built-in defaults.")
 
-    # ── Bootstrap prompt factories from the mounted cartridge ─────────────
+    # -- Bootstrap prompt factories from the mounted cartridge -------------
     # Must run AFTER mount_cartridge and _overwrite_constants_from_config so
     # that _project_name() resolves to the real ecosystem name and all
     # cartridge-supplied fields (reasoning_gate_domains, coding_mandates,
@@ -396,13 +396,13 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         pipeline_bootstrap_prompts()
         print("  [Kernel] Prompt factories refreshed from cartridge.")
     except Exception as _pbe:
-        print(f"  [Kernel] WARNING: prompt bootstrap failed — {_pbe}")
+        print(f"  [Kernel] WARNING: prompt bootstrap failed  {_pbe}")
 
     ctx.user_prompt = user_prompt
     ctx.project_root = PROJECT_ROOT
     ctx.session_mgr = session_mgr
 
-    # ── Pre-Flight: Ollama Health Check ────────────────────────────────────
+    # -- Pre-Flight: Ollama Health Check ------------------------------------
     try:
         urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=1.0)
     except Exception as e:
@@ -431,7 +431,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         else:
             print(f"  Checkpoint {checkpoint_id} not found, starting fresh")
 
-    # ── Resurrection Check ─────────────────────────────────────────────────
+    # -- Resurrection Check -------------------------------------------------
     # If resuming from a BLOCKED checkpoint, skip Phases 1-3 and reconstruct
     # state from the checkpoint data. Treat user_prompt as the manual fix.
     # DIAGNOSTIC is handled in Phase 0.05 above.
@@ -497,12 +497,12 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     if ctx.is_chat:
         _ts = datetime.now().strftime('%H:%M:%S')
         print(f"\n{'='*70}")
-        print(f"  [{_ts}] Chat Mode Detected — Direct Response (bypassing pipeline)")
+        print(f"  [{_ts}] Chat Mode Detected  Direct Response (bypassing pipeline)")
         print(f"{'='*70}")
 
-        # ── Inject project context so CHAT mode has awareness ────
+        # -- Inject project context so CHAT mode has awareness ----
         # The CHAT_SYSTEM prompt says "use provided project context"
-        # but previously we sent zero context — the model had no
+        # but previously we sent zero context  the model had no
         # access to GDD, docs, or project state.
         chat_context_parts = [user_prompt]
         try:
@@ -529,17 +529,17 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         ctx.final_output = response
         return response
 
-    # ── INFORMATIONAL Route: Analyst (Librarian-First, Read-Only) ──────────
+    # -- INFORMATIONAL Route: Analyst (Librarian-First, Read-Only) ----------
     if intent == "INFORMATIONAL":
         _ts = datetime.now().strftime('%H:%M:%S')
         print(f"\n{'='*70}")
-        print(f"  [{_ts}] Informational Query Detected — Analyst Route")
+        print(f"  [{_ts}] Informational Query Detected  Analyst Route")
         print(f"{'='*70}")
 
         # Phase A: Gather ALL source documents first (Librarian-first)
         analyst_context_parts = [f"## User Question\n{user_prompt}"]
 
-        # 1. GDD — full text sections via the Librarian
+        # 1. GDD  full text sections via the Librarian
         try:
             gdd_sections = recursive_librarian(user_prompt)
             if gdd_sections.strip():
@@ -576,7 +576,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         ctx.final_output = response
         return response
 
-    # ── Blueprint Execution Loop ──────────────────────────────────────────
+    # -- Blueprint Execution Loop ------------------------------------------
     # Runs fetches → tasks → merge in a loop, auto-feeding the next blueprint
     # task after each approved cycle, until the blueprint is complete.
     # The integration gate is only shown once all blueprint tasks are done.
@@ -590,15 +590,19 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
             _saved_root = ctx.project_root
             _saved_session = ctx.session_mgr
             _saved_cartridge = getattr(ctx, '_mounted_cartridge', None)
-            # Scope fields set by run_fetches() on iteration 1 — must survive reset
+            # Scope fields set by run_fetches() on iteration 1  must survive reset
             # so the auto-feeder's <macro_invariants> wrapper and scope-inheritance
             # logic see the correct values on all subsequent iterations.
             _saved_scope_mode   = getattr(ctx, '_scope_mode',   'GENERAL')
             _saved_scope_target = getattr(ctx, '_scope_target',  '')
             _saved_scope_refs   = getattr(ctx, '_scope_refs',    [])
             _saved_orig_prompt  = getattr(ctx, '_original_user_prompt', '')
+            # Option C: bulk-enriched blueprint tasks must survive reset so
+            # subsequent auto-feed iterations can consume them one at a time
+            # without re-calling the Director.
+            _saved_enriched_tasks = list(getattr(ctx, '_enriched_blueprint_tasks', []))
 
-            # ── Blueprint cross-iteration memory: snapshot approved files ────
+            # -- Blueprint cross-iteration memory: snapshot approved files ----
             # Collect every file path that was written during this iteration so
             # the Director on the NEXT iteration sees the current on-disk state
             # and does not re-implement work that already exists.
@@ -655,6 +659,13 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
             ctx._original_user_prompt  = _saved_orig_prompt
             # Restore accumulated cross-iteration file snapshots
             ctx.completed_file_snapshots = _saved_snapshots
+            # Option C: restore bulk-enriched task headers so the Director
+            # guard in run_fetches can consume them one at a time without
+            # an LLM call.  Do NOT populate ctx.tasks_list here  that
+            # would trigger the auto-feeder guard and skip advancement.
+            ctx._enriched_blueprint_tasks = _saved_enriched_tasks
+            if _saved_enriched_tasks:
+                print(f"  [Blueprint Loop] Restored {len(_saved_enriched_tasks)} enriched task(s) from prior iteration.")
             # Empty prompt triggers the auto-feeder to pick the next blueprint task
             ctx.user_prompt = ""
             _ts_iter = datetime.now().strftime('%H:%M:%S')
@@ -662,7 +673,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
             print(f"  [{_ts_iter}] [Blueprint Loop] Starting iteration {_blueprint_iteration}...")
             print(f"{'='*70}")
 
-        # ── Phase 0.5–3: Fetches ──
+        # -- Phase 0.53: Fetches --
         # On the very first iteration, remove any stale root-level attraction
         # files that a prior bad run may have written.  Attractions must live at
         # attractions/<slug>/<slug>.lua; a root-level <slug>.lua is always wrong.
@@ -693,7 +704,35 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         if ctx.final_output:
             return ctx.final_output
 
-        # ── Phase 0.9: Pre-Decomposition Architect Pass ───────────────────────
+        # -- Option C: Blueprint Bulk Enrichment (iteration 1, full DAG) ---------
+        # On the very first iteration, after the blueprint was generated and
+        # approved, enrich ALL flat blueprint items with canonical task headers
+        # (domain tags, DEPENDS_ON, Inputs/Outputs/Hooks, File) in a single LLM
+        # call.  The enriched tasks are loaded directly into ctx.tasks_list so
+        # the wave sorter (sort_tasks_into_waves in run_tasks) can build the
+        # full DAG and process independent tasks in parallel waves.
+        # Bypasses the per-iteration auto-feeder entirely  reduces N iterations
+        # to 1 when the Director assigns correct DEPENDS_ON edges.
+        _bp_path = ctx.project_root / "docs" / "project_blueprint.md"
+        if _blueprint_iteration == 1 and _bp_path.is_file() and not getattr(ctx, '_enriched_blueprint_tasks', []):
+            try:
+                from mesh_fetches import _enrich_blueprint_tasks as _do_enrich
+                _enriched = _do_enrich(ctx, _bp_path)
+                if _enriched:
+                    # Load ALL enriched tasks into ctx.tasks_list at once.
+                    # The wave sorter will reorder them into dependency-ordered
+                    # waves and process independent tasks in parallel.
+                    ctx.tasks_list = _enriched
+                    ctx._enriched_blueprint_tasks = []  # consumed  no per-iteration feeding needed
+                    print(f"  [Blueprint Enricher] Bulk-enriched {len(_enriched)} blueprint task(s) "
+                          f"with full DAG metadata  wave sorter will handle dependency ordering "
+                          f"in a single pass. All tasks run in one iteration.")
+                    # Do NOT set _blueprint_continue  the full DAG is processed
+                    # in one pass by run_tasks, then the loop exits naturally.
+            except Exception as _ee:
+                print(f"  [Blueprint Enricher] ⚠ Enrichment failed (falling back to per-iteration Director): {_ee}")
+
+        # -- Phase 0.9: Pre-Decomposition Architect Pass -----------------------
         # Runs AFTER run_fetches so scope/GDD context is available, but BEFORE
         # run_tasks so every agent benefits from the shared design document.
         # Skipped on blueprint continuation iterations (design already present).
@@ -707,7 +746,7 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         except Exception as _arch_err:
             print(f"  [Kernel] ⚠ Architect pass skipped (import/runtime error): {_arch_err}")
 
-        # ── Phase 0.95: Blueprint Approval Gate ──────────────────────────────
+        # -- Phase 0.95: Blueprint Approval Gate ------------------------------
         # When the architect pass produced a brand-new design document this
         # iteration, pause and show it to the human before task decomposition
         # begins.  The human can approve (continue), reject (abort), or skip
@@ -715,18 +754,18 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         if _design_was_fresh and getattr(ctx, 'attraction_design', None) is not None:
             _design = ctx.attraction_design
             print(f"\n{'='*70}")
-            print(f"  🎨 BLUEPRINT APPROVAL — Review the Architect's design document")
+            print(f"  🎨 BLUEPRINT APPROVAL  Review the Architect's design document")
             print(f"{'='*70}")
             try:
                 print(_design.to_context_block())
             except Exception:
                 print(str(_design))
-            print(f"\n{'─'*70}")
+            print(f"\n{'-'*70}")
             print("  This design will guide every task agent in this run.")
-            print("  a — Approve and continue (recommended)")
-            print("  r — Reject and abort pipeline")
-            print("  s — Skip design (run without a design document)")
-            print(f"{'─'*70}")
+            print("  a  Approve and continue (recommended)")
+            print("  r  Reject and abort pipeline")
+            print("  s  Skip design (run without a design document)")
+            print(f"{'-'*70}")
             from pipeline import AUTO_APPROVE_GATES as _auto_gates
             if _auto_gates:
                 print("  [Blueprint Gate] ✓ Design auto-approved (AUTO_APPROVE_GATES=True).")
@@ -737,37 +776,37 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
                     except (KeyboardInterrupt, EOFError):
                         _bp_choice = 'r'
                     if _bp_choice in ('a', 'approve', 'yes', 'y'):
-                        print("  [Blueprint Gate] ✓ Design approved — proceeding to task decomposition.")
+                        print("  [Blueprint Gate] ✓ Design approved  proceeding to task decomposition.")
                         break
                     elif _bp_choice in ('r', 'reject', 'no', 'n'):
-                        print("  [Blueprint Gate] ⛔ Design rejected — aborting pipeline.")
+                        print("  [Blueprint Gate] ⛔ Design rejected  aborting pipeline.")
                         ctx.final_output = "Pipeline aborted: blueprint rejected by user."
                         return ctx.final_output
                     elif _bp_choice in ('s', 'skip'):
-                        print("  [Blueprint Gate] ⏭ Design skipped — pipeline will run without a design document.")
+                        print("  [Blueprint Gate] ⏭ Design skipped  pipeline will run without a design document.")
                         ctx.attraction_design = None
                         break
                     else:
                         print("  Invalid input. Enter 'a' to approve, 'r' to reject, or 's' to skip.")
 
-        # ── Phase 4: Task Execution ──
+        # -- Phase 4: Task Execution --
         ctx = run_tasks(ctx)
 
-        # ── VRAM Abort Guard: Skip Phases 5–8 if TPS watchdog fired ──
+        # -- VRAM Abort Guard: Skip Phases 58 if TPS watchdog fired --
         # If the VRAM Circuit Breaker in run_tasks detected token speed below
         # 2.0 tok/s, ctx.final_verdict is set to "VRAM_OVERRUN" and all
-        # remaining waves are aborted. We must NOT proceed to Phases 5–8
+        # remaining waves are aborted. We must NOT proceed to Phases 58
         # because that will immediately load models and trigger another
         # cascade of VRAM overruns (as seen in the Architect Syntax Fix loop).
         if getattr(ctx, 'final_verdict', None) == "VRAM_OVERRUN":
             print(f"\n  [VRAM Abort Guard] ⛔ Pipeline aborted during task execution "
-                  f"(VRAM overrun). Skipping Phases 5–8.\n")
+                  f"(VRAM overrun). Skipping Phases 58.\n")
             output_path = PROJECT_ROOT / f"pipeline_abort_{datetime.now():%Y%m%d_%H%M%S}.md"
             atomic_write_text(output_path, ctx.final_output)
             print(f"  Abort report saved to {output_path.name}")
             return ctx.final_output
 
-        # ── Phases 5–8: Code Merge, Review, Consensus, Final Approval ──
+        # -- Phases 58: Code Merge, Review, Consensus, Final Approval --
         # run_code_merge handles revision-required retry internally (inside
         # _handle_approved in mesh_finalize.py) before returning to this loop.
         ctx = run_code_merge(ctx)
@@ -781,17 +820,21 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
 
         # If the finalize phase signalled that the blueprint has more tasks,
         # loop back and process the next one automatically.
+        # NOTE: With the full-DAG enrichment (Option C), all tasks are loaded
+        # into ctx.tasks_list on iteration 1 and _blueprint_continue is NOT set,
+        # so this path is only reached by the legacy per-iteration Director path.
         if getattr(ctx, '_blueprint_continue', False):
             ctx._blueprint_continue = False
             continue
 
-        # Blueprint complete (or no blueprint) — exit the loop.
+        # Blueprint complete (or no blueprint)  exit the loop.
         break
+
 
     return ctx.final_output
 
 
-# ── Main Entry Point ───────────────────────────────────────────────────────
+# -- Main Entry Point -------------------------------------------------------
 
 def run_pipeline(user_prompt: str, checkpoint_id: str = None,
                  session_id: str = None) -> str:
@@ -821,7 +864,7 @@ def run_pipeline(user_prompt: str, checkpoint_id: str = None,
     return result
 
 
-# ── TagSuggester: Post-Pipeline Tag Auto-Detection ─────────────────────────
+# -- TagSuggester: Post-Pipeline Tag Auto-Detection -------------------------
 try:
     from pipeline_session import SessionManager, get_or_create_session
     HAS_SESSION_MANAGER = True

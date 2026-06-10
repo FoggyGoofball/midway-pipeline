@@ -1,10 +1,10 @@
 """
-FETCH signal handler — parse [FETCH:filepath#anchor] tags and return the
+FETCH signal handler  parse [FETCH:filepath#anchor] tags and return the
 content under the specified header with temporal read-depth tracking.
 
 Also handles [READ_OFFLOADED:block_id] signals for restoring paged context.
 
-No async/await — purely synchronous file I/O and regex parsing.
+No async/await  purely synchronous file I/O and regex parsing.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from offload_store import get_offload_store
 from token_budget import TokenBudget
 
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# -- Constants ----------------------------------------------------------------
 # Use the env-var project root if set so FETCH targets resolve against the
 # game project tree, not the pipeline repo itself.
 import os as _os
@@ -194,7 +194,7 @@ def handle_read_offloaded_signal(block_id: str, task_context: str = "",
                 return (
                     "\n## Offloaded Context Retrieval: CONTEXT_OVERFLOW\n"
                     f"**Block ID:** {block_id}\n"
-                    f"**Error:** Cannot free enough space — all non-pinned sections "
+                    f"**Error:** Cannot free enough space  all non-pinned sections "
                     f"have been exhausted. Block needs ~{estimated_tokens} tokens "
                     f"but only {available} available.\n\n"
                     f"**Pinned blocks preventing page-out:** "
@@ -247,7 +247,7 @@ def _page_out_context(context_text: str, needed_chars: int,
             id_base = re.sub(r'[^a-zA-Z0-9]', '_', header[:60]).strip('_').lower()
             content_hash = hashlib.md5(section_text.encode("utf-8")).hexdigest()[:16]
             block_id = f"paged_{id_base}_{content_hash}"
-            # Skip pinned blocks — prevents infinite swap-loops
+            # Skip pinned blocks  prevents infinite swap-loops
             if block_id in pinned_blocks:
                 continue
             store.store_block(block_id, header, body)

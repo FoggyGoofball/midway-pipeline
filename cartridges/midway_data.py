@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 
-# ── Domain registry ─────────────────────────────────────────────────────────
+# -- Domain registry ---------------------------------------------------------
 
 def build_domain_registry(
     EXECUTION_MODEL: str,
@@ -48,10 +48,12 @@ def build_domain_registry(
         "   [SEARCH] / [REPLACE]\n"
         "   Any other variant that does not use the exact <<<<<<< SEARCH / >>>>>>> REPLACE "
         "conflict markers shown above.\n"
-        "5. Multiple hunks are allowed — emit one SEARCH/REPLACE block per changed region."
+        "5. CRITICAL: You are strictly forbidden from using XML tags like "
+        "<SEARCH> or <fix-plan> for file patching. XML is not a valid patch format.\n"
+        "6. Multiple hunks are allowed — emit one SEARCH/REPLACE block per changed region."
     )
 
-    # ── Midway project-wide prohibitions ────────────────────────────────────
+    # -- Midway project-wide prohibitions ------------------------------------
     # These rules apply to EVERY domain agent in this cartridge.
     # They address recurring hallucination patterns specific to this project.
     _MIDWAY_PROHIBITIONS = (
@@ -81,6 +83,7 @@ def build_domain_registry(
         "  GetLinearVelocity → use GetVelocity(handle).\n"
         "  SetLinearVelocity(handle, vec) → use SetLinearVelocity(handle, vx, vy, vz).\n"
         "  MoveKinematic(handle, vec) → use MoveKinematic(handle, lx, ly, lz, dt).\n"
+        "  SetMass / MidwayPhysics.SetMass → does NOT exist. Pass mass during SpawnDynamic*(..., mass) instead.\n"
         "  sol.on_load / sol.on_step / sol.on_unload / sol.set_function -> these do NOT exist.\n"
         "  function OnStep(dt) ... end (bare global) -> this is NEVER called by the engine; "
         "register via MidwayPhysics.OnStep(function(dt) ... end) inside OnLoad() instead.\n"
@@ -283,22 +286,41 @@ def build_domain_registry(
                 "CORRECT: `table.remove(ballHandles, i)`\n\n"
                 "CRITICAL TASK PRIMACY: Execute the instructions in your ## Task Specification exactly. "
                 "Do not add unrequested systems or lifecycle hooks.\n\n"
+                "MODULE-LEVEL SPAWN / POLL PROHIBITION (CRITICAL — read before writing any code):\n"
+                "The following three patterns are ALWAYS WRONG and will be caught by the static\n"
+                "preflight guard and cause an immediate FAIL before the reviewer even runs:\n\n"
+                "FORBIDDEN 1 — Spawning physics bodies at module level:\n"
+                "  WRONG:  ball = MidwayPhysics.SpawnDynamicSphere(0,0,0,1)  -- top of file\n"
+                "  CORRECT: put ALL SpawnDynamic* / SpawnStatic* calls inside OnLoad().\n"
+                "  WHY: The engine slot is not mounted at module-load time. The host will crash\n"
+                "  or silently return 0/nil for every spawn attempted outside OnLoad().\n\n"
+                "FORBIDDEN 2 — Polling Engine.GetStreak() or AttractionConstants.modifiers\n"
+                "  at module level or inside OnLoad (once only):\n"
+                "  WRONG:  local streak = Engine.GetStreak()  -- top of file, stale forever\n"
+                "  CORRECT: call Engine.GetStreak() and read AttractionConstants.modifiers\n"
+                "  INSIDE the MidwayPhysics.OnStep closure, every frame.\n"
+                "  WHY: The streak and modifier values change during gameplay. A value read\n"
+                "  once at startup is stale by the time the player scores.\n\n"
+                "FORBIDDEN 3 — Omitting OnLoadStatic():\n"
+                "  Every attraction script MUST define OnLoadStatic(). If your attraction has\n"
+                "  no permanent geometry, write an empty stub: function OnLoadStatic() end\n"
+                "  Omitting it entirely is a FAIL — the host will log a missing-hook error.\n\n"
                 "ECONOMY & ENGINE MODIFIERS MANDATE (REQUIRED FOR EVERY NEW ATTRACTION):\n"
                 "Every attraction script MUST include both of the following or it will be\n"
                 "rejected by the Phantom API Gate before final approval.\n\n"
                 "1. MODIFIER CONSUMPTION — read AttractionConstants.modifiers inside OnStep each\n"
                 "   frame and apply the values to gameplay variables. You MUST consume ALL nine:\n"
                 "     local MOD = AttractionConstants.modifiers\n"
-                "     -- Core Physical (§4.1)\n"
+                "     -- Core Physical (S4.1)\n"
                 "     MOD.mass          -- scale projectile/object mass\n"
                 "     MOD.volume        -- scale booth/gameplay volume\n"
                 "     MOD.friction      -- scale surface friction\n"
-                "     -- Meta-Navigational (§4.2)\n"
+                "     -- Meta-Navigational (S4.2)\n"
                 "     MOD.karma         -- RNG tilt / hidden luck direction\n"
                 "     MOD.luck          -- procedural generation bias\n"
                 "     MOD.persuasion    -- NPC/target difficulty bias\n"
                 "     MOD.heat          -- overall difficulty multiplier\n"
-                "     -- Tactile (§4.3)\n"
+                "     -- Tactile (S4.3)\n"
                 "     MOD.sleight_of_hand  -- TILT mechanic sensitivity\n"
                 "     MOD.nerve            -- timing window width\n"
                 "   If a modifier has no meaningful effect in your attraction, still read it and\n"
@@ -311,7 +333,27 @@ def build_domain_registry(
                 "   Use Engine.GetStreak() to scale rewards by the player's current streak.\n"
                 "   FORBIDDEN: `economy:awardTickets(...)`, `economy:award(...)`,\n"
                 "   `Economy.Award(...)` — all colon-method or non-Engine-namespaced forms are\n"
-                "   phantom APIs and will hard-fail the gate.\n"
+                "   phantom APIs and will hard-fail the gate.\n\n"
+                "ANTI-PATTERNS (NEVER DO THESE — these are the #1 cause of pipeline failures):\n\n"
+                "ANTI-PATTERN 1 — Module-level Spawn* calls:\n"
+                "  NEVER write `MidwayPhysics.SpawnDynamicSphere(0, 0, 0, 1)` or ANY\n"
+                "  Spawn* / Pool* / DestroyBody call at the TOP LEVEL of the file, outside\n"
+                "  of any function. The engine slot is NOT mounted at module-load time.\n"
+                "  Every such call will crash the engine or silently return handle 0.\n"
+                "  CORRECT: Put ALL spawn calls inside OnLoad() or OnLoadStatic().\n\n"
+                "ANTI-PATTERN 2 — Bare `function OnStep(dt)` at global scope:\n"
+                "  NEVER define `function OnStep(dt) ... end` as a bare global function.\n"
+                "  The engine will NEVER call it. `OnStep` is NOT a lifecycle hook — it\n"
+                "  is a callback registered via `MidwayPhysics.OnStep(function(dt) ... end)`\n"
+                "  INSIDE OnLoad(). The ONLY valid lifecycle hooks are OnLoadStatic,\n"
+                "  OnLoad, and OnUnload.\n\n"
+                "ANTI-PATTERN 3 — Duplicate functions:\n"
+                "  NEVER write more than one definition of `function OnLoadStatic() end`,\n"
+                "  `function OnLoad() end`, or `function OnUnload() end` in the same file.\n"
+                "  Lua silently overwrites the first definition with the second, meaning\n"
+                "  code from the first version is permanently lost. If the pipeline's\n"
+                "  static guard reports `duplicate function 'OnLoadStatic'`, the file has\n"
+                "  multiple definitions and MUST be deduplicated (keep one, merge all code).\n"
             ) + _MIDWAY_PROHIBITIONS + _SEARCH_REPLACE_MANDATE,
         },
         "DOC": {
@@ -547,7 +589,7 @@ def build_domain_registry(
     return registry
 
 
-# ── Alias map ────────────────────────────────────────────────────────────────
+# -- Alias map ----------------------------------------------------------------
 
 def build_alias_map(kernel_alias_map: dict) -> Dict[str, str]:
     """Return the full Midway agent alias map (extends kernel map)."""
@@ -587,7 +629,7 @@ def build_alias_map(kernel_alias_map: dict) -> Dict[str, str]:
     return combined
 
 
-# ── Environment metadata ──────────────────────────────────────────────────────
+# -- Environment metadata ------------------------------------------------------
 
 def build_environment_metadata() -> Dict[str, Dict[str, str]]:
     """Return per-domain environment metadata with architectural invariants."""
@@ -644,7 +686,7 @@ def build_environment_metadata() -> Dict[str, Dict[str, str]]:
     }
 
 
-# ── Domain rules ──────────────────────────────────────────────────────────────
+# -- Domain rules --------------------------------------------------------------
 
 def build_domain_rules() -> Dict[str, Dict[str, Any]]:
     """Return consolidated rule checklists for every pipeline agent domain."""
@@ -657,14 +699,14 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
                 "Lua bridge: sol2 v3 bindings. Every Lua-accessible fn registered in MidwayPhysics.cpp or Engine.cpp.",
             ],
             "vicious_cycle_seam": [
-                "Teleport trigger: |playerZ| >= CYCLE_LENGTH (150.0f) → Z=0 with zero visual interruption.",
+                "Teleport trigger: |playerZ| >= CYCLE_LENGTH (150.0f) -> Z=0 with zero visual interruption.",
                 "Lap counter: increment m_viciousCycleLap on each seam crossing.",
                 "All dynamic bodies re-positioned by teleport offset. Static bodies (booths) re-indexed, not moved.",
                 "Post-teleport: OptimizeBroadPhase() after static body re-indexing.",
             ],
             "slot_booth_architecture": [
-                "Booth lifecycle: BeginBoothCapture(staticIDs, slotID) → spawn → EndBoothCapture() → OptimizeBroadPhase().",
-                "Dynamic lifecycle: BeginDynamicCapture(dynamicIDs, slotID) → spawn → EndDynamicCapture().",
+                "Booth lifecycle: BeginBoothCapture(staticIDs, slotID) -> spawn -> EndBoothCapture() -> OptimizeBroadPhase().",
+                "Dynamic lifecycle: BeginDynamicCapture(dynamicIDs, slotID) -> spawn -> EndDynamicCapture().",
                 "Physics culling: suspend simulation for slots > 14.0m interaction radius. Destroy dynamics on walk-away.",
                 "Coordinate transform: LocalToWorld(lx, lz, wx, wz) applies booth transform.",
             ],
@@ -679,7 +721,7 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
             ],
             "rendering_shaders": [
                 "Carnival Barker sprite uses billboard transform. 2D high-res sprite only.",
-                "Karmic-Temporal Transmutation Matrix: dual-axis GLSL shader (X = PS1 snap ↔ smooth PBR, Y = Demonic ↔ Angelic).",
+                "Karmic-Temporal Transmutation Matrix: dual-axis GLSL shader (X = PS1 snap <-> smooth PBR, Y = Demonic <-> Angelic).",
                 "Demonic Skew: 3D noise-driven vertex displacement at extreme negative Karma.",
                 "Barker's Exemption: 2D sprite ignores Transmutation Matrix entirely.",
             ],
@@ -691,7 +733,7 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
         },
         "LUA": {
             "language_environment": [
-                "Lua 5.4 via sol2. No LuaJIT features. No external Lua modules — only MidwayPhysics and Engine APIs.",
+                "Lua 5.4 via sol2. No LuaJIT features. No external Lua modules -- only MidwayPhysics and Engine APIs.",
                 "Self-contained constants. Every attraction defines LOCAL config tables. Never import shared tuning files.",
                 "Game tuning values (pusher stroke, shelf height, spawn counts) belong in local constants, never in C++ bridge.",
             ],
@@ -707,7 +749,7 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
             ],
             "canonical_dimensions": [
                 "Booth shell: width_x = 9.0, height_y = 9.0, depth_z = 15.0.",
-                "Booth center offset: BOOTH_SIDE_X = ±10.5, BOOTH_SPACING = 15.0.",
+                "Booth center offset: BOOTH_SIDE_X = +/-10.5, BOOTH_SPACING = 15.0.",
                 "Corridor: CORRIDOR_HALF_WIDTH = 6.0.",
             ],
             "engine_globals": [
@@ -718,11 +760,11 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
             "midwayphysics_api": [
                 "Spawn: SpawnStaticBox/Sphere/Capsule/Cylinder/Mesh, SpawnKinematic*, SpawnDynamic*.",
                 "Sensors: SpawnSensorBox/Sphere. Movement: MoveKinematic. Impulses: ApplyImpulse, AddLinearVelocity.",
-                "Per-body overrides: SetFriction, SetRestitution, SetGravityFactor, SetMass, SetLinearDamping, SetAngularDamping.",
+                "Per-body overrides: SetFriction, SetRestitution, SetGravityFactor, SetLinearDamping, SetAngularDamping.",
             ],
             "object_pools": [
                 "CreatePool(unique_name_N, hotN, coldN, paramsTable). Pool name: {attraction}_{type}_{slotID}.",
-                "Acquire/Return: PoolAcquire(name, lx, ly, lz) → handle. PoolReturn(name, handle).",
+                "Acquire/Return: PoolAcquire(name, lx, ly, lz) -> handle. PoolReturn(name, handle).",
                 "Culling: PoolCullBelow(name, yThreshold). Query: PoolFree, PoolTotal.",
             ],
             "economy_api": [
@@ -732,14 +774,14 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
             ],
             "modifier_integration": [
                 "Read MOD = AttractionConstants.modifiers inside OnStep each frame.",
-                "Mass→kinetic transfer, Volume→hitbox size, Friction→bounce/restitution.",
-                "Karma→RNG tilt, Luck→procedural generation, Heat→difficulty scaling.",
-                "Sleight of Hand→TILT mechanic, Nerve→timing windows.",
+                "Mass->kinetic transfer, Volume->hitbox size, Friction->bounce/restitution.",
+                "Karma->RNG tilt, Luck->procedural generation, Heat->difficulty scaling.",
+                "Sleight of Hand->TILT mechanic, Nerve->timing windows.",
             ],
         },
         "PHYS": {
             "engine_selection": [
-                "UNIFIED JOLT STANDARD: ALL attractions use Jolt Physics exclusively — 3D volumetric and 2D planar alike.",
+                "UNIFIED JOLT STANDARD: ALL attractions use Jolt Physics exclusively -- 3D volumetric and 2D planar alike.",
                 "Box2D is FULLY DEPRECATED. Do NOT write Box2D initialization vectors, variables, or API references.",
                 "2D planar attractions: modeled via Jolt DOF constraints (Z-translation locked, X/Y rotation locked, Z-only rotation).",
                 "3D volumetric attractions: unconstrained Jolt rigid bodies.",
@@ -747,12 +789,12 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
             "vicious_cycle_teleport": [
                 "Check |playerZ| >= 150.0f every physics step. Teleport to Z=0, increment lap counter.",
                 "Re-index static booth bodies relative to new Z=0 origin.",
-                "Recalculate kinematic motion paths post-teleport — no spatial drift.",
+                "Recalculate kinematic motion paths post-teleport -- no spatial drift.",
                 "Dynamic bodies crossing seam teleport with player. Call OptimizeBroadPhase() after re-index.",
             ],
             "booth_lifecycle_physics": [
-                "BeginBoothCapture(slotID) → spawn statics → EndBoothCapture() → OptimizeBroadPhase().",
-                "BeginDynamicCapture(slotID) → spawn dynamics → EndDynamicCapture().",
+                "BeginBoothCapture(slotID) -> spawn statics -> EndBoothCapture() -> OptimizeBroadPhase().",
+                "BeginDynamicCapture(slotID) -> spawn dynamics -> EndDynamicCapture().",
                 "Walk-away: DestroyBodies() for slot's dynamic list. ActivateBodies/DeactivateBodies for statics.",
             ],
             "body_handle_management_phys": [
@@ -766,12 +808,12 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
                 "Pool name pattern: {attraction}_{type}_{slotID}.",
             ],
             "per_body_overrides": [
-                "SetFriction(0.0-1.0), SetRestitution(0.0-1.0), SetGravityFactor, SetMass(>0.0).",
+            "SetFriction(0.0-1.0), SetRestitution(0.0-1.0), SetGravityFactor.",
                 "SetLinearDamping, SetAngularDamping, MoveKinematic(handle, lx, ly, lz, dt).",
             ],
             "collision_layers": [
                 "NON_MOVING (0) = static. MOVING (1) = dynamic/kinematic. Sensors use MOVING.",
-                "ObjLayerPairFilterImpl: NON_MOVING↔MOVING = collide. MOVING↔MOVING = collide.",
+                "ObjLayerPairFilterImpl: NON_MOVING<->MOVING = collide. MOVING<->MOVING = collide.",
             ],
             "performance_phys": [
                 "Physics culling: 14.0m interaction radius. DeactivateBodies() for off-screen booths.",
@@ -781,8 +823,8 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
         },
         "SHADER": {
             "karmic_temporal_matrix": [
-                "Dual-axis GLSL shader. X-axis: PS1 vertex snapping (left) ↔ smooth PBR (right).",
-                "Y-axis: Demonic (bottom) ↔ Angelic (top). Origin (0,0) = max distortion.",
+                "Dual-axis GLSL shader. X-axis: PS1 vertex snapping (left) <-> smooth PBR (right).",
+                "Y-axis: Demonic (bottom) <-> Angelic (top). Origin (0,0) = max distortion.",
                 "Driven by player's Karma modifier. Single shader with uniform interpolation.",
             ],
             "ps1_vertex_snapping": [
@@ -825,7 +867,7 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
             ],
             "state_replication": [
                 "Replicate position/velocity/type for active bodies in current + adjacent slots (14.0m radius).",
-                "Do NOT replicate individual pool slot states — reconstruct from authoritative positions.",
+                "Do NOT replicate individual pool slot states -- reconstruct from authoritative positions.",
                 "Broadcast 9 modifier values as single compact packet.",
             ],
             "rpc_security": [
@@ -840,15 +882,15 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
         },
         "REVIEWER": {
             "api_contract_verification": [
-                "Every Lua API function called must be registered in C++ via sol2 — signatures must match exactly.",
+                "Every Lua API function called must be registered in C++ via sol2 -- signatures must match exactly.",
                 "All handles returned to Lua are integers (0 = invalid). No raw JPH::BodyID leaks.",
                 "Pool names in Lua match C++ routing key: {attraction}_{type}_{slotID}.",
                 "SyncModifierGlobalsToLua() sets all 9 globals. Lua reads from AttractionConstants.modifiers each frame.",
             ],
             "feature_completeness": [
-                "No orphaned tasks — every breakdown task corresponds to generated code.",
-                "No phantom APIs — Lua does not call non-existent C++ bridge functions.",
-                "NET wraps C++ — state replication covers bodies/events from C++ and Lua tasks.",
+                "No orphaned tasks -- every breakdown task corresponds to generated code.",
+                "No phantom APIs -- Lua does not call non-existent C++ bridge functions.",
+                "NET wraps C++ -- state replication covers bodies/events from C++ and Lua tasks.",
                 "Economy events wrapped by server-authoritative NET layer.",
             ],
             "coordinate_alignment": [
@@ -865,7 +907,7 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
                 "F1 panel changes propagate to Lua every frame. NET broadcasts to remote clients.",
             ],
             "error_handling_security": [
-                "No raw pointers in C++ — unique_ptr, vector, map. No new/delete.",
+                "No raw pointers in C++ -- unique_ptr, vector, map. No new/delete.",
                 "RPC authentication includes session token. Rate-limited 10/sec per client.",
                 "Server-authoritative economy and Death's Door.",
             ],
@@ -873,296 +915,10 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
     }
 
 
-# ── API references ────────────────────────────────────────────────────────────
+# -- API references ------------------------------------------------------------
 
-def build_api_references(prefix: str = "docs") -> Dict[str, Dict[str, Any]]:
-    """Return structured index of API documentation files.
-
-    ``prefix`` is accepted for backwards-compatibility but all paths now resolve
-    to the canonical sister-repo location (repos/midway/docs).  Callers that
-    previously passed a relative prefix will still receive a valid dict; the
-    ``path`` values are absolute so agents can open them without guessing.
-    """
-    from pathlib import Path as _Path
-    _docs = _Path(__file__).resolve().parents[2] / "midway" / "docs"
-
-    def _p(filename: str) -> str:
-        return str(_docs / filename)
-
-    return {
-        # ── Scraped external API docs ────────────────────────────────────────
-        "jolt": {
-            "label": "Jolt Physics API",
-            "path": _p("jolt_api.md"),
-            "anchors": {
-                "PhysicsSystem": "#physicssystem",
-                "BodyInterface": "#bodyinterface",
-                "BodyCreationSettings": "#bodycreationsettings",
-                "ObjectLayerFilter": "#objectlayerfilter",
-                "BroadPhaseLayer": "#broadphaselayerinterface",
-                "ConstraintSettings": "#constraintsettings",
-                "Body": "#body",
-                "BodyID": "#bodyid",
-                "EMotionType": "#emotiontype",
-            },
-            "search_terms": [
-                "physics system", "body interface", "body creation",
-                "shape settings", "constraints", "body id",
-                "broadphase", "collision layers", "motion type",
-            ],
-        },
-        "sol2": {
-            "label": "sol2 Lua Binding API",
-            "path": _p("sol2_api.md"),
-            "anchors": {
-                "sol::state": "#sol-state",
-                "sol::state_view": "#sol-state-view",
-                "sol::function": "#sol-function",
-                "sol::table": "#sol-table",
-                "sol::object": "#sol-object",
-                "new_usertype": "#new-usertype",
-                "set_function": "#set-function",
-                "pointer_safety": "#pointer-safety",
-            },
-            "search_terms": [
-                "lua state", "binding", "function registration",
-                "usertype", "metatable", "ownership",
-            ],
-        },
-        "cpp17": {
-            "label": "C++17 Standard Library",
-            "path": _p("cpp17_api.md"),
-            "anchors": {
-                "StructuredBindings": "#structured-bindings",
-                "if_constexpr": "#if-constexpr",
-                "FoldExpressions": "#fold-expressions",
-                "InlineVariables": "#inline-variables",
-                "filesystem": "#std-filesystem",
-                "optional": "#std-optional",
-                "variant": "#std-variant",
-                "string_view": "#std-string-view",
-                "shared_mutex": "#std-shared-mutex",
-                "clamp": "#std-clamp",
-            },
-            "search_terms": [
-                "filesystem", "optional", "variant", "string_view",
-                "structured bindings", "constexpr", "fold expression",
-            ],
-        },
-        "opengl_sdl": {
-            "label": "OpenGL 3.3 + SDL2 API",
-            "path": _p("opengl_sdl_api.md"),
-            "anchors": {
-                "SDL_CreateWindow": "#sdl-createwindow",
-                "SDL_GL_CreateContext": "#sdl-gl-createcontext",
-                "SDL_PollEvent": "#sdl-pollevent",
-                "glCreateShader": "#gl-createshader",
-                "glCreateProgram": "#gl-createprogram",
-                "glGenVertexArrays": "#gl-genvertexarrays",
-                "glBufferData": "#gl-bufferdata",
-            },
-            "search_terms": [
-                "window creation", "opengl context", "shader compilation",
-                "vertex array", "uniform location", "event loop",
-            ],
-        },
-        "box2d": {
-            "label": "Box2D API (deprecated — reference only)",
-            "path": _p("box2d_api.md"),
-            "search_terms": ["box2d", "b2World", "b2Body"],
-        },
-        # ── Project-authored reference docs ──────────────────────────────────
-        "engine_bridge": {
-            "label": "Engine↔Lua Bridge Contract",
-            "path": _p("engine_lua_bridge_contract.md"),
-            "search_terms": [
-                "bridge contract", "midwayphysics api", "spawn",
-                "modifier bridge", "economy api", "callbacks",
-            ],
-        },
-        "api_index": {
-            "label": "Master API Index",
-            "path": _p("api_index.md"),
-            "search_terms": ["api index", "symbol index", "function list"],
-        },
-        "internal_api_ledger": {
-            "label": "Internal API Ledger",
-            "path": _p("internal_api_ledger.md"),
-            "search_terms": ["ledger", "internal api", "registered functions"],
-        },
-        "attraction_specs": {
-            "label": "Attraction Specifications",
-            "path": _p("attraction_specs.md"),
-            "search_terms": [
-                "attraction", "booth", "skeeball", "coin cascade",
-                "mini golf", "carnival", "slot machine",
-            ],
-        },
-        "pipeline_anchor_index": {
-            "label": "Pipeline Anchor Index",
-            "path": _p("pipeline_anchor_index.md"),
-            "search_terms": ["anchor", "pipeline index", "agent anchor"],
-        },
-        # ── Rules docs ────────────────────────────────────────────────────────
-        "rules_cpp": {
-            "label": "C++ Coding Rules",
-            "path": _p("rules_cpp.md"),
-            "search_terms": ["cpp rules", "c++ standard", "coding mandates"],
-        },
-        "rules_lua": {
-            "label": "Lua Scripting Rules",
-            "path": _p("rules_lua.md"),
-            "search_terms": ["lua rules", "lua scripting", "sol2 rules"],
-        },
-        "rules_phys": {
-            "label": "Physics Rules",
-            "path": _p("rules_phys.md"),
-            "search_terms": ["physics rules", "jolt constraints", "collision rules"],
-        },
-        "rules_review": {
-            "label": "Code Review Rules",
-            "path": _p("rules_review.md"),
-            "search_terms": ["review rules", "code review", "reviewer mandates"],
-        },
-        "rules_shader": {
-            "label": "Shader Rules",
-            "path": _p("rules_shader.md"),
-            "search_terms": ["shader rules", "glsl", "vertex shader", "fragment shader"],
-        },
-        "rules_net": {
-            "label": "Networking Rules",
-            "path": _p("rules_net.md"),
-            "search_terms": ["networking rules", "net code", "multiplayer"],
-        },
-    }
-
-
-# ── Bridge contract ───────────────────────────────────────────────────────────
-
-def build_bridge_contract() -> Dict[str, Any]:
-    """Return the consolidated Engine↔Lua bridge contract."""
-    return {
-        "globals_injected": {
-            "BOOTH_WORLD_X": "float — world-space X center of this slot",
-            "BOOTH_WORLD_Z": "float — world-space Z center of this slot",
-            "BOOTH_SLOT_ID": "int — unique slot identifier",
-            "BOOTH_IS_STATIC": "bool — true during static load, false during dynamic load",
-        },
-        "modifier_globals": {
-            "ENGINE_MOD_MASS":           {"gdd": "§4.1 Core Physical", "default": 1.0},
-            "ENGINE_MOD_VOLUME":         {"gdd": "§4.1 Core Physical", "default": 1.0},
-            "ENGINE_MOD_FRICTION":       {"gdd": "§4.1 Core Physical", "default": 1.0},
-            "ENGINE_MOD_KARMA":          {"gdd": "§4.2 Meta-Navigational", "default": 0.0, "range": "-1..1"},
-            "ENGINE_MOD_LUCK":           {"gdd": "§4.2 Meta-Navigational", "default": 0.0},
-            "ENGINE_MOD_PERSUASION":     {"gdd": "§4.2 Meta-Navigational", "default": 0.0},
-            "ENGINE_MOD_HEAT":           {"gdd": "§4.2 Meta-Navigational", "default": 0.0},
-            "ENGINE_MOD_SLEIGHT_OF_HAND": {"gdd": "§4.3 Tactile", "default": 0.0},
-            "ENGINE_MOD_NERVE":          {"gdd": "§4.3 Tactile", "default": 0.0},
-        },
-        "load_order": [
-            "1. attractions/_shared/attraction_constants.lua — canonical dimensions, tuning, live modifiers",
-            "2. attractions/booth_shared.lua — SpawnSharedBooth() helper and SharedBooth utilities",
-            "3. Attraction script — OnLoadStatic() for permanent geometry, OnLoad() for gameplay bodies",
-        ],
-        "script_lifecycle": {
-            "OnLoadStatic": "Call SpawnSharedBooth() first, then spawn cabinet-specific static geometry.",
-            "OnLoad": "Spawn kinematic/dynamic bodies. Register OnStep callback via MidwayPhysics.OnStep(fn).",
-            "OnUnload": "Optional cleanup. Engine destroys dynamic bodies automatically.",
-            "OnStep_dt": "Read AttractionConstants.modifiers each frame. Never cache at load time.",
-        },
-        "midwayphysics_spawn_api": {
-            "SpawnStaticBox(lx, ly, lz, w, h, d) → handle": "Permanent static box",
-            "SpawnStaticSphere(lx, ly, lz, radius) → handle": "Permanent static sphere",
-            "SpawnStaticCapsule(lx, ly, lz, halfHeight, radius) → handle": "Permanent static capsule",
-            "SpawnStaticCylinder(lx, ly, lz, halfHeight, radius) → handle": "Permanent static cylinder",
-            "SpawnStaticMesh(lx, ly, lz, yaw, path) → handle": "Static mesh from asset file",
-            "SpawnKinematicBox(lx, ly, lz, w, h, d) → handle": "Moving platform / pusher — box",
-            "SpawnKinematicSphere(lx, ly, lz, radius) → handle": "Moving platform — sphere",
-            "SpawnKinematicCapsule(lx, ly, lz, halfHeight, radius) → handle": "Moving platform — capsule",
-            "SpawnKinematicCylinder(lx, ly, lz, halfHeight, radius) → handle": "Moving platform — cylinder",
-            "SpawnDynamicBox(lx, ly, lz, w, h, d [, mass]) → handle": "Physics-simulated box",
-            "SpawnDynamicSphere(lx, ly, lz, radius [, mass]) → handle": "Physics-simulated sphere",
-            "SpawnDynamicCapsule(lx, ly, lz, halfHeight, radius [, mass]) → handle": "Physics-simulated capsule",
-            "SpawnDynamicCylinder(lx, ly, lz, halfHeight, radius [, mass]) → handle": "Physics-simulated cylinder",
-            "SpawnDynamicMesh(lx, ly, lz, yaw, mass, path) → handle": "Dynamic mesh from asset file",
-            "SpawnSensorBox(lx, ly, lz, w, h, d) → handle": "Trigger zone — box",
-            "SpawnSensorSphere(lx, ly, lz, radius) → handle": "Trigger zone — sphere",
-            "MoveKinematic(handle, lx, ly, lz, dt)": "Sets kinematic body target position each step.",
-            "ApplyImpulse(handle, ix, iy, iz)": "Instantaneous force in local space.",
-            "ApplyAngularImpulse(handle, ix, iy, iz)": "Instantaneous torque.",
-            "SetLinearVelocity(handle, vx, vy, vz)": "Override current velocity.",
-            "AddLinearVelocity(handle, vx, vy, vz)": "Additive velocity change.",
-            "SetFriction/Restitution/GravityFactor/Mass/LinearDamping/AngularDamping": "Per-body property overrides.",
-            "GetPosition(handle) → lx, ly, lz": "Local-space position relative to booth origin.",
-            "GetVelocity(handle) → vx, vy, vz": "Local-space velocity.",
-            "IsActive(handle) → bool": "False for destroyed or parked bodies.",
-            "IsSensorTriggered(handle) → bool": "Overlap state from previous physics step.",
-            "DestroyBody(handle)": "Remove from handle map AND physics system.",
-            "OnStep(fn)": "Register per-frame callback: MidwayPhysics.OnStep(function(dt) ... end). Call inside OnLoad().",
-        },
-        "object_pools": {
-            "CreatePool(name, hotN, coldN, paramsTable)": "Two-tier pool. params: shape, w, h, d, radius, halfH, mass, friction, restitution, damping.",
-            "PoolAcquire(name, lx, ly, lz) → handle": "0 = pool exhausted.",
-            "PoolReturn(name, handle)": "Park body at Y=-9999.",
-            "PoolCullBelow(name, yThreshold)": "Return hot bodies below threshold to cold store.",
-            "PoolFree(name) → int": "Available hot slots.",
-            "PoolTotal(name) → int": "Hot + cold slots.",
-            "Naming convention": "{attraction}_{type}_{slotID} (e.g. plinko_balls_3)",
-        },
-        "economy_api": {
-            "Engine.AwardTickets(n, label)": "Adds n tickets, queues win banner.",
-            "Engine.AwardTokens(n, label)": "Adds/subtracts n soul tokens, queues banner.",
-            "Engine.GetTickets() → int": "Current ticket balance.",
-            "Engine.GetTokens() → int": "Current soul token balance.",
-            "Engine.GetStreak() → int": "Current streak counter.",
-        },
-        "win_banners": {
-            "display_duration": "3.5 seconds",
-            "fade_duration": "1 second (last second of display)",
-            "stacking": "Multiple simultaneous banners stack vertically",
-            "position": "Centered on screen at ~35% from top — gold header, white subtext (+N TICKETS)",
-        },
-    }
-
-
-# ── Attraction specs ──────────────────────────────────────────────────────────
-
-def build_attraction_specs() -> Dict[str, Any]:
-    """Return consolidated attraction geometry and placement constants."""
-    return {
-        "unit_scale": "1 engine unit = 1 meter",
-        "coordinate_system": {
-            "origin": "center of booth at floor level (local space)",
-            "axes": {"+X": "right", "+Y": "up", "+Z": "back", "opening": "-Z"},
-        },
-        "canonical_booth": {
-            "width_x": 9.0,
-            "height_y": 9.0,
-            "depth_z": 15.0,
-            "booth_side_x": 10.5,
-            "booth_spacing": 15.0,
-            "corridor_half_width": 6.0,
-            "button_zone_local": {
-                "x": 0.0,
-                "y": 1.7,
-                "z_expr": "-HD + 0.5 where HD = depth_z * 0.5",
-            },
-        },
-        "cabinet_envelope": {
-            "max_width": 7.0,
-            "max_height": 6.5,
-            "max_depth": 11.0,
-            "clearance_side": 0.5,
-            "clearance_rear": 0.5,
-        },
-        "placement": {
-            "station_spacing_z": 15.0,
-            "x_offset": "±10.5 from midway centerline",
-            "booths_should_touch_visually_but_not_intersect": True,
-        },
-        "gdd_modifier_classes": {
-            "core_physicals_4_1": ["Mass", "Volume", "Friction"],
-            "meta_navigational_4_2": ["Karma", "Luck", "Persuasion", "Heat"],
-            "tactile_4_3": ["Sleight of Hand", "Nerve"],
-        },
-    }
+from .midway_data_refs import (
+    build_api_references,
+    build_bridge_contract,
+    build_attraction_specs,
+)  # noqa: F401

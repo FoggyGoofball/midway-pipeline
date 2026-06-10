@@ -1,17 +1,17 @@
 """
-_pipeline_helpers.py — Facade module for the mesh consensus pipeline helpers.
+_pipeline_helpers.py  Facade module for the mesh consensus pipeline helpers.
 
 This module re-exports all public symbols from the three sub-modules:
-    _helpers_exec  — Base layer & LLM logic
-    _helpers_text  — Text parsing & formatting
-    _helpers_io    — File system & hashing
+    _helpers_exec   Base layer & LLM logic
+    _helpers_text   Text parsing & formatting
+    _helpers_io     File system & hashing
 
 All imports use relative syntax to prevent circular imports.
 """
 
 from __future__ import annotations
 
-# ── Re-export from _helpers_exec (Base Layer & LLM Logic) ─────────────────
+# -- Re-export from _helpers_exec (Base Layer & LLM Logic) -----------------
 from _helpers_exec import (
     PROJECT_ROOT,
     MAX_ITERATIONS,
@@ -33,7 +33,7 @@ from _helpers_exec import (
     compile_project,
 )
 
-# ── Re-export from _helpers_text (Text Parsing & Formatting) ──────────────
+# -- Re-export from _helpers_text (Text Parsing & Formatting) --------------
 from _helpers_text import (
     CHAT_PATTERNS,
     is_likely_chat,
@@ -42,7 +42,7 @@ from _helpers_text import (
     get_normalized_syntax,
 )
 
-# ── Re-export from _helpers_io (File System & Hashing) ───────────────────
+# -- Re-export from _helpers_io (File System & Hashing) -------------------
 from _helpers_io import (
     trigger_chime,
     _DOC_CACHE,
@@ -59,6 +59,7 @@ from _helpers_io import (
     _list_single_dir,
     handle_file_list,
     atomic_write_text,
+    sanitize_agent_file_output,
     _FILE_HASHES,
     compute_file_hash,
     save_initial_file_hashes_from_context,
@@ -66,7 +67,7 @@ from _helpers_io import (
     get_tracked_file_hashes,
 )
 
-# ── Re-export from domain_registry (shared dictionaries) ─────────────────
+# -- Re-export from domain_registry (shared dictionaries) -----------------
 from domain_registry import (
     ALL_DOMAINS,
     AGENT_ALIAS_MAP,
@@ -76,7 +77,7 @@ from domain_registry import (
     MESH_AGENT_SYSTEM_EXTENSION,
 )
 
-# ── Re-export from _prompts (system prompts) ────────────────────────────
+# -- Re-export from _prompts (system prompts) ----------------------------
 from _prompts import (
     DIRECTOR_SYSTEM,
     REVIEW_SYSTEM,
@@ -92,7 +93,7 @@ from _prompts import (
     REASONING_GATE_SYSTEM,
 )
 
-# ── Re-export from ollama_client (model constants) ──────────────────────
+# -- Re-export from ollama_client (model constants) ----------------------
 from ollama_client import (
     OLLAMA_HOST,
     MODEL,
@@ -107,10 +108,10 @@ from ollama_client import (
     call_ollama_streamed,
 )
 
-# ── Re-export from models ──────────────────────────────────────────────
+# -- Re-export from models ----------------------------------------------
 from models import Task, PipelineContext, SignalType, MeshSignal, ConsensusResult
 
-# ── Public API — explicit __all__ to keep external imports unbroken ───────
+# -- Public API  explicit __all__ to keep external imports unbroken -------
 __all__ = [
     # Config & globals
     "PROJECT_ROOT",

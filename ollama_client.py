@@ -1,6 +1,6 @@
 """
-Ollama HTTP client — synchronous streaming and non-streaming calls to
-the Ollama API for LLM inference. No async/await — purely synchronous.
+Ollama HTTP client  synchronous streaming and non-streaming calls to
+the Ollama API for LLM inference. No async/await  purely synchronous.
 
 Handles URL errors, JSON decode errors, and timeouts gracefully.
 Yields tokens as they arrive from the NDJSON stream.
@@ -25,9 +25,9 @@ from pathlib import Path
 _active_model = None
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  Directive D — Stream Resilience Helpers
-# ═══════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+#  Directive D  Stream Resilience Helpers
+# ===========================================================================
 
 _retry_counter: dict = {"attempt": 0, "temperature": 0.5}
 _stream_crashed: bool = False  # Directive D: flag set to True when socket drops
@@ -91,7 +91,7 @@ def _cooldown_and_retry(
     print(f"  [Retry] Attempting automatic retry for '{label}' (attempt {_retry_counter['attempt']})...")
     try:
         if messages is not None:
-            # ── Directive B: Stateful Retry — use mutated ActiveMessages array ──
+            # -- Directive B: Stateful Retry  use mutated ActiveMessages array --
             # When messages are provided (from paging.active_messages.to_payload()),
             # bypass call_ollama_streamed which would rebuild from raw system/user strings
             # and lose all mounted page state. Instead, stream directly with the preserved
@@ -150,7 +150,7 @@ def _stream_messages_payload(
 
     ctx_size = resolve_ctx_size(model)
 
-    # ── Phase 7: Sync paging controller's allocated_ctx with actual num_ctx ──
+    # -- Phase 7: Sync paging controller's allocated_ctx with actual num_ctx --
     # This is critical for retry paths: if the paging controller had a stale
     # allocated_ctx, PAGE_IN hard caps and resume payloads would use the wrong
     # context ceiling.
@@ -168,7 +168,7 @@ def _stream_messages_payload(
         "keep_alive": "0",
         "options": {
             "num_ctx": ctx_size,
-            "num_predict": MAX_TOKENS,   # Full generation window — no premature cutoffs
+            "num_predict": MAX_TOKENS,   # Full generation window  no premature cutoffs
             "use_mmap": True,
             "kv_cache_type": "q8_0",    # Halves KV memory vs f16 default
         },
@@ -244,43 +244,9 @@ def _stream_messages_payload(
 
 
 
-def unload_model(model_name: str) -> bool:
-    """Explicitly unload a model from VRAM by sending a blank chat request with keep_alive=0.
-
-    Also unregisters the model from the VRAM Budget Tracker so subsequent
-    admission checks reflect the freed capacity.
-
-    Args:
-        model_name: The model name to unload (e.g., 'qwen2.5-coder:7b').
-
-    Returns:
-        True if the request succeeded, False otherwise.
-    """
-    from vram_budget import unregister_model as _vram_unregister
-    payload = json.dumps({
-        "model": model_name,
-        "keep_alive": "0",
-        "messages": [{"role": "user", "content": ""}],
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        f"{OLLAMA_HOST}/api/chat",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            resp.read()  # consume response
-        print(f"  [VRAM Flush] Unloaded model '{model_name}' (keep_alive=0)")
-        # Also unregister from VRAM budget tracker
-        _vram_unregister(model_name)
-        return True
-    except Exception as e:
-        print(f"  [VRAM Flush] Failed to unload model '{model_name}': {e}")
-        return False
 
 
-# ── Streaming Callback Hook ────────────────────────────────────────────────
+# -- Streaming Callback Hook ------------------------------------------------
 # Set by pipeline_stream.py to receive tokens without monkey-patching.
 # Since pipeline.py uses `from ollama_client import call_ollama`, patching
 # pipeline.call_ollama is a dead patch (Python import binding creates a local
@@ -288,231 +254,57 @@ def unload_model(model_name: str) -> bool:
 # call_ollama or call_ollama_streamed are captured.
 _stream_callback = None
 
-# ── Configuration ──────────────────────────────────────────────────────────
-OLLAMA_HOST: str = "http://192.168.0.16:11434"
+# -- Config, constants, TPS watchdog and VramOverrunError live in ollama_config
+from ollama_config import (
+    OLLAMA_HOST, OLLAMA_TIMEOUT,
+    OLLAMA_NUM_CTX, OLLAMA_NUM_CTX_LARGE, OLLAMA_NUM_CTX_UPPER_MID, OLLAMA_NUM_CTX_MASSIVE,
+    CODER_MODEL, REVIEWER_MODEL, FALLBACK_REVIEWER_MODEL, PRE_SUMMARIZER_MODEL,
+    LIBRARIAN_MODEL, SYNTAX_GATE_MODEL, INTENT_CLASSIFIER_MODEL, CHAT_MODEL,
+    EXECUTION_MODEL, REASONING_MODEL, MODEL, DIRECTOR_MODEL,
+    MAX_TOKENS, _MODEL_CTX_PRECEDENCE, resolve_ctx_size,
+    _TPS_BASELINE, _TPS_WINDOW_SEC, _TPS_WINDOW_TOKENS, _TPS_MIN_STREAM_SEC,
+    _TpsWatchdog,
+)
+from ollama_config import VramOverrunError as _VramOverrunErrorBase
+# -- unload_model and is_fatal_ollama_error live in ollama_extras
+from ollama_extras import unload_model, is_fatal_ollama_error, _FATAL_SENTINELS  # noqa: F401
 
-# ── Model Names ──────────────────────────────────────────────────────────────
-CODER_MODEL: str = "qwen2.5-coder:7b"
-REVIEWER_MODEL: str = "phi3:14b"
-FALLBACK_REVIEWER_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
-PRE_SUMMARIZER_MODEL: str = "phi3.5:latest"  # 3.8B mini — compresses large context before phi3:14b review
-LIBRARIAN_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
-SYNTAX_GATE_MODEL: str = "qwen2.5-coder:1.5b"
-INTENT_CLASSIFIER_MODEL: str = "llama3.2:1b"
-CHAT_MODEL: str = CODER_MODEL
-EXECUTION_MODEL: str = CODER_MODEL
-REASONING_MODEL: str = REVIEWER_MODEL
-MODEL: str = EXECUTION_MODEL
-DIRECTOR_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
+# -- Subclass in this namespace so local `raise VramOverrunError` works
+class VramOverrunError(_VramOverrunErrorBase):  # type: ignore[misc]
+    pass
 
-# ── Timeouts & Budget ──────────────────────────────────────────────────────
-OLLAMA_TIMEOUT: int = 600
-# ── VRAM-Guarded Context Window Sizes ────────────────────────────────────
-# All values carefully tuned for 12GB unified memory (Steam Deck).
-# Calculation basis (q4_K_M weights + q8_0 KV cache):
-#   7B model:  ~4-5GB weights + ~2GB/16K ctx KV cache → ~6-7GB total at 24576
-#               ~4-5GB weights + ~4GB/32K ctx KV cache → ~8-9GB total at 32768
-#   9B model:  ~6-7GB weights + ~2GB/16K ctx KV cache → ~8-9GB total at 24576
-#   14B model: ~8-9GB weights + ~2GB/16K ctx KV cache → ~10-11GB total at 16384
-#   phi3.5:    ~9-10GB + ~2GB/16K ctx KV cache → ~11-12GB total at 16384
-#
-# Strategy: Large models (14B) get reduced context to save weight-room VRAM.
-#           Medium models (9B) get an in-between window for breathing room.
-# Context windows tuned for 12 GB unified memory (Steam Deck).
-# phi3:14b was 10.2 GB at 16K (97% budget) → now 8K → ~9.0 GB (86%).
-# Context window budgets — calibrated for q8_0 KV cache on 12 GB unified memory.
-# Verified VRAM headroom (weights + KV q8_0):
-#   7b  @32768: ~6.6 GB  (55%)   llama3.1:8b @32768: ~7.0 GB (58%)
-#   14b @16384: ~9.0 GB  (75%)   phi3.5      @16384: ~2.7 GB (23%)
-# The previous values (all 8192) caused the collapse guard to fire before
-# the model could emit PAGE_OUT, defeating the entire paging subsystem.
-OLLAMA_NUM_CTX: int = 32768         # Default: 7B/8B models — safe at q8_0 KV
-OLLAMA_NUM_CTX_LARGE: int = 16384   # 14B models — 9.0 GB at 16K, 75% of 12 GB budget
-OLLAMA_NUM_CTX_UPPER_MID: int = 16384  # 9B models — headroom confirmed
-OLLAMA_NUM_CTX_MASSIVE: int = 16384  # phi3.5 3.8B pre-summarizer — fits at 2.7 GB
-
-# ── Centralized Model-to-Context Resolution ──────────────────────────────
-# Single source of truth for all routing call sites. Eliminates 3 duplicate
-# if/elif/else blocks that can drift apart during refactoring.
-_MODEL_CTX_PRECEDENCE: list[tuple[str, int]] = [
-    # Ordered: most-specific match first, fallback last
-    ("phi3.5",     OLLAMA_NUM_CTX_MASSIVE),  # 16384 — 3.8B mini, ~2.7 GB total
-    ("phi-3.5",    OLLAMA_NUM_CTX_MASSIVE),  # 16384
-    ("phi-mini",   OLLAMA_NUM_CTX_MASSIVE),  # 16384
-    ("phi3:14b",   OLLAMA_NUM_CTX_LARGE),    # 16384 — ~9.0 GB at 16K (75% budget)
-    ("14b",        OLLAMA_NUM_CTX_LARGE),    # 16384
-    ("9b",         OLLAMA_NUM_CTX_UPPER_MID), # 16384
-    ("7b",         OLLAMA_NUM_CTX),          # 32768 — ~6.6 GB at 32K (55% budget)
-    ("8b",         OLLAMA_NUM_CTX),          # 32768 — ~7.0 GB at 32K (58% budget)
-    ("3b",         OLLAMA_NUM_CTX_MASSIVE),  # 16384 — phi-mini / small models
-]
-
-
-
-def resolve_ctx_size(model_name: str) -> int:
-    """Centralized model-to-context-window resolution.
-
-    Returns the safe num_ctx value for the given model name,
-    using the precedence table above. Falls back to OLLAMA_NUM_CTX (32768).
-    """
-
-    model_lower = model_name.lower()
-    for tag, ctx in _MODEL_CTX_PRECEDENCE:
-        if tag in model_lower:
-            return ctx
-    return OLLAMA_NUM_CTX
-
-MAX_TOKENS: int = 4096
-
-# ── TPS Watchdog — Token Speed Monitor ─────────────────────────────────────
-# Monitors streaming throughput and aborts with a diagnostic dump when
-# token speed drops below the safety floor, indicating VRAM overload.
-# Uses a rolling window of 5-second buckets to filter transient stalls
-# (page-in token detection / stream resume) from genuine VRAM degradation.
-
-_TPS_BASELINE: float = 2.0         # tok/s — below this = VRAM overload
-_TPS_WINDOW_SEC: float = 5.0       # rolling window length in seconds
-_TPS_WINDOW_TOKENS = 20            # minimum tokens in window to compute rate
-                                    # Increased from 3 to 20 to prevent false
-                                    # positives during model warm-up phase.
-                                    # First 20 tokens arrive slowly due to
-                                    # KV cache population; TPS recovers after.
-_TPS_MIN_STREAM_SEC: float = 15.0  # Minimum streaming time (seconds) before
-                                    # watchdog can fire. Prevents premature
-                                    # abort during model warm-up when the
-                                    # first 5-15s of streaming is slow.
-
-
-class _TpsWatchdog:
-    """Rolling-window token throughput monitor.
-
-    Tracks token arrival timestamps over a sliding window.  On every
-    token consumed, checks if the rolling throughput has dropped below
-    _TPS_BASELINE.  If so, prints a comprehensive diagnostic dump and
-    raises RuntimeError to abort the stream.
-    """
-
-    def __init__(self):
-        self._timestamps: list[float] = []
-        self._total_tokens = 0
-        self._first_token_time: float | None = None
-
-    def hit(self) -> None:
-        """Record one token arrival and check throughput."""
-        now = time.time()
-        self._timestamps.append(now)
-        if self._first_token_time is None:
-            self._first_token_time = now
-        self._total_tokens += 1
-
-        # Warm-up guard: don't fire the watchdog until at least
-        # _TPS_MIN_STREAM_SEC seconds have elapsed since the first token.
-        # Prevents false positives during model warm-up phase when the
-        # KV cache is still being populated (first ~15s of streaming).
-        if self._first_token_time is not None:
-            if now - self._first_token_time < _TPS_MIN_STREAM_SEC:
-                return
-
-        # Prune old entries outside the window
-        cutoff = now - _TPS_WINDOW_SEC
-        while self._timestamps and self._timestamps[0] < cutoff:
-            self._timestamps.pop(0)
-
-        if len(self._timestamps) < _TPS_WINDOW_TOKENS:
-            return  # not enough data yet
-
-        elapsed = self._timestamps[-1] - self._timestamps[0]
-        if elapsed <= 0.0:
-            return
-
-        tps = (len(self._timestamps) - 1) / elapsed
-        if tps < _TPS_BASELINE:
-            # ── Diagnostic dump ───────────────────────────────────────
-            elapsed_total = now - self._first_token_time if self._first_token_time else 0.0
-            avg_tps = self._total_tokens / elapsed_total if elapsed_total > 0 else 0.0
-            diag = (
-                f"\n{'='*60}\n"
-                f"  🚨 VRAM OVERRUN DETECTED — Token speed below {_TPS_BASELINE} tok/s\n"
-                f"  Rolling window: {tps:.2f} tok/s (last {_TPS_WINDOW_SEC}s)\n"
-                f"  Average speed:  {avg_tps:.2f} tok/s over {elapsed_total:.1f}s\n"
-                f"  Total tokens:   {self._total_tokens}\n"
-                f"  Window tokens:  {len(self._timestamps)}\n"
-                f"{'='*60}\n"
-            )
-            print(diag, flush=True)
-            # Re-raise with diagnostics appended
-            raise RuntimeError(diag)
-
-    def reset(self) -> None:
-        """Clear all timing state."""
-        self._timestamps.clear()
-        self._total_tokens = 0
-        self._first_token_time = None
-
-
-# ── Module-Level Watchdog Sentinel ─────────────────────────────────────────
-# Initialized by call_ollama_streamed before the first stream cycle.
-# Checked by the TPS Watchdog hit() call inside _run_stream_cycle.
-# Singleton pattern via module-level global allows recursive paging
-# resume cycles to share the same monitoring instance.
+# -- Module-level mutable VRAM state (global-declared inside streamer)
 _tps_watchdog: _TpsWatchdog | None = None
-
-# ── VRAM Overrun Abort Flag ───────────────────────────────────────────────
-# Set to True when TPS Watchdog fires. Checked by upstream callers
-# (execute_task, run_tasks) to trigger a hard pipeline abort with full
-# VRAM diagnostics dump. Reset per top-level call_ollama_streamed().
 _vram_overrun_abort: bool = False
 _vram_abort_diagnostics: str = ""
 
 
-class VramOverrunError(Exception):
-    """Raised when token speed drops below _TPS_BASELINE indicating VRAM overload.
-    
-    Intentionally NOT caught internally — propagates all the way up the call
-    chain to execute_task() which performs the hard abort.
-    """
-    pass
-
-
 def vram_overrun_abort() -> bool:
-    """Check if a VRAM overrun was detected in the most recent LLM call.
-    
-    Returns:
-        True if the TPS watchdog fired and a VRAM overrun was detected.
-    """
     return _vram_overrun_abort
 
 
 def get_vram_abort_diagnostics() -> str:
-    """Return the full VRAM diagnostics from the most recent overrun."""
     return _vram_abort_diagnostics
 
 
 def reset_vram_overrun_abort() -> None:
-    """Reset the VRAM overrun abort flag for a fresh pipeline run."""
     global _vram_overrun_abort, _vram_abort_diagnostics
     _vram_overrun_abort = False
     _vram_abort_diagnostics = ""
 
 
-# ── Paging Stateful Cache Bridge (Directive A: Key-Value State Cache) ─────
+# -- Paging Stateful Cache Bridge (Directive A)
 _last_paged_cache: Dict[str, str] = {}
 
 
 def get_last_paged_cache() -> Dict[str, str]:
-    """Return the paged_in_cache dict from the most recent streaming call.
-
-    Returns a dict mapping filenames to extracted text chunks.
-    Used by _helpers_exec.py to attach cached content to task objects
-    for Pro-Mode Inheritance across sub-agent boundaries.
-    """
     return dict(_last_paged_cache)
 
 
 def _evict_previous_model(model: str) -> None:
     """Evict the previously active model from VRAM if different from the current one.
 
-    One model at a time — always evicts the old model before loading the new one.
+    One model at a time  always evicts the old model before loading the new one.
     Uses keep_alive=0 to tell Ollama to unload immediately.
     VRAM Budget Tracker is called in log-only mode for telemetry.
     """
@@ -521,7 +313,7 @@ def _evict_previous_model(model: str) -> None:
     if _active_model and _active_model != model:
         _do_evict(_active_model)
 
-    # Log the new model load via VRAM Budget Tracker (advisory only — never blocks)
+    # Log the new model load via VRAM Budget Tracker (advisory only  never blocks)
     from vram_budget import register_model
     target_ctx = resolve_ctx_size(model)
     register_model(model, target_ctx)
@@ -560,8 +352,8 @@ def call_ollama_streamed(
     Handles errors by yielding an error message string and stopping.
 
     Payload features:
-    - keep_alive: "0" — model unloads instantly after each call to free VRAM.
-    - kv_cache_type: "q8_0" — halves KV cache memory vs the f16 Ollama default.
+    - keep_alive: "0"  model unloads instantly after each call to free VRAM.
+    - kv_cache_type: "q8_0"  halves KV cache memory vs the f16 Ollama default.
 
     Args:
         system: System prompt text.
@@ -579,7 +371,7 @@ def call_ollama_streamed(
     _evict_previous_model(use_model)
     ctx_size = resolve_ctx_size(use_model)
 
-    # ── Adaptive num_ctx: size KV cache to actual input, not always max ──
+    # -- Adaptive num_ctx: size KV cache to actual input, not always max --
     # Allocating the full 32K KV cache for a 3K-token prompt wastes VRAM
     # and adds seconds to the prefill phase on unified-memory hardware.
     # Strategy: estimate input tokens at 3 chars/token (code-heavy heuristic),
@@ -603,15 +395,15 @@ def call_ollama_streamed(
     print(f"{'='*60}")
     sys.stdout.flush()
 
-    # ── Directive D: Paging Protocol initialization ────────────────────────
+    # -- Directive D: Paging Protocol initialization ------------------------
     # Set up a PagingController to intercept <PAGE_IN> and <PAGE_OUT> tokens
     # mid-stream. This will gracefully pause the current stream, execute the
     # page operation, and auto-resume with a continuation prompt.
-    from paging_kernel import PagingController
+    from paging_controller import PagingController
     from offload_store import get_offload_store
     paging = PagingController(offload_store=get_offload_store())
     _page_resume_depth: int = 0  # Hard cap on recursive paging resumes
-    # ── Phase 7: Forward the active model's context allocation ──────────
+    # -- Phase 7: Forward the active model's context allocation ----------
     # Ensures the PagingController uses the correct context ceiling for
     # dynamic hard cap enforcement (handle_page_in) and resume payload
     # construction (build_resume_payload).
@@ -630,7 +422,7 @@ def call_ollama_streamed(
         "keep_alive": "0",
         "options": {
             "num_ctx": ctx_size,
-            "num_predict": MAX_TOKENS,   # Full generation window — no premature cutoffs
+            "num_predict": MAX_TOKENS,   # Full generation window  no premature cutoffs
             "use_mmap": True,
             "kv_cache_type": "q8_0",    # Halves KV memory vs f16 default
         },
@@ -648,6 +440,11 @@ def call_ollama_streamed(
         _ka = params.pop("keep_alive", None)
         if _ka is not None:
             payload["keep_alive"] = str(_ka)
+        # Strip num_ctx from callers' params — adaptive ctx at line 386 already
+        # sizes the KV cache to actual input + output budget.  Allowing callers
+        # (especially call_ollama_with_messages) to override num_ctx here negates
+        # that calculation and can waste up to 12K of KV cache.
+        params.pop("num_ctx", None)
         payload["options"].update(params)
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -657,7 +454,7 @@ def call_ollama_streamed(
         method="POST",
     )
 
-    # ── Helper: Single stream read cycle (extracted for page+resume) ───────
+    # -- Helper: Single stream read cycle (extracted for page+resume) -------
     def _run_stream_cycle(payload_override: Optional[dict] = None,
                           cycle_label: str = label) -> Generator[str, None, None]:
         """Execute one streaming cycle, yielding tokens.
@@ -688,7 +485,7 @@ def call_ollama_streamed(
                         print(f"\n  [Stream] Socket dropped during read. Triggering retry...",
                               file=sys.stderr)
                         sys.stderr.flush()
-                        # ── Directive B: Pass ActiveMessages state to retry ──
+                        # -- Directive B: Pass ActiveMessages state to retry --
                         # Send the mutated messages array so retry preserves all
                         # mounted page state instead of rebuilding from raw strings.
                         # Phase 7: Forward paging controller for allocated_ctx sync.
@@ -716,7 +513,7 @@ def call_ollama_streamed(
                                 if not token:
                                     continue
 
-                                # ── Directive D: Live Paging Detection ─────
+                                # -- Directive D: Live Paging Detection -----
                                 # Feed the token to the paging controller.
                                 # If it detects a complete <PAGE_IN> or
                                 # <PAGE_OUT> token, we need to:
@@ -753,7 +550,7 @@ def call_ollama_streamed(
                                             _target = page_info.get("target", "unknown")
                                             print(
                                                 f"  [Paging Kernel] ⛔ PAGE_IN failed for "
-                                                f"'{_target}' — skipping auto-resume to prevent "
+                                                f"'{_target}'  skipping auto-resume to prevent "
                                                 f"infinite continuation loop."
                                             )
                                             sys.stdout.flush()
@@ -778,7 +575,7 @@ def call_ollama_streamed(
                                     if _page_resume_depth > _MAX_RESUME:
                                         print(
                                             f"  [Paging Kernel] ⛔ Resume depth cap reached "
-                                            f"({_page_resume_depth}/{_MAX_RESUME}) — "
+                                            f"({_page_resume_depth}/{_MAX_RESUME})  "
                                             f"aborting further paging resumes."
                                         )
                                         sys.stdout.flush()
@@ -796,7 +593,7 @@ def call_ollama_streamed(
                                     )
                                     return
 
-                                # Normal token — print, callback, yield
+                                # Normal token  print, callback, yield
                                 print(token, end="")
                                 sys.stdout.flush()
                                 cb = _stream_callback
@@ -806,7 +603,7 @@ def call_ollama_streamed(
                                     except Exception:
                                         pass
 
-                                # ── TPS Watchdog: check every token ──────
+                                # -- TPS Watchdog: check every token ------
                                 # Located inside _run_stream_cycle so it
                                 # catches tokens from ALL cycles, including
                                 # recursive paging resume cycles.
@@ -829,12 +626,12 @@ def call_ollama_streamed(
                                         _active = _active_model or "none"
                                         vram_dump = (
                                             f"\n\n{'‼'*40}\n"
-                                            f"  🚨🚨 VRAM OVERRUN — HARD PIPELINE ABORT 🚨🚨\n"
+                                            f"  🚨🚨 VRAM OVERRUN  HARD PIPELINE ABORT 🚨🚨\n"
                                             f"  [{_now_s}] Active model: {_active}\n"
                                             f"  Current cycle: {cycle_label}\n"
                                             f"  Context window: {ctx_size} tokens\n"
                                             f"{diag}"
-                                            f"  🚨 Pipeline ABORTED — no further phases will execute.\n"
+                                            f"  🚨 Pipeline ABORTED  no further phases will execute.\n"
                                             f"  💡 Suggested actions:\n"
                                             f"    1. Check if a smaller model (e.g. qwen2.5-coder:7b) can be used\n"
                                             f"    2. Reduce context window with 'num_ctx' settings\n"
@@ -862,11 +659,11 @@ def call_ollama_streamed(
             print(msg)
             yield msg
         except VramOverrunError:
-            # VRAM overrun — DO NOT catch here. Propagate up to execute_task()
+            # VRAM overrun  DO NOT catch here. Propagate up to execute_task()
             # for a hard pipeline abort with full diagnostics.
             raise
         except urllib.error.URLError as e:
-            # Network timeout / server unreachable — retry up to 3 times with
+            # Network timeout / server unreachable  retry up to 3 times with
             # increasing backoff before giving up. Yielding the raw error string
             # would push it downstream as "code", corrupting every dependent task.
             _url_attempt = getattr(_run_stream_cycle, '_url_retry_count', 0) + 1
@@ -891,7 +688,7 @@ def call_ollama_streamed(
             print(msg)
             yield msg
 
-    # ── TPS Watchdog: Reset for top-level call ─────────────────────────────
+    # -- TPS Watchdog: Reset for top-level call -----------------------------
     # Reset the singleton watchdog so it starts fresh for each top-level
     # call_ollama_streamed invocation.  The watchdog lives inside
     # _run_stream_cycle (at the actual token yield point) to catch ALL
@@ -901,7 +698,7 @@ def call_ollama_streamed(
 
     yield from _run_stream_cycle()
 
-    # ── Directive A: Capture paged_in_cache for Pro-Mode Inheritance ──
+    # -- Directive A: Capture paged_in_cache for Pro-Mode Inheritance --
     global _last_paged_cache
     _last_paged_cache = dict(paging.paged_in_cache)
 
@@ -913,17 +710,17 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
     Delegates to call_ollama_streamed() generator, collecting all yielded
     tokens into a single string. Fully backward compatible.
 
-    ── Fix E: Hard floor guard ─────────────────────────────────────────
+    -- Fix E: Hard floor guard -----------------------------------------
     Always resolves num_ctx for the target model and enforces a hard
     character ceiling at 75% of the model's context budget on the user
     payload. This is critical for non-streamed calls from the Lead
     Producer (Scope Gate), Director, GDD Librarian, and pipeline signal
     handlers, which don't pass through call_ollama_with_messages().
 
-    ── Pre-Summarizer: phi3.5 compression pass ─────────────────────────
+    -- Pre-Summarizer: phi3.5 compression pass -------------------------
     When the target model is phi3:14b and the user payload exceeds 80% of
     phi3:14b's context window, phi3.5:latest (3.8B mini) runs first to
-    compress the payload — discarding irrelevant context intelligently —
+    compress the payload  discarding irrelevant context intelligently 
     before handing a compact summary to phi3:14b for deep reasoning.
 
     Args:
@@ -938,22 +735,21 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
     """
     use_model = model or MODEL
 
-    # ── Pre-Summarizer: compress large context before slow-prefill models ──
+    # -- Pre-Summarizer: compress large context before slow-prefill models --
     # Fires when the user payload alone would force a slow prefill pass that
     # causes a multi-minute TTFT on unified-memory hardware.
     # Threshold is model-aware:
-    #   phi3:14b  — 60% of its 16384 ctx → 14745 chars
-    #   llama3.1/qwen 7B/8B — hard cap at 24000 chars (~8000 tok at 3 ch/tok)
+    #   phi3:14b   60% of its 16384 ctx → 14745 chars
+    #   llama3.1/qwen 7B/8B  hard cap at 24000 chars (~8000 tok at 3 ch/tok)
     #     because prefill beyond ~8K tokens takes >2 min at 1 tok/s on iGPU.
     # Skipped for review/fix loops, conflict resolution, tribunal, and final
-    # approval (skip_pre_summarizer=True) — those must see the full context.
+    # approval (skip_pre_summarizer=True)  those must see the full context.
     _model_ctx_for_presumm = resolve_ctx_size(use_model)
     if "phi3:14b" in use_model:
         _presumm_char_threshold = int(OLLAMA_NUM_CTX_LARGE * 1.5 * 0.60)  # 14745 chars
     else:
-        # For 7B/8B models on iGPU: prefill > 8K tokens = visible hang.
-        # 24000 chars @ 3 ch/tok ≈ 8000 tokens — safe prefill boundary.
-        _presumm_char_threshold = 24000
+        # Scale to 75% of the model's actual resolved context size
+        _presumm_char_threshold = int(_model_ctx_for_presumm * 1.5 * 0.75)
     if not skip_pre_summarizer and len(user) > _presumm_char_threshold and (
         "phi3:14b" in use_model
         or "llama3.1" in use_model
@@ -963,7 +759,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
               f"Compressing with {PRE_SUMMARIZER_MODEL} first...")
         _presumm_ctx = resolve_ctx_size(PRE_SUMMARIZER_MODEL)
         # Adaptive num_ctx for the pre-summarizer: no need to allocate the full
-        # 16K KV cache when the input is large — size to input + output budget.
+        # 16K KV cache when the input is large  size to input + output budget.
         # _presumm_system is ~300 chars; approximate as 100 tokens for the budget calc.
         _presumm_system_tok_est = 100
         _presumm_input_est = max(512, int(len(user) / 3) + _presumm_system_tok_est)
@@ -983,7 +779,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
             "2. Discards preamble, redundant explanations, repeated boilerplate, and irrelevant background.\n"
             "3. Preserves any code blocks, function signatures, and error messages verbatim.\n"
             "4. Is written in clear, structured prose with bullet points where appropriate.\n"
-            "Output ONLY the compressed summary — no meta-commentary."
+            "Output ONLY the compressed summary  no meta-commentary."
         )
         _presumm_params = {"num_ctx": _presumm_ctx, "temperature": 0.1}
         _evict_previous_model(PRE_SUMMARIZER_MODEL)
@@ -1003,20 +799,28 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
         print(f"  [{_ts_end}] [END] [Pre-Summarizer ({label})] Compressed {_presumm_input_len} → {len(user)} chars.")
         sys.stdout.flush()
 
-    # ── Fix E: Context collapse guard on combined system+user payload ──
+    if "Integration Review" in label or "Review" in label:
+        try:
+            from pipeline import _CTX
+            if _CTX and getattr(_CTX, "pre_flight_errors", ""):
+                user += f"\n\n## ⚠ STATIC GUARD ERRORS ⚠\nThe following errors were detected by the static analyzer. You MUST issue a [VERDICT: FAIL] and cite these errors if they are not resolved in the code above:\n{_CTX.pre_flight_errors}\n"
+        except Exception:
+            pass
+
+    # -- Fix E: Context collapse guard on combined system+user payload --
     # Ollama returns HTTP 400 if system_tokens + user_tokens > num_ctx.
     # The guard must measure the total payload, not just user alone.
-    # Chars-to-tokens ratio: ~1.5 chars/tok (conservative estimate).
+    # Chars-to-tokens ratio: ~2.5 chars/tok (realistic for code).
     _e_model_ctx = resolve_ctx_size(use_model)
     _e_total_chars = len(system) + len(user)
-    _e_max_total_chars = int(_e_model_ctx * 1.5)          # 100% of ctx in chars
+    _e_max_total_chars = int(_e_model_ctx * 2.5)          # 100% of ctx in chars
     _e_reserved_system_chars = len(system)
     _e_max_user_chars = max(256, _e_max_total_chars - _e_reserved_system_chars)
     if len(user) > _e_max_user_chars:
         _e_overflow = user[_e_max_user_chars:]
         print(f"  [Context Collapse] combined payload was {_e_total_chars} chars "
-              f"({int(_e_total_chars/1.5)} tok estimated), "
-              f"model ctx={_e_model_ctx} tok — truncating user to {_e_max_user_chars} chars "
+              f"({int(_e_total_chars/2.5)} tok estimated), "
+              f"model ctx={_e_model_ctx} tok  truncating user to {_e_max_user_chars} chars "
               f"(system={len(system)} chars reserved)")
         # Preserve overflow in OffloadStore so the LLM can PAGE_IN if needed.
         _e_overflow_note = ""
@@ -1033,7 +837,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
                     body_lines=[_e_overflow],
                 )
                 _e_overflow_note = (
-                    f"\n[📄 Context overflow preserved — {len(_e_overflow)} chars offloaded. "
+                    f"\n[📄 Context overflow preserved  {len(_e_overflow)} chars offloaded. "
                     f"Use `<invoke_kernel><action>PAGE_IN</action>"
                     f"<target>{_e_oid}</target></invoke_kernel>` to retrieve.]\n"
                 )
@@ -1045,7 +849,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
             f"total_chars=\"{len(_e_overflow)}\" />"
         ) + _e_overflow_note
 
-    # ── Adaptive num_ctx for call_ollama (mirrors streamed path) ──────
+    # -- Adaptive num_ctx for call_ollama (mirrors streamed path) ------
     _e_input_chars = len(system) + len(user)
     _e_input_tokens_est = max(512, int(_e_input_chars / 3))
     _e_adaptive_ctx = min(
@@ -1076,25 +880,6 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
     return result
 
 
-# ── Fatal-error sentinel detection ────────────────────────────────────────────
-# All error paths in call_ollama_streamed yield a bracketed sentinel string
-# instead of raising.  Callers that loop (execute_task, preflight retry,
-# review/fix) MUST check this before treating output as valid code.
-_FATAL_SENTINELS = (
-    "[SYSTEM ERROR:",
-    "[FATAL]",
-    "[RETRY ERROR]",
-    "[OOM Fallback]",
-    "[ERROR]",
-)
-
-def is_fatal_ollama_error(text: str) -> bool:
-    """Return True if text is an ollama error sentinel, not real model output."""
-    if not text:
-        return False
-    stripped = text.strip()
-    return any(stripped.startswith(s) for s in _FATAL_SENTINELS)
-
 
 def call_ollama_with_messages(
     messages: List[Dict[str, str]],
@@ -1105,8 +890,8 @@ def call_ollama_with_messages(
     """Call Ollama with a pre-built messages array (stateless context).
 
     Directive A (Hard Context Firewall):
-    This function accepts an already-assembled messages list — typically
-    built as [system, user] — and passes it directly to Ollama's /api/chat
+    This function accepts an already-assembled messages list  typically
+    built as [system, user]  and passes it directly to Ollama's /api/chat
     endpoint. NO history survives between calls because each invocation
     receives only the messages explicitly provided.
 
@@ -1132,20 +917,32 @@ def call_ollama_with_messages(
         elif msg.get("role") == "user":
             user_text = msg.get("content", "")
 
-    # ── Fix B: Hard floor guard — mandatory collapse ────────────────
+    if "Integration Review" in label or "Review" in label:
+        try:
+            from pipeline import _CTX
+            if _CTX and getattr(_CTX, "pre_flight_errors", ""):
+                user_text += f"\n\n## ⚠ STATIC GUARD ERRORS ⚠\nThe following errors were detected by the static analyzer. You MUST issue a [VERDICT: FAIL] and cite these errors if they are not resolved in the code above:\n{_CTX.pre_flight_errors}\n"
+                # Update the message in the array
+                for msg in messages:
+                    if msg.get("role") == "user":
+                        msg["content"] = user_text
+        except Exception:
+            pass
+
+    # -- Fix B: Hard floor guard  mandatory collapse ----------------
     # Always resolve num_ctx for the target model and enforce a hard
     # character ceiling on the user payload. This prevents call sites
     # (like execute_task) from silently accumulating context past the
     # model's VRAM budget even when params are omitted.
     _model_ctx = resolve_ctx_size(model or MODEL)
-    # Estimate token ceiling: use 1.5 char/token (conservative for code)
-    _max_user_chars = int(_model_ctx * 1.5 * 0.75)  # 75% of context for user content
+    # Estimate token ceiling: use 2.5 char/token (realistic for code)
+    _max_user_chars = int(_model_ctx * 2.5 * 0.85)  # 85% of context for user content
     if len(user_text) > _max_user_chars:
         _b_overflow = user_text[_max_user_chars:]
         print(f"  [Context Collapse] user_text was {len(user_text)} chars "
-              f"({int(len(user_text)/1.5)} tok estimated), "
-              f"model ctx={_model_ctx} tok — truncating to {_max_user_chars} chars "
-              f"({int(_model_ctx*0.75)} tok)")
+              f"({int(len(user_text)/2.5)} tok estimated), "
+              f"model ctx={_model_ctx} tok  truncating to {_max_user_chars} chars "
+              f"({int(_model_ctx*0.85)} tok)")
         # Preserve overflow in OffloadStore so the LLM can PAGE_IN if needed.
         _b_overflow_note = ""
         _b_oid = ""  # initialise before try so the VRAM_STUB f-string is always valid
@@ -1161,7 +958,7 @@ def call_ollama_with_messages(
                     body_lines=[_b_overflow],
                 )
                 _b_overflow_note = (
-                    f"\n[📄 Context overflow preserved — {len(_b_overflow)} chars offloaded. "
+                    f"\n[📄 Context overflow preserved  {len(_b_overflow)} chars offloaded. "
                     f"Use `<invoke_kernel><action>PAGE_IN</action>"
                     f"<target>{_b_oid}</target></invoke_kernel>` to retrieve.]\n"
                 )

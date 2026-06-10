@@ -1,5 +1,5 @@
 """
-mesh_finalize.py — Facade for Phases 5-8 (Conflict Resolution, Review,
+mesh_finalize.py  Facade for Phases 5-8 (Conflict Resolution, Review,
                      Consensus, Final Approval)
 ======================================================================
 Delegates to three sub-modules:
@@ -28,6 +28,9 @@ from _domain_sandbox import reject_cross_domain_output
 from _finalize_conflicts import _run_conflict_resolution
 from _finalize_review import _run_review_fix_loop
 from _finalize_preflight import _run_preflight_checks
+from _build_skeleton import ensure_skeleton, inject_skeleton, skeleton_exists
+from _post_process_lua import post_process_ctx, post_process_lua
+
 from runtime_sim import run_phantom_api_final_pass
 from _helpers_io import enable_staging, disable_staging, commit_staging, is_staging_active
 from pipeline import (
@@ -46,9 +49,9 @@ from pipeline import (
 __all__ = ["finalize_mesh"]
 
 
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 #  Adversarial TDD: post-integration test runner
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 
 def _run_tdd_tests(ctx: PipelineContext) -> None:
     """Execute all adversarial TDD test files that were generated during pro-mode.
@@ -70,7 +73,7 @@ def _run_tdd_tests(ctx: PipelineContext) -> None:
         return
 
     print(f"\n{'='*60}")
-    print(f"  ADVERSARIAL TDD — Post-Integration Test Run")
+    print(f"  ADVERSARIAL TDD  Post-Integration Test Run")
     print(f"{'='*60}")
 
     results_summary: list[str] = ["## Adversarial TDD Test Results (post-integration)\n"]
@@ -117,47 +120,71 @@ def _run_tdd_tests(ctx: PipelineContext) -> None:
             results_summary.append(f"- **{task.task_id}**: TIMEOUT")
             all_passed = False
         except FileNotFoundError:
-            msg = f"  [TDD] {task.task_id}: runner not found — skipped"
+            msg = f"  [TDD] {task.task_id}: runner not found  skipped"
             print(msg)
             results_summary.append(f"- **{task.task_id}**: RUNNER NOT FOUND (skipped)")
 
-    overall = "ALL PASSED ✓" if all_passed else "SOME FAILURES ✗ — review fix cycle recommended"
+    overall = "ALL PASSED ✓" if all_passed else "SOME FAILURES ✗  review fix cycle recommended"
     print(f"\n  [TDD Summary] {overall}")
     results_summary.append(f"\n**Overall:** {overall}")
     ctx.output_parts.append("\n".join(results_summary))
 
 
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 #  Public Entry Points
-# ──────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
 
 def finalize_mesh(ctx: PipelineContext) -> PipelineContext:
     """Complete Phases 5-8 finalization pipeline.
 
-    Equivalent to run_code_merge() — delegates to sub-modules for
+    Equivalent to run_code_merge()  delegates to sub-modules for
     conflict resolution, review/fix loop, consensus, and post-processing.
     """
     return run_code_merge(ctx)
 
 
 def run_code_merge(ctx: PipelineContext) -> PipelineContext:
-    """Phases 5-8: Conflict resolution, pre-flight negative intent validation,
-    integration review & fix loop, observability pass, consensus gate, final approval,
-    and TagSuggester post-processing.
+    """Phases 5-8: Stateful validation, review/fix loop, consensus, final approval.
 
-    Returns updated ctx with final_output set to the pipeline result string.
+    SHARED-FILE MERGE (Phase 5) has been ABOLISHED.
+    Real-time SEARCH/REPLACE application now occurs in _helpers_exec.py immediately
+    after each task completes (Step 4 of the Skeleton → Search/Replace flow).
+
+    The pipeline flow is:
+      1. Pre-flight checks on the real-time-patched files
+      2. Enable staging (catches any late writes from review/fix cycles)
+      3. Integration review & fix loop
+      4. Observability pass
+      5. Phantom API gate
+      6. Consensus gate & final approval
+      7. TagSuggester post-processing
     """
-    ctx = _run_conflict_resolution(ctx)
-    ctx = _run_preflight_checks(ctx)
+    # -- Phase 5: Conflict Resolution is ABOLISHED -------------------------
+    # Real-time SEARCH/REPLACE application in _helpers_exec.py applies patches
+    # atomically after each task, so there is nothing to merge at this stage.
+    # _run_conflict_resolution is called as a no-op placeholder that logs
+    # "merge skipped (real-time patch mode)" and returns ctx unchanged.
 
-    # ── Phase IV: Enable staging workspace before review/fix loop ──────
+    ctx = _run_conflict_resolution(ctx)
+
+    # Preflight checks are called inside _run_review_fix_loop — not here.
+    # Duplicate invocation causes every guard pattern to fire twice.
+
+    # -- Phase IV: Enable staging workspace before review/fix loop ------
     # All atomic_write_text calls during review and fix cycles will be
     # redirected to .staging_workspace/, protecting the native tree.
     enable_staging(ctx.project_root)
-    print(f"  [Staging FS] 🛡 Virtual staging activated — native source tree protected")
-                
+    print(f"  [Staging FS] 🛡 Virtual staging activated  native source tree protected")
+
     ctx = _run_review_fix_loop(ctx)
+
+    # -- Phase B: Deterministic Post-Processor -----------------------------
+    # Runs after the review-fix loop but before consensus/observability.
+    # Sanitizes structural issues that the LLM fix cycle introduced.
+    ctx = post_process_ctx(ctx)
+
     ctx = _run_observability_pass(ctx)
+
     ctx = _run_phantom_api_gate(ctx)
     ctx = _run_consensus_and_finalization(ctx)
     ctx = _run_tagsuggester_post(ctx)
@@ -166,230 +193,16 @@ def run_code_merge(ctx: PipelineContext) -> PipelineContext:
     return ctx
 
 
-# ── Phase 6b: Observability Instrumentation Pass ──────────────────────
 
-def _run_observability_pass(ctx: PipelineContext) -> PipelineContext:
-    """Phase 6b: Independent Observability Instrumentation Pass.
-    
-    Processes reviewed code blocks to inject mandatory logging. Enforces
-    canonical file-level sandboxing using the original task's domain key
-    to physically prevent cross-language hallucinations.
-    """
-    if ctx.review_verdict != "PASS":
-        return ctx  # Skip logging injection if core logic failed review
+from mesh_finalize_obs import (
+    _run_observability_pass,
+    _run_phantom_api_gate,
+)  # noqa: F401
 
-    print(f"\n{'='*70}")
-    print(f"  Phase 6b: Independent Observability Pass")
-    print(f"{'='*70}")
-    ctx.output_parts.append("\n## Phase 6b: Independent Observability Pass\n")
-
-    obs_system = get_agent_system("OBSERVABILITY")
-
-    for tid, current_code in list(ctx.all_results_dict.items()):
-        task_obj = ctx.task_map.get(tid)
-        if not task_obj:
-            continue
-
-        original_domain_key = resolve_agent_name(task_obj.agent)
-        
-        # Skip read-only domains
-        if original_domain_key in ("DOC", "CONF", "TRIBUNAL", "LIBRARIAN", "REVIEWER", "DIRECTOR"):
-            continue
-
-        domain_name = ALL_DOMAINS.get(original_domain_key, {}).get("name", original_domain_key)
-        print(f"  [Observability] Instrumenting {domain_name} task ({tid})...")
-
-        obs_input = (
-            f"## TARGET DOMAIN: {original_domain_key}\n\n"
-            f"Review the following working code block. It has passed core review but lacks complete logging.\n"
-            f"Inject mandatory function entry and state logging strictly native to the {original_domain_key} domain.\n"
-            f"Do NOT alter existing core logic.\n\n"
-            f"```\n{current_code}\n```"
-        )
-
-        from pipeline import EXECUTION_MODEL as _execution_model
-        raw_obs_output = call_ollama(
-            obs_system, 
-            obs_input, 
-            f"Observability Pass ({tid})", 
-            _execution_model
-        )
-
-        # DIRECTIVE A: Canonical File-Level Sandboxing Enforcement
-        # Validate output against the original domain (e.g., 'Lua') rather than 'OBSERVABILITY'
-        is_clean, safe_output = reject_cross_domain_output(
-            domain_key=original_domain_key,
-            output_text=raw_obs_output,
-            persona_name=f"Observability Auditor targeting {original_domain_key}"
-        )
-
-        # Anti-Contamination Intercept
-        if any(marker in safe_output for marker in ["<<<<<<< SEARCH", "======= ", ">>>>>>> REPLACE"]):
-            print(f"  [Observability] ⛔ Raw diff marker contamination detected for {tid}. Discarding corrupt output.")
-            is_clean = False
-
-        if not is_clean:
-            print(f"  [Observability] ⛔ Language drift or cross-extension write detected for {tid}. Discarding logs and falling back to safe un-instrumented code.")
-            ctx.output_parts.append(f"### Observability Pass ({tid}) — REJECTED (Language Drift)\nFallback to un-instrumented working code retained.\n")
-            continue
-
-        # FM4: Re-run phantom API guard on the instrumented output before
-        # committing.  The observability model can silently introduce new
-        # phantom calls (e.g. MidwayPhysics.log, Engine.SomeNewThing) that
-        # would otherwise bypass all static guards.
-        _approved_lua_obs = getattr(ctx, '_bridge_exclusion_set', set())
-        _domain_key_obs = resolve_agent_name(task_obj.agent) if task_obj else ""
-        if _domain_key_obs.upper() == "LUA":
-            import re as _re_obs
-            # sol.log_message and MidwayPhysics.log_message are NOT registered in the
-            # Lua bridge (MidwayPhysics.cpp exposes no logging function).  The only safe
-            # logging primitive in Lua is the built-in print().
-            # Full approved API set verified against engine_lua_bridge_contract.md.
-            # The bridge contract dict uses slash-delimited compound keys
-            # (e.g. "SpawnStaticBox/Sphere/Capsule/Cylinder/Mesh") so the
-            # dynamic _bridge_exclusion_set only captures the first variant of
-            # each group.  This set is the authoritative supplement that covers
-            # every variant so the observability guard never false-positive rejects
-            # instrumented code that uses a valid but non-first spawn variant.
-            _always_ok_obs = {
-                # Economy
-                "engine.awardtickets", "engine.awardtokens",
-                "engine.gettickets", "engine.gettokens", "engine.getstreak",
-                # Physics lifecycle
-                "midwayphysics.onstep", "midwayphysics.destroybody",
-                # Static spawn variants
-                "midwayphysics.spawnstaticbox", "midwayphysics.spawnstaticsphere",
-                "midwayphysics.spawnstaticcapsule", "midwayphysics.spawnstaticcylinder",
-                "midwayphysics.spawnstaticmesh",
-                "midwayphysics.spawnstaticboxr", "midwayphysics.spawnstaticspherer",
-                "midwayphysics.spawnstaticcapsuler", "midwayphysics.spawnstaticcylinderr",
-                # Kinematic spawn variants
-                "midwayphysics.spawnkinematicbox", "midwayphysics.spawnkinematicsphere",
-                "midwayphysics.spawnkinematiccapsule", "midwayphysics.spawnkinematiccylinder",
-                "midwayphysics.spawnkinematicboxr",
-                # Dynamic spawn variants
-                "midwayphysics.spawndynamicbox", "midwayphysics.spawndynamicsphere",
-                "midwayphysics.spawndynamiccapsule", "midwayphysics.spawndynamiccylinder",
-                "midwayphysics.spawndynamicmesh",
-                "midwayphysics.spawndynamicboxr", "midwayphysics.spawndynamicspherer",
-                "midwayphysics.spawndynamiccapsuler", "midwayphysics.spawndynamiccylinderr",
-                # Sensor spawn variants
-                "midwayphysics.spawnsensorbox", "midwayphysics.spawnSensorsphere",
-                # Queries / velocity / impulse / movement
-                "midwayphysics.movekinematic", "midwayphysics.getposition",
-                "midwayphysics.getvelocity", "midwayphysics.getrotation",
-                "midwayphysics.isactive", "midwayphysics.issensortriggered",
-                "midwayphysics.setlinearvelocity", "midwayphysics.addlinearvelocity",
-                "midwayphysics.applyimpulse", "midwayphysics.applyangularimpulse",
-                # Per-body property overrides
-                "midwayphysics.setfriction", "midwayphysics.setrestitution",
-                "midwayphysics.setgravityfactor", "midwayphysics.setmass",
-                "midwayphysics.setlineardamping", "midwayphysics.setangulardamping",
-                # Object pools
-                "midwayphysics.createpool", "midwayphysics.poolacquire",
-                "midwayphysics.poolreturn", "midwayphysics.poolcullbelow",
-                "midwayphysics.poolfree", "midwayphysics.pooltotal",
-                # Lua stdlib
-                "table.insert", "table.remove", "table.concat", "table.sort",
-                "math.floor", "math.ceil", "math.abs", "math.max", "math.min",
-                "math.sqrt", "math.random", "string.format", "string.len",
-                "string.sub", "string.find", "string.gsub",
-                "tostring", "tonumber", "ipairs", "pairs", "print",
-            }
-            # Explicit deny list: these look plausible but have no bridge registration.
-            _phantom_deny_obs = {"sol.log_message", "midwayphysics.log_message", "sol.log", "midwayphysics.log"}
-            _approved_obs = _approved_lua_obs | _always_ok_obs
-            _phantom_obs = [
-                _m.group(1)
-                for _m in _re_obs.finditer(r'\b([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*\(', safe_output)
-                if _m.group(1).lower() in _phantom_deny_obs
-                or (
-                    _m.group(1).lower() not in _approved_obs
-                    and _m.group(1).lower().split(".")[0] not in (
-                        "math", "string", "table", "io", "os", "coroutine", "package", "debug", "utf8"
-                    )
-                )
-            ]
-            if _phantom_obs:
-                print(f"  [Observability] ⛔ Phantom API(s) introduced by instrumentation for {tid}: "
-                      + ", ".join(_phantom_obs[:5])
-                      + " — discarding instrumented output, retaining prior code.")
-                ctx.output_parts.append(
-                    f"### Observability Pass ({tid}) — REJECTED (Phantom APIs introduced)\n"
-                    f"Discarded: {', '.join(_phantom_obs[:5])}. Un-instrumented code retained.\n"
-                )
-                continue
-
-        # Commit instrumented code
-        ctx.all_results_dict[tid] = safe_output
-        
-        # Synchronous array update: keep all_results list in sync with all_results_dict
-        _found = False
-        for i, entry in enumerate(ctx.all_results):
-            if entry.get("task_id") == tid:
-                ctx.all_results[i] = {"task_id": tid, "output": safe_output}
-                _found = True
-                break
-        if not _found:
-            ctx.all_results.append({"task_id": tid, "output": safe_output})
-        
-        ctx.output_parts.append(f"### Observability Pass ({tid})\n{safe_output}\n")
-
-        
-        # Synchronous Index Re-hydration: update the active_code_index entry
-        # with the newly instrumented safe_output text.
-        if f"### [{tid}]" in ctx.active_code_index:
-            start_marker = f"### [{tid}]"
-            end_marker = "\n### ["
-            start_idx = ctx.active_code_index.find(start_marker)
-            if start_idx != -1:
-                end_idx = ctx.active_code_index.find(end_marker, start_idx + len(start_marker))
-                if end_idx == -1:
-                    end_idx = len(ctx.active_code_index)
-                replacement_block = start_marker + "\n```\n" + safe_output + "\n```"
-                ctx.active_code_index = (
-                    ctx.active_code_index[:start_idx]
-                    + replacement_block
-                    + ctx.active_code_index[end_idx:]
-                )
-
-    print("  [Observability] ✓ Instrumentation complete.")
-    return ctx
-
-
-# ── Phase 6c: Final Phantom-API Gate ─────────────────────────────────
-
-def _run_phantom_api_gate(ctx: PipelineContext) -> PipelineContext:
-    """Phase 6c: Deterministic phantom-API and economy/modifier gate.
-
-    Runs AFTER observability so it catches any phantom calls introduced
-    by instrumentation.  Results are stored on ctx.phantom_pass_errors
-    and surfaced in the consensus gate so approval is physically blocked
-    on any violation.
-    """
-    print(f"\n{'='*70}")
-    print(f"  Phase 6c: Phantom API Final Gate")
-    print(f"{'='*70}")
-    ctx.output_parts.append("\n## Phase 6c: Phantom API Final Gate\n")
-
-    phantom_errors = run_phantom_api_final_pass(ctx)
-
-    if phantom_errors:
-        ctx.output_parts.append("### ❌ Phantom API violations found\n")
-        for err in phantom_errors:
-            ctx.output_parts.append(f"- {err}\n")
-            print(f"  [PhantomAPIGate] ❌ {err}")
-    else:
-        ctx.output_parts.append("### ✅ Phantom API gate — clean\n")
-        print("  [PhantomAPIGate] ✅ All outputs pass the phantom-API gate.")
-
-    return ctx
-
-
-# ── Phase 7-8: Consensus Gate, Final Approval, Failure Report ────────
+# -- Phase 7-8: Consensus Gate, Final Approval, Failure Report --------
 
 def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
-    # ── Phase 7: Consensus Gate ───────────────────────────────────────────
+    # -- Phase 7: Consensus Gate -------------------------------------------
     print(f"\n{'='*70}")
     print(f"  Phase 7: Consensus Gate")
     print(f"{'='*70}")
@@ -427,7 +240,7 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
         status = "✅" if passed else "❌"
         ctx.output_parts.append(f"- {status} {check}\n")
 
-    # ── Phase 8: Final Approval or Failure Report ─────────────────────────
+    # -- Phase 8: Final Approval or Failure Report -------------------------
     if ctx.review_verdict == "BLOCKED":
         _handle_blocked(ctx)
     elif ctx.all_checks_pass:
@@ -435,7 +248,7 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
     else:
         _handle_failure(ctx)
 
-    # ── Blueprint Step Chaining ───────────────────────────────────────────
+    # -- Blueprint Step Chaining -------------------------------------------
     if ctx.all_checks_pass:
         blueprint_path = ctx.project_root / "docs" / "project_blueprint.md"
         if blueprint_path.is_file():
@@ -446,7 +259,7 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
                     next_step = next_match.group(1)
                     ctx.output_parts.append(
                         f"\n### Next Blueprint Step\n"
-                        f"**{next_step}** — run with:\n"
+                        f"**{next_step}**  run with:\n"
                         f"`python pipeline.py \"{next_step}\"`\n"
                     )
                 else:
@@ -457,7 +270,7 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
             except Exception:
                 pass
 
-    # ── Session Timeline Log ─────────────────────────────────────────
+    # -- Session Timeline Log -----------------------------------------
     agent_list = [
         ALL_DOMAINS.get(resolve_agent_name(t.agent), {}).get("name", t.agent)
         for t in ctx.task_map.values() if t.completed
@@ -476,11 +289,11 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
         final_output=ctx.final_output,
     )
 
-    # ── Timeline Archiver: [FLUSH] Signal Detection (Task 11) ────────────
+    # -- Timeline Archiver: [FLUSH] Signal Detection (Task 11) ------------
     _handle_flush_signal(ctx)
 
     print(f"\n{'='*70}")
-    print(f"  Pipeline Complete — {'APPROVED' if ctx.all_checks_pass else ('SUSPENDED' if ctx.review_verdict == 'BLOCKED' else 'FAILED')}")
+    print(f"  Pipeline Complete  {'APPROVED' if ctx.all_checks_pass else ('SUSPENDED' if ctx.review_verdict == 'BLOCKED' else 'FAILED')}")
     print(f"{'='*70}")
 
     return ctx
@@ -488,11 +301,11 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
 
 def _handle_blocked(ctx: PipelineContext) -> None:
     print(f"\n{'='*70}")
-    print(f"  ⛔ CIRCUIT BREAKER TRIPPED — Suspending Pipeline")
+    print(f"  ⛔ CIRCUIT BREAKER TRIPPED  Suspending Pipeline")
     print(f"{'='*70}")
     ctx.output_parts.append("\n## ⛔ Pipeline Suspended (Circuit Breaker)\n")
 
-    # ── Phase IV: Disable staging on blocked — keep staged files for inspection ──
+    # -- Phase IV: Disable staging on blocked  keep staged files for inspection --
     if is_staging_active():
         print(f"  [Staging FS] ⏹ Staging workspace preserved at .staging_workspace/ for inspection")
         disable_staging()
@@ -536,7 +349,7 @@ def _handle_approved(ctx: PipelineContext) -> None:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## Phase 8: Final Approval\n")
 
-    # ── Collect staged files BEFORE committing so we can list them ────
+    # -- Collect staged files BEFORE committing so we can list them ----
     _staged_files: list[str] = []
     if is_staging_active():
         from _helpers_io import _STAGING_DIR, PROJECT_ROOT as _IO_ROOT
@@ -562,7 +375,7 @@ def _handle_approved(ctx: PipelineContext) -> None:
     for _rel_p, _mkey in list(_merged_reg_fa.items()):
         _merged_content = ctx.all_results_dict.get(_mkey, "")
         if _merged_content:
-            _snip = _merged_content[:_FA_CODE_BUDGET] + ("…[truncated]" if len(_merged_content) > _FA_CODE_BUDGET else "")
+            _snip = _merged_content[:_FA_CODE_BUDGET] + ("[truncated]" if len(_merged_content) > _FA_CODE_BUDGET else "")
             _fa_code_blocks.append(f"### [MERGED FILE: {_rel_p}]\n{_snip}")
     # Then non-merged tasks (skip task_ids that have a merged counterpart)
     _merged_tids: set = set()
@@ -578,7 +391,7 @@ def _handle_approved(ctx: PipelineContext) -> None:
             break
         _tobj = ctx.task_map.get(_tid)
         _dom = (_tobj.agent if _tobj and getattr(_tobj, 'agent', None) else "?")
-        _snip = _out[:_FA_CODE_BUDGET] + ("…[truncated]" if len(_out) > _FA_CODE_BUDGET else "")
+        _snip = _out[:_FA_CODE_BUDGET] + ("[truncated]" if len(_out) > _FA_CODE_BUDGET else "")
         _fa_code_blocks.append(f"### [{_tid}] [{_dom}]\n{_snip}")
         _remaining_slots -= 1
     _fa_inline_code = "\n\n".join(_fa_code_blocks)
@@ -639,7 +452,7 @@ def _handle_approved(ctx: PipelineContext) -> None:
                 CHECKPOINT_DIR / f"{ctx.checkpoint_id}.archived.json"
             )
 
-    # ── Blueprint Coverage Summary ─────────────────────────────────
+    # -- Blueprint Coverage Summary ---------------------------------
     _bp_done: list[str] = []
     _bp_pending: list[str] = []
     _bp_path = (ctx.project_root / "docs" / "project_blueprint.md") if ctx.project_root else None
@@ -656,43 +469,43 @@ def _handle_approved(ctx: PipelineContext) -> None:
         except Exception:
             pass
 
-    # ── User-Gated Integration Prompt ─────────────────────────────
+    # -- User-Gated Integration Prompt -----------------------------
     print("\n" + "=" * 50)
     print("  INTEGRATION GATE")
     print("=" * 50)
     print()
-    print("  ┌─ WHAT IS THE INTEGRATION GATE? ───────────────────────────────────┐")
-    print("  │ The pipeline finished successfully and the new code is sitting in │")
-    print("  │ a safe holding area (.staging_workspace/) — it has NOT touched    │")
-    print("  │ your real project files yet.                                      │")
-    print("  │                                                                   │")
-    print("  │ Answering YES copies every staged file into your actual project.  │")
-    print("  │ Answering NO leaves the files safely in the staging folder so you │")
-    print("  │ can inspect or copy them manually whenever you are ready.         │")
-    print("  └───────────────────────────────────────────────────────────────────┘")
+    print("  +- WHAT IS THE INTEGRATION GATE? -----------------------------------+")
+    print("  | The pipeline finished successfully and the new code is sitting in |")
+    print("  | a safe holding area (.staging_workspace/)  it has NOT touched    |")
+    print("  | your real project files yet.                                      |")
+    print("  |                                                                   |")
+    print("  | Answering YES copies every staged file into your actual project.  |")
+    print("  | Answering NO leaves the files safely in the staging folder so you |")
+    print("  | can inspect or copy them manually whenever you are ready.         |")
+    print("  +-------------------------------------------------------------------+")
     if _staged_files:
         print("  The following files were generated and are staged for integration:")
         for _f in _staged_files:
-            print(f"    • {_f}")
+            print(f"     {_f}")
     else:
-        print("  (No staged files detected — generated code was written directly.)")
+        print("  (No staged files detected  generated code was written directly.)")
 
     # Blueprint coverage report
     _bp_total = len(_bp_done) + len(_bp_pending)
     if _bp_total > 0:
         print()
-        print(f"  ┌─ BLUEPRINT COVERAGE ({'⚠ INCOMPLETE' if _bp_pending else '✅ COMPLETE'}) ─────────────────────────────────────┐")
-        print(f"  │  Tasks completed this session : {len(_bp_done)}/{_bp_total}")
-        print(f"  │  Tasks remaining in blueprint : {len(_bp_pending)}")
+        print(f"  +- BLUEPRINT COVERAGE ({'⚠ INCOMPLETE' if _bp_pending else '✅ COMPLETE'}) -------------------------------------+")
+        print(f"  |  Tasks completed this session : {len(_bp_done)}/{_bp_total}")
+        print(f"  |  Tasks remaining in blueprint : {len(_bp_pending)}")
         if _bp_pending:
-            print(f"  │")
-            print(f"  │  Remaining tasks (run each as a separate pipeline prompt):")
+            print(f"  |")
+            print(f"  |  Remaining tasks (run each as a separate pipeline prompt):")
             for _i, _pt in enumerate(_bp_pending[:10], 1):
-                _short = _pt[:72] + "…" if len(_pt) > 72 else _pt
-                print(f"  │    {_i:2}. {_short}")
+                _short = _pt[:72] + "" if len(_pt) > 72 else _pt
+                print(f"  |    {_i:2}. {_short}")
             if len(_bp_pending) > 10:
-                print(f"  │    … and {len(_bp_pending) - 10} more (see docs/project_blueprint.md)")
-        print(f"  └────────────────────────────────────────────────────────────────────┘")
+                print(f"  |     and {len(_bp_pending) - 10} more (see docs/project_blueprint.md)")
+        print(f"  +--------------------------------------------------------------------+")
     print()
     _integrate = input(
         "  Integrate the new code into the project? (y/N): "
@@ -703,30 +516,30 @@ def _handle_approved(ctx: PipelineContext) -> None:
             print(f"  [Staging FS] 📦 Committed {committed} staged files to native tree")
             disable_staging()
         else:
-            print("  [Integration] ⚠ Staging not active — files were already written directly.")
+            print("  [Integration] ⚠ Staging not active  files were already written directly.")
         print("  [Integration] ✓ Code integrated into project.")
-        # ── Post-integration: run adversarial TDD tests ───────────────
+        # -- Post-integration: run adversarial TDD tests ---------------
         _run_tdd_tests(ctx)
     else:
         if is_staging_active():
-            print("  [Staging FS] ⏸ Staged files preserved at .staging_workspace/ — integration skipped.")
+            print("  [Staging FS] ⏸ Staged files preserved at .staging_workspace/  integration skipped.")
             disable_staging()
         print("  [Integration] ⏭ Skipped (user declined)")
 
-    # ── User-Gated Ledger Save (Task 10) ──────────────────────────
+    # -- User-Gated Ledger Save (Task 10) --------------------------
     print("\n" + "=" * 50)
     print("  MEMORY ARCHIVE GATE")
     print("=" * 50)
     print()
-    print("  ┌─ WHAT IS THE MEMORY ARCHIVE GATE? ────────────────────────────────┐")
-    print("  │ The pipeline keeps a long-term memory of successful runs so       │")
-    print("  │ future sessions can reference how similar features were built.    │")
-    print("  │                                                                   │")
-    print("  │ Answering YES saves a summary of this run (your request, the      │")
-    print("  │ plan, and the final output) to the architecture memory ledger.    │")
-    print("  │ Answering NO skips the save — nothing is lost from your project,  │")
-    print("  │ the pipeline just will not remember this run next time.           │")
-    print("  └───────────────────────────────────────────────────────────────────┘")
+    print("  +- WHAT IS THE MEMORY ARCHIVE GATE? --------------------------------+")
+    print("  | The pipeline keeps a long-term memory of successful runs so       |")
+    print("  | future sessions can reference how similar features were built.    |")
+    print("  |                                                                   |")
+    print("  | Answering YES saves a summary of this run (your request, the      |")
+    print("  | plan, and the final output) to the architecture memory ledger.    |")
+    print("  | Answering NO skips the save  nothing is lost from your project,  |")
+    print("  | the pipeline just will not remember this run next time.           |")
+    print("  +-------------------------------------------------------------------+")
     from pipeline import AUTO_APPROVE_GATES as _auto_mem
     if _auto_mem:
         save_to_memory = "y"
@@ -780,9 +593,9 @@ def _handle_failure(ctx: PipelineContext) -> None:
     )
     ctx.output_parts.append(failure_report + "\n")
 
-    # ── Phase 8b: Lead Producer Scope Post-Mortem ──────────────────────────
+    # -- Phase 8b: Lead Producer Scope Post-Mortem --------------------------
     print(f"\n{'='*70}")
-    print(f"  Phase 8b: Lead Producer — Scope Post-Mortem")
+    print(f"  Phase 8b: Lead Producer  Scope Post-Mortem")
     print(f"{'='*70}")
     ctx.output_parts.append(
         "\n## Phase 8b: Lead Producer Scope Post-Mortem\n"
@@ -793,10 +606,10 @@ def _handle_failure(ctx: PipelineContext) -> None:
         f"## Director's Task Breakdown\n{ctx.director_output}\n\n"
         f"## Failure Report\n{failure_report}\n\n"
         f"Analyze the failure above. Determine:\n"
-        f"1. **TOO_BROAD** — was the original prompt too wide for sub-agents "
+        f"1. **TOO_BROAD**  was the original prompt too wide for sub-agents "
         f"(requiring >{SCOPE_FILE_LIMIT} files or >{SCOPE_LINE_LIMIT} lines "
         f"across multiple domains)?\n"
-        f"2. **NARROW** — scope was fine, failure was technical "
+        f"2. **NARROW**  scope was fine, failure was technical "
         f"(model misinterpretation, real code bug, Ollama issue)?\n\n"
         f"If TOO_BROAD, suggest a narrower version of the prompt the user "
         f"could run instead.\n"
@@ -825,7 +638,7 @@ def _handle_failure(ctx: PipelineContext) -> None:
     ctx.final_output = "\n".join(ctx.output_parts)
 
 
-# ── TagSuggester Post-Processing ──────────────────────────────────────
+# -- TagSuggester Post-Processing --------------------------------------
 
 def _run_tagsuggester_post(ctx: PipelineContext) -> PipelineContext:
     try:
@@ -842,7 +655,7 @@ def _run_tagsuggester_post(ctx: PipelineContext) -> PipelineContext:
             if checklist_path.is_file():
                 try:
                     checklist_content = checklist_path.read_text(encoding="utf-8")
-                    tag_section_marker = "### Tag System (Phase 9 — Future)"
+                    tag_section_marker = "### Tag System (Phase 9  Future)"
                     if tag_section_marker in checklist_content:
                         tag_block = "\n".join(
                             f"  - {tag}" for tag in tag_suggestions
@@ -889,7 +702,7 @@ def _run_tagsuggester_post(ctx: PipelineContext) -> PipelineContext:
     return ctx
 
 
-# ── Human-in-the-Loop Verification Gate ───────────────────────────────
+# -- Human-in-the-Loop Verification Gate -------------------------------
 
 def enforce_human_approval_gate(staged_changes_summary: str) -> bool:
     """
@@ -900,16 +713,16 @@ def enforce_human_approval_gate(staged_changes_summary: str) -> bool:
     print("  🛑 ULTIMATE HUMAN-IN-THE-LOOP VERIFICATION GATE")
     print("=" * 70)
     print()
-    print("  ┌─ WHAT IS THIS GATE? ──────────────────────────────────────────────┐")
-    print("  │ This is the last line of defence before any file on disk is       │")
-    print("  │ permanently changed.                                              │")
-    print("  │                                                                   │")
-    print("  │ The list below shows every file that is about to be written or    │")
-    print("  │ overwritten in your real project. Read it carefully.              │")
-    print("  │                                                                   │")
-    print("  │  y  — I have read the list and authorise these changes.           │")
-    print("  │  n  — Do NOT touch my files; keep everything in staging only.     │")
-    print("  └───────────────────────────────────────────────────────────────────┘")
+    print("  +- WHAT IS THIS GATE? ----------------------------------------------+")
+    print("  | This is the last line of defence before any file on disk is       |")
+    print("  | permanently changed.                                              |")
+    print("  |                                                                   |")
+    print("  | The list below shows every file that is about to be written or    |")
+    print("  | overwritten in your real project. Read it carefully.              |")
+    print("  |                                                                   |")
+    print("  |  y   I have read the list and authorise these changes.           |")
+    print("  |  n   Do NOT touch my files; keep everything in staging only.     |")
+    print("  +-------------------------------------------------------------------+")
     print("The orchestration mesh has proposed the following modifications:")
     print(staged_changes_summary)
     print("-" * 70)
@@ -936,7 +749,7 @@ def _build_staged_changes_summary(ctx: PipelineContext) -> str:
     parts = []
     snap = ctx.snapshot
     if not snap:
-        return "  (no snapshot manager — no staged changes detected)"
+        return "  (no snapshot manager  no staged changes detected)"
 
     manifest = snap._manifest if hasattr(snap, '_manifest') else {}
     proposals = manifest.get("proposals", {})
@@ -981,7 +794,7 @@ def _build_staged_changes_summary(ctx: PipelineContext) -> str:
     return "\n".join(parts)
 
 
-# ── Output Saving ─────────────────────────────────────────────────────
+# -- Output Saving -----------------------------------------------------
 
 def _save_output(ctx: PipelineContext) -> None:
     from ollama_client import _stream_crashed, _retry_counter
@@ -989,9 +802,9 @@ def _save_output(ctx: PipelineContext) -> None:
     ctx.final_output = "\n".join(ctx.output_parts)
     output_path = ctx.project_root / f"pipeline_output_{ctx.run_id}.md"
 
-    # ── Directive D: Snapshot rollback on stream crash ────────────────
+    # -- Directive D: Snapshot rollback on stream crash ----------------
     if _stream_crashed:
-        print(f"\n  [Stream Crash] ⛔ Fatal stream failure detected — rolling back snapshot.")
+        print(f"\n  [Stream Crash] ⛔ Fatal stream failure detected  rolling back snapshot.")
         if ctx.snapshot:
             try:
                 ctx.snapshot.revert_all()
@@ -1001,7 +814,7 @@ def _save_output(ctx: PipelineContext) -> None:
             except Exception as e:
                 print(f"  [Snapshot] Revert error: {e}")
         else:
-            print(f"  [Snapshot] ⚠ No snapshot manager available — cannot rollback")
+            print(f"  [Snapshot] ⚠ No snapshot manager available  cannot rollback")
     else:
         try:
             atomic_write_text(output_path, ctx.final_output)
@@ -1010,7 +823,7 @@ def _save_output(ctx: PipelineContext) -> None:
             print(f"\n  Could not save output: {e}")
 
         if ctx.snapshot:
-            # ── Human-in-the-Loop Verification Gate ──────────────────
+            # -- Human-in-the-Loop Verification Gate ------------------
             staged_summary = _build_staged_changes_summary(ctx)
             if enforce_human_approval_gate(staged_summary):
                 try:
@@ -1019,11 +832,11 @@ def _save_output(ctx: PipelineContext) -> None:
                 except Exception as e:
                     print(f"  [Snapshot] Apply error: {e}")
             else:
-                print(f"  [Snapshot] ⏭ Skipped — changes quarantined in staging directory.")
+                print(f"  [Snapshot] ⏭ Skipped  changes quarantined in staging directory.")
 
 
 
-# ── Timeline Archiver: [FLUSH] Signal (Task 11) ─────────────────────────
+# -- Timeline Archiver: [FLUSH] Signal (Task 11) -------------------------
 
 def _handle_flush_signal(ctx: PipelineContext) -> None:
     """Detect [FLUSH] signal in user prompt. When triggered, summarize the
@@ -1040,7 +853,7 @@ def _handle_flush_signal(ctx: PipelineContext) -> None:
         return
 
     print(f"\n{'='*50}")
-    print(f"  📊 FLUSH SIGNAL DETECTED — Archiving Timeline")
+    print(f"  📊 FLUSH SIGNAL DETECTED  Archiving Timeline")
     print(f"{'='*50}")
 
     timeline_path = ctx.session_timeline_path if hasattr(ctx, 'session_timeline_path') and ctx.session_timeline_path else SESSION_TIMELINE_PATH
@@ -1065,7 +878,7 @@ def _handle_flush_signal(ctx: PipelineContext) -> None:
     last_50 = entries[-50:] if len(entries) > 50 else entries
 
     summary_lines = [
-        f"### Timeline Archive — {datetime.now().isoformat()}",
+        f"### Timeline Archive  {datetime.now().isoformat()}",
         f"**Trigger:** [FLUSH] signal",
         f"**Entries archived:** {len(last_50)} of {len(entries)} total",
         "",
@@ -1087,6 +900,6 @@ def _handle_flush_signal(ctx: PipelineContext) -> None:
 
     try:
         atomic_write_text(timeline_path, "# Session Timeline\n\n")
-        print(f"  [FLUSH] ✓ Timeline wiped — fresh start")
+        print(f"  [FLUSH] ✓ Timeline wiped  fresh start")
     except Exception as e:
         print(f"  [FLUSH] ⚠ Could not wipe timeline: {e}")

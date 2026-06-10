@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Midway Agent Journal — Persistent Memory & Pattern Tracking
+Midway Agent Journal  Persistent Memory & Pattern Tracking
 =============================================================
 Records every pipeline attempt per-agent with self-assessment,
 failure analysis, and cross-session pattern detection.
 
 Tiered Memory System (for 8B models with ~20K context):
-  L1: Active project rules — always injected (~3K tokens)
-  L2: Hot patterns (repeat_count >= 2) — tag-filtered (~2K tokens)
-  L3: Recent history — last 3 sessions for matched tags (~3K tokens)
-  L4: Cold archive — never injected, kept for pruning analysis
+  L1: Active project rules  always injected (~3K tokens)
+  L2: Hot patterns (repeat_count >= 2)  tag-filtered (~2K tokens)
+  L3: Recent history  last 3 sessions for matched tags (~3K tokens)
+  L4: Cold archive  never injected, kept for pruning analysis
 
 Pruning: Weekly / on-demand consolidation via consolidate_and_prune()
 """
@@ -108,7 +108,7 @@ class JournalDB:
     def _save_index(self, index: dict):
         INDEX_PATH.write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # ── Session Management ──────────────────────────────────────────────────
+    # -- Session Management --------------------------------------------------
 
     def start_session(self, user_prompt: str) -> str:
         """Create a new session directory and return the session_id."""
@@ -287,7 +287,7 @@ class JournalDB:
                 "resolved": False,
             })
 
-    # ── Intelligent Retrieval ──────────────────────────────────────────────
+    # -- Intelligent Retrieval ----------------------------------------------
 
     def query_relevant_context(
         self,
@@ -307,7 +307,7 @@ class JournalDB:
         request_tags = _extract_tags(request_text)
         parts = []
 
-        # ── L2: Hot Patterns (tag-filtered) ────────────────────────────────
+        # -- L2: Hot Patterns (tag-filtered) --------------------------------
         hot_patterns = [
             p for p in index.get("knowledge_base", [])
             if p.get("repeat_count", 0) >= PATTERN_REPEAT_THRESHOLD and not p.get("resolved", False)
@@ -322,19 +322,19 @@ class JournalDB:
             ]
 
         if hot_patterns:
-            pattern_lines = ["╔═ KNOWLEDGE BASE ─────────────────────────────╗"]
+            pattern_lines = ["+= KNOWLEDGE BASE -----------------------------+"]
             for p in hot_patterns[:5]:  # Max 5 patterns
                 pattern_lines.append(
-                    f"║ ⚠ Pattern: {p['pattern'][:80]}"
+                    f"| ⚠ Pattern: {p['pattern'][:80]}"
                 )
                 pattern_lines.append(
-                    f"║   Agent: {p.get('agent', '?')} | "
+                    f"|   Agent: {p.get('agent', '?')} | "
                     f"Seen: {p.get('repeat_count', 1)}x | "
                     f"Resolved: {p.get('resolved', False)}"
                 )
                 if p.get("rules_reference"):
-                    pattern_lines.append(f"║   Rules: {p['rules_reference']}")
-            pattern_lines.append("╚═══════════════════════════════════════════╝")
+                    pattern_lines.append(f"|   Rules: {p['rules_reference']}")
+            pattern_lines.append("+===========================================+")
             patterns_text = "\n".join(pattern_lines) + "\n"
 
             # Track token usage
@@ -346,7 +346,7 @@ class JournalDB:
                 # Truncate patterns to fit budget
                 budget_remaining = max(budget_remaining, 200)
 
-        # ── L3: Recent History (tag-matched, limited) ──────────────────────
+        # -- L3: Recent History (tag-matched, limited) ----------------------
         # Score entries by tag overlap + recency
         scored_entries = []
         for entry in index.get("entries", []):
@@ -403,9 +403,9 @@ class JournalDB:
             budget_remaining -= _estimate_tokens(line + "\n")
 
         if history_lines:
-            history_block = "╔═ RECENT HISTORY ──────────────────────────╗\n"
-            history_block += "\n".join(f"║ {l}" for l in history_lines)
-            history_block += "\n╚═══════════════════════════════════════════╝\n"
+            history_block = "+= RECENT HISTORY --------------------------+\n"
+            history_block += "\n".join(f"| {l}" for l in history_lines)
+            history_block += "\n+===========================================+\n"
             parts.append(history_block)
 
         if not parts:
@@ -413,7 +413,7 @@ class JournalDB:
 
         return "\n".join(parts)
 
-    # ── Pruning ─────────────────────────────────────────────────────────────
+    # -- Pruning -------------------------------------------------------------
 
     def consolidate_and_prune(self, force: bool = False) -> dict:
         """Consolidate related patterns, archive old sessions, prune INDEX.
@@ -523,7 +523,7 @@ class JournalDB:
 
         return result
 
-    # ── Summary ─────────────────────────────────────────────────────────────
+    # -- Summary -------------------------------------------------------------
 
     def get_summary(self) -> dict:
         """Get a summary of the journal state."""
@@ -542,7 +542,7 @@ class JournalDB:
         }
 
 
-# ── Standalone CLI ──────────────────────────────────────────────────────────
+# -- Standalone CLI ----------------------------------------------------------
 
 if __name__ == "__main__":
     import sys

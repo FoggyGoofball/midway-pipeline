@@ -1,5 +1,5 @@
 """
-_mesh_api.py — Mesh work queue API, conflict resolution, progressive output.
+_mesh_api.py  Mesh work queue API, conflict resolution, progressive output.
 Extracted from pipeline.py to reduce its size to ~800 lines.
 
 Exports: submit_mesh_task, get_mesh_task_status, list_mesh_tasks,
@@ -7,7 +7,7 @@ cancel_mesh_task, get_mesh_work_queue, get_mesh_results,
 resolve_conflict, _generate_failure_report_rest,
 register_progress_listener, _emit_progress
 
-No async/await — purely synchronous.
+No async/await  purely synchronous.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, List, Optional
 #   from pipeline import _CTX, call_ollama, ALL_DOMAINS, OLLAMA_HOST, ...
 
 
-# ── Mesh Work Queue API ─────────────────────────────────────────────────────
+# -- Mesh Work Queue API -----------------------------------------------------
 # These use _CTX (PipelineContext singleton) for shared mutable state.
 
 def submit_mesh_task(task_type: str, payload: dict, priority: int = 0,
@@ -106,7 +106,7 @@ def get_mesh_results(_CTX=None) -> list:
     ]
 
 
-# ── Conflict Resolution ────────────────────────────────────────────────────
+# -- Conflict Resolution ----------------------------------------------------
 
 def resolve_conflict(agent_a_code: str, agent_b_code: str,
                      veto_justification: str, feature_request: str,
@@ -162,7 +162,7 @@ def resolve_conflict(agent_a_code: str, agent_b_code: str,
     )
 
 
-# ── REST API Failure Report ─────────────────────────────────────────────────
+# -- REST API Failure Report -------------------------------------------------
 
 def _generate_failure_report_rest(task_id: str, error_details: str,
                                    _CTX=None, _OLLAMA_HOST=None, _EXECUTION_MODEL=None) -> str:
@@ -193,7 +193,7 @@ def _generate_failure_report_rest(task_id: str, error_details: str,
     )
 
 
-# ── Progressive Output Support ──────────────────────────────────────────────
+# -- Progressive Output Support ----------------------------------------------
 
 def register_progress_listener(callback, _CTX=None):
     """Register a callback for progressive output updates via _CTX."""
