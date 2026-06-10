@@ -13,7 +13,6 @@ Exported:
 from __future__ import annotations
 
 import re
-from patch_regexes import SEARCH_REPLACE_PATTERN
 from typing import Any, List
 
 from models import PipelineContext

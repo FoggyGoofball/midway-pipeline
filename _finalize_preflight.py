@@ -11,10 +11,15 @@ Exported:
 from __future__ import annotations
 
 import re
-from patch_regexes import SEARCH_REPLACE_PATTERN
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional
+
+# ── SEARCH/REPLACE conflict-marker regex (inline — patch_regexes.py was deleted) ──
+SEARCH_REPLACE_PATTERN = re.compile(
+    r"<<<<<<<\s*SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>>\s*(?:REPLACE)?",
+    re.DOTALL,
+)
 
 from models import PipelineContext
 from _pipeline_helpers import atomic_write_text

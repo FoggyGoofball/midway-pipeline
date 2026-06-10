@@ -176,8 +176,8 @@ OLLAMA_TIMEOUT = 420
 # wireframe, reconciliation, memory archive).  The final merge/integrate gate in
 # mesh_finalize.py is intentionally excluded and always requires explicit authorisation.
 AUTO_APPROVE_GATES = True
-# Hardened global context ceiling aligned to 16GB host RAM / 12GB dedicated safety margin
-OLLAMA_NUM_CTX = 16384
+# Qwen2.5-Coder:7B @ 32768 — safe at q8_0 KV on this hardware (verified 2026-06-10)
+OLLAMA_NUM_CTX = 32768
 MAX_TOKENS = 12000
 CHECKPOINT_DIR = PROJECT_ROOT / ".pipeline_checkpoints"
 MEMORY_DIR = PROJECT_ROOT / "docs" / "memory"

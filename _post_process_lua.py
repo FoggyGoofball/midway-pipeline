@@ -2,7 +2,7 @@
 _post_process_lua.py — Deterministic post-processor for Lua attraction scripts.
 =============================================================================
 Runs AFTER all LLM task output has been merged into the target file.
-7 fixes, all 100% Python/regex, zero LLM cost.
+8 fixes, all 100% Python/regex, zero LLM cost.
 
 Designed to be called from mesh_finalize.py:run_code_merge() after the
 review-fix loop but before consensus.  Can also be run standalone:
@@ -404,17 +404,95 @@ def search_exactly_once_gate(file_content: str, search_block: str) -> bool:
 
 
 # ==============================================================================
-#  Main entry point: apply all 7 fixes
+#  Fix #8: Phantom API call stripper
+# ==============================================================================
+# Strips or comments-out calls to MidwayPhysics APIs that don't exist in
+# the bridge contract (hallucinated by the LLM).  Fail-open when no cartridge
+# is mounted.
+
+def _strip_phantom_api_calls(content: str) -> str:
+    """Strip or comment-out calls to MidwayPhysics APIs not in the bridge contract.
+
+    When no cartridge is mounted (no bridge contract available), the function
+    is a no-op -- it does NOT strip any calls.
+
+    Strategy:
+      1. Build the known-good API set from the cartridge bridge contract.
+         If no cartridge is mounted, return content unchanged (fail-open).
+      2. Scan for every MidwayPhysics.XXXXX( pattern in the content.
+      3. For each call found, check if XXXXX is in the known-good set.
+      4. If not, comment out the entire line with a [PHANTOM API] marker.
+    """
+    # Phase 1: Build known-good API set
+    _known_apis: set[str] = set()
+    try:
+        from pipeline import _CTX as _ctx8
+        if _ctx8 is not None:
+            _build_fn = getattr(_ctx8, '_cartridge_build_bridge_contract', None)
+            if callable(_build_fn):
+                _bc8 = _build_fn()
+                if _bc8 and isinstance(_bc8, dict):
+                    _physics = _bc8.get("midwayphysics_spawn_api") or {}
+                    _pools   = _bc8.get("object_pools") or {}
+                    _economy = _bc8.get("economy_api") or {}
+                    _known_apis.update(_physics.keys())
+                    _known_apis.update(_pools.keys())
+                    _known_apis.update(_economy.keys())
+    except Exception:
+        pass
+
+    # Also add the known-good functions the engine always exports:
+    _known_apis.update({
+        "OnLoadStatic", "OnLoad", "OnStep", "OnUnload",
+        "SpawnDynamicSphere", "SpawnDynamicBox", "SpawnDynamicCapsule",
+        "SpawnStaticPlane", "SpawnStaticMesh",
+        "DestroyBody", "GetVelocity", "GetPosition", "GetRotation",
+        "ApplyImpulse", "MoveKinematic", "IsSensorTriggered",
+        "RayCast", "GetCollisionGroup", "SetCollisionGroup",
+        "PoolAcquire", "PoolReturn", "PoolFree", "CreatePool",
+        "GetModifiers", "GetModifier", "GetCurrentScore", "AddScore",
+        "ResetScore", "GetTokens", "DeductTokens", "AwardTokens",
+        "GRAVITY", "PHYSICS_SCALE",
+    })
+
+    if not _known_apis:
+        return content  # fail-open
+
+    # Phase 2: Scan and strip
+    lines = content.splitlines()
+    new_lines: list[str] = []
+    modifications = 0
+
+    for line in lines:
+        calls = re.findall(r'MidwayPhysics\.(\w+)\s*\(', line)
+        stripped = False
+        for call in calls:
+            if call not in _known_apis:
+                new_lines.append(f"-- [PHANTOM API] {line.strip()}  -- MidwayPhysics.{call}() does not exist")
+                stripped = True
+                modifications += 1
+                break
+        if not stripped:
+            new_lines.append(line)
+
+    if modifications:
+        print(f"  [Post-Process Fix #8] Commented out {modifications} phantom API call(s) (not in bridge contract)")
+
+    return "\n".join(new_lines)
+
+
+# ==============================================================================
+#  Main entry point: apply all 8 fixes
 # ==============================================================================
 
 def post_process_lua(content: str) -> str:
-    """Apply all 7 deterministic fixes to a Lua attraction script.
+    """Apply all 8 deterministic fixes to a Lua attraction script.
 
     Args:
         content: Raw Lua source text.
 
     Returns:
-        Cleaned Lua source with all 7 fixes applied.
+        Cleaned Lua source with all 8 fixes applied.
     """
     # Preserve trailing newline — many fix functions use splitlines()/join
     # which naturally strips it.
@@ -426,6 +504,7 @@ def post_process_lua(content: str) -> str:
     content = _strip_module_level_mod(content)         # Fix #2
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
+    content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
     content = _inject_onload_static(content)           # Fix #4
     content = _inject_slot_id(content)                 # Fix #5
     # Fix #7 is a gate, not a transform — used by callers
@@ -455,7 +534,7 @@ def post_process_lua_file(path: Path) -> bool:
 
     if cleaned != original:
         path.write_text(cleaned, encoding="utf-8")
-        print(f"  [Post-Process] ✅ Cleaned {path.name} ({len(original)} → {len(cleaned)} chars)")
+        print(f"  [Post-Process] ✅ Cleaned {path.name} ({len(original)} -> {len(cleaned)} chars)")
         return True
 
     print(f"  [Post-Process] ✓ {path.name} already clean ({len(original)} chars)")
