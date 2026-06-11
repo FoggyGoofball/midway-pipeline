@@ -4156,5 +4156,27 @@
     "status": "active",
     "message_count": 0,
     "session_id": "pipeline_20260610_104852_89d48e40"
+  },
+  "pipeline_20260611_090541_4f02222f": {
+    "start_time": "2026-06-11T09:05:41.417768",
+    "user_prompt": "build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single \"skeeball.lua\"  also include the ability for the user to aim and set power on the b",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260611_090541_4f02222f"
+  },
+  "pipeline_20260611_094609_02d81d21": {
+    "start_time": "2026-06-11T09:46:09.586138",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260611_094609_02d81d21"
   }
 }

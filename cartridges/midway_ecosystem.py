@@ -290,6 +290,24 @@ class MidwayAgentCartridge:
         )
 
     @staticmethod
+    def get_lora_path() -> str:
+        """
+        Return the filesystem path to the cartridge-specific LoRA adapter
+        for project-specific API knowledge (MidwayPhysics, Engine, pools, etc.).
+
+        Returns None if no cartridge LoRA has been trained yet.
+        """
+        lora_dir = Path(__file__).resolve().parent.parent / "lora generator" / "lora_output_cartridge"
+        adapter_file = lora_dir / "adapter_model.safetensors"
+        if adapter_file.exists():
+            return str(lora_dir)
+        # Also check GGUF format
+        gguf_files = list(lora_dir.glob("*.gguf"))
+        if gguf_files:
+            return str(gguf_files[0])
+        return None
+
+    @staticmethod
     def get_schema_patterns() -> Dict[str, str]:
         """Regex patterns for parsing Lua output declarations in agent responses.
 

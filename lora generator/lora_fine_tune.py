@@ -43,6 +43,7 @@ Usage
    a prior run of lora_dataset_generator.py)
 """
 
+import argparse
 import json
 import os
 import sys
@@ -53,8 +54,12 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 os.environ["TORCH_CUDNN_DETERMINISTIC"] = "1"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_PATH = os.path.join(SCRIPT_DIR, "paging_lora_dataset.jsonl")
-OUTPUT_DIR = os.path.join(SCRIPT_DIR, "lora_output")
+DEFAULT_DATASET_PATH = os.path.join(SCRIPT_DIR, "paging_lora_dataset.jsonl")
+DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "lora_output")
+
+# Cartridge-specific defaults
+CARTRIDGE_DATASET_PATH = os.path.join(SCRIPT_DIR, "midway_lora_dataset.jsonl")
+CARTRIDGE_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "lora_output_cartridge")
 
 # -- Hyperparameters ------------------------------------------------------
 BASE_MODEL_NAME = "unsloth/Qwen2.5-Coder-7B"
@@ -98,18 +103,74 @@ def load_and_format_dataset(path: str) -> List[Dict]:
 
 # -- Main training routine ------------------------------------------------
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="LoRA fine-tuning for Qwen2.5-Coder-7B")
+    parser.add_argument(
+        "--cartridge", "-c",
+        action="store_true",
+        help="Train on cartridge API dataset (midway_lora_dataset.jsonl) "
+             "instead of paging dataset. Output goes to lora_output_cartridge/",
+    )
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        help="Override dataset path (overrides --cartridge dataset selection)",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Override output directory",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help=f"Override NUM_EPOCHS (default: {NUM_EPOCHS})",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help=f"Override LEARNING_RATE (default: {LEARNING_RATE})",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
+    # Resolve dataset and output paths
+    if args.dataset:
+        dataset_path = args.dataset
+        output_dir = args.output or os.path.join(SCRIPT_DIR, "lora_output_custom")
+    elif args.cartridge:
+        dataset_path = CARTRIDGE_DATASET_PATH
+        output_dir = args.output or CARTRIDGE_OUTPUT_DIR
+    else:
+        dataset_path = args.dataset or DEFAULT_DATASET_PATH
+        output_dir = args.output or DEFAULT_OUTPUT_DIR
+
+    # Override hyperparams from env (for trainer server) or CLI
+    num_epochs = args.epochs or int(os.environ.get("LORA_OVERRIDE_EPOCHS", NUM_EPOCHS))
+    learning_rate = args.lr or float(os.environ.get("LORA_OVERRIDE_LR", LEARNING_RATE))
+
+    mode_name = "Cartridge API" if args.cartridge else "Paging Protocol"
     print("=" * 72)
-    print("  Universal Virtual Memory Paging Protocol - LoRA Fine-Tuning")
+    print(f"  {mode_name} - LoRA Fine-Tuning")
     print("  Base Model: Qwen2.5-Coder-7B (4-bit QLoRA)")
-    print(f"  Dataset:    {DATASET_PATH}")
-    print(f"  Output:     {OUTPUT_DIR}")
-    print("  Loss mask:  response template only (train_on_inputs=false)")
+    print(f"  Dataset:    {dataset_path}")
+    print(f"  Output:     {output_dir}")
+    print(f"  Epochs:     {num_epochs}")
+    print(f"  LR:         {learning_rate}")
+    if args.cartridge:
+        print("  Loss mask:  train_on_inputs=true (full sequence, factual API knowledge)")
+    else:
+        print("  Loss mask:  response template only (train_on_inputs=false)")
     print("=" * 72)
 
     # Step 1: Load dataset ------------------------------------------------
     print("\n[1/5] Loading dataset...")
-    samples = load_and_format_dataset(DATASET_PATH)
+    samples = load_and_format_dataset(dataset_path)
 
     # Step 2: Import dependencies -----------------------------------------
     print("\n[2/5] Initializing Unsloth...")
@@ -215,12 +276,12 @@ def main():
     print("-" * 60)
 
     training_args = TrainingArguments(
-        output_dir=OUTPUT_DIR,
+        output_dir=output_dir,
         per_device_train_batch_size=TRAIN_BATCH_SIZE,
         gradient_accumulation_steps=GRADIENT_ACCUM_STEPS,
         warmup_steps=WARMUP_STEPS,
-        num_train_epochs=NUM_EPOCHS,
-        learning_rate=LEARNING_RATE,
+        num_train_epochs=num_epochs,
+        learning_rate=learning_rate,
         fp16=not is_bfloat16_supported(),
         bf16=is_bfloat16_supported(),
         logging_steps=LOGGING_STEPS,
@@ -248,8 +309,8 @@ def main():
 
     # -- Train ------------------------------------------------------------
     print("\n  Starting training...")
-    print(f"  Epochs:    {NUM_EPOCHS}")
-    print(f"  LR:        {LEARNING_RATE}")
+    print(f"  Epochs:    {num_epochs}")
+    print(f"  LR:        {learning_rate}")
     print(f"  Batch:     {TRAIN_BATCH_SIZE} (accum {GRADIENT_ACCUM_STEPS})")
     print(f"  Loss mask: assistant-only (<|im_start|>assistant template)")
     print()
@@ -260,15 +321,15 @@ def main():
     print(f"\n  Training completed in {elapsed / 60:.1f} minutes")
 
     # -- Save -------------------------------------------------------------
-    print(f"\n  Saving LoRA adapter to {OUTPUT_DIR}...")
-    model.save_pretrained(OUTPUT_DIR)
-    tokenizer.save_pretrained(OUTPUT_DIR)
+    print(f"\n  Saving LoRA adapter to {output_dir}...")
+    model.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
 
     # Try GGUF export for Ollama compatibility
     try:
         print("  Attempting GGUF export for Ollama...")
         model.save_pretrained_gguf(
-            OUTPUT_DIR,
+            output_dir,
             tokenizer,
             quantization_method="q4_k_m",
         )
@@ -278,17 +339,18 @@ def main():
 
     print("\n" + "=" * 72)
     print("  LoRA fine-tuning complete!")
-    print(f"  Adapter: {OUTPUT_DIR}/adapter_model.safetensors")
-    print(f"  Config:  {OUTPUT_DIR}/adapter_config.json")
+    print(f"  Adapter: {output_dir}/adapter_model.safetensors")
+    print(f"  Config:  {output_dir}/adapter_config.json")
     print("=" * 72)
 
     print("\n  Test with:")
     print("    python lora_generator/test_lora_adapter.py")
     print()
     print("  To create an Ollama model:")
-    print('    ollama create qwen-paging -f - << EOF')
+    model_name = "qwen-midway-api" if args.cartridge else "qwen-paging"
+    print(f'    ollama create {model_name} -f - << EOF')
     print('    FROM qwen2.5-coder:7b')
-    print(f'    ADAPTER {OUTPUT_DIR}/adapter_model.safetensors')
+    print(f'    ADAPTER {output_dir}/adapter_model.safetensors')
     print('    TEMPLATE """{{ .Prompt }}"""')
     print('    EOF')
 
