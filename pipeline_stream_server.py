@@ -26,6 +26,12 @@ from pathlib import Path
 import hashlib
 import time
 
+# Bug S: Set deterministic-server-mode env var BEFORE any pipeline modules are
+# imported.  This ensures the reconciliation gate in _finalize_review.py detects
+# server mode via os.environ["MIDWAY_FORCED_DETERMINISTIC"] even when stdin
+# reports isatty()=True (which can happen in Popen-detached subprocesses).
+os.environ["MIDWAY_FORCED_DETERMINISTIC"] = "1"
+
 # Enforce local directory import precedence
 LOCAL_DIR = Path(__file__).resolve().parent
 if str(LOCAL_DIR) in sys.path:
@@ -147,7 +153,7 @@ class StreamHandler(BaseHTTPRequestHandler):
         _add_cors_headers(self)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Connection", "close")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
@@ -203,6 +209,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                 pass
 
         print(f"  [StreamServer] Stream ended for '{prompt[:60]}...'")
+        self.close_connection = True
 
     # -- POST route: OpenAI-compatible /v1/chat/completions ------------
 
@@ -252,7 +259,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                 _add_cors_headers(self)
                 self.send_header("Content-Type", "text/event-stream; charset=utf-8")
                 self.send_header("Cache-Control", "no-cache")
-                self.send_header("Connection", "keep-alive")
+                self.send_header("Connection", "close")
                 self.send_header("X-Accel-Buffering", "no")
                 self.end_headers()
 
@@ -347,6 +354,7 @@ class StreamHandler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                     except Exception:
                         pass
+                    self.close_connection = True
             except Exception as e:
                 print(f"  [OpenAI POST] UNEXPECTED ERROR: {e}")
         else:

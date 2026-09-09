@@ -24,12 +24,10 @@ except ImportError:
 
 # -- Constants (shared from pipeline.py top section) -------------------------
 # These constants are referenced by domain configurations below.
-# Qwen Coder 3.5 profile (9B)  uncomment when backend hardware supports it
-# EXECUTION_MODEL = "qwen3.5:9b"
-# CODER_MODEL = "qwen3.5:9b"
+# Qwen Coder 2.5 (7B) — temporary revert for speed test.
 EXECUTION_MODEL = "qwen2.5-coder:7b"
 CODER_MODEL = "qwen2.5-coder:7b"
-REVIEWER_MODEL = "phi3:14b"
+REVIEWER_MODEL = "qwen3.5:9b"
 REASONING_MODEL = REVIEWER_MODEL
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
 LIBRARIAN_MODEL = EXECUTION_MODEL

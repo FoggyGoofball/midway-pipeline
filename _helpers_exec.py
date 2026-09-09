@@ -626,8 +626,8 @@ def execute_task(task, user_prompt: str, director_output: str,
     # The system prompt instructs Task 2+ agents to output ONLY SEARCH/REPLACE
     # blocks targeting the TODO placeholders left by Task 1's scaffold.
     # LIVE_FILE_CAP is now computed from model context rather than hardcoded.
-    # This ensures qwen2.5-coder:7b (32768 tok ctx) gets ~44K chars of file,
-    # while smaller aux models get proportionally less.
+    # This ensures the coder (qwen3.5:9b @ 16384 tok ctx) gets a proportional
+    # file cap, while smaller aux models get proportionally less.
     from ollama_client import resolve_ctx_size as _resolve_live_ctx
     _live_model_ctx = _resolve_live_ctx(preferred_model)
     # LIVE_FILE_CAP uses density-aware 2 chars/tok and caps at 40% of the

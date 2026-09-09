@@ -393,6 +393,21 @@ def _build_director_scope_mandate(ctx: "PipelineContext") -> str:
     if scope_mode == "NEW_ATTRACTION":
         ref_names = ", ".join(_os.path.basename(p) for p in scope_refs[:6])
         suffix = ", ..." if len(scope_refs) > 6 else ""
+        # Derive the canonical slug path from the scoped attraction name so the
+        # Director is bound to the EXACT target instead of a generic example.
+        # A hardcoded 'skeeball' example was previously copied verbatim by the
+        # model, causing it to decompose the WRONG attraction.
+        _slug = re.sub(r'[^\w]+', '_', (scope_target or '').strip().lower()).strip('_')
+        _canonical_path = f"attractions/{_slug}/{_slug}.lua" if _slug else ""
+        _file_mandate = (
+            f"The target attraction is '{scope_target}'. ALL tasks MUST target EXACTLY "
+            f"this file: `{_canonical_path}`. "
+            f"Do NOT rename it, do NOT use a different slug, and do NOT switch to any "
+            f"other attraction  the file path above is authoritative and overrides any "
+            f"other attraction name mentioned in the request."
+            if _canonical_path else
+            "The new attraction file MUST be a NEW file under the `attractions/` directory."
+        )
         # Import the canonical anchor tasks for the anchor listing
         try:
             from _anchors import get_all_anchor_tasks as _get_anchors
@@ -408,8 +423,7 @@ def _build_director_scope_mandate(ctx: "PipelineContext") -> str:
         parts.append(
             f"## SCOPE MANDATE — NEW ATTRACTION\n"
             f"You are decomposing tasks for a BRAND-NEW attraction file.\n"
-            f"The new file MUST be placed under the `attractions/` directory "
-            f"(e.g. `attractions/skeeball/skeeball.lua`).\n"
+            f"{_file_mandate}\n"
             f"You MUST NOT assign any task to an existing attraction file "
             f"({ref_names}{suffix}).\n"
             f"Those files are read-only context — never task targets.\n"

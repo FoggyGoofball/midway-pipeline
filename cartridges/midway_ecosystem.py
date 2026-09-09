@@ -31,8 +31,8 @@ try:
 except ImportError:
     EXECUTION_MODEL = "qwen2.5-coder:7b"
     CODER_MODEL = "qwen2.5-coder:7b"
-    REVIEWER_MODEL = "phi3:14b"
-    REASONING_MODEL = "phi3:14b"
+    REVIEWER_MODEL = "qwen3.5:9b"
+    REASONING_MODEL = "qwen3.5:9b"
     PRE_SUMMARIZER_MODEL = "phi3.5:latest"
     LIBRARIAN_MODEL = "qwen2.5-coder:7b"
 

@@ -36,6 +36,7 @@ def build_fix_bridge_snippet(ctx: 'PipelineContext') -> str:
         _api   = list((_bc.get("midwayphysics_spawn_api") or {}).keys())
         _pool  = list((_bc.get("object_pools") or {}).keys())
         _econ  = list((_bc.get("economy_api") or {}).keys())
+        _input = list((_bc.get("input_api") or {}).keys())
         if not _api:
             return ""
         return (
@@ -44,6 +45,8 @@ def build_fix_bridge_snippet(ctx: 'PipelineContext') -> str:
             "Physics: " + ", ".join(_api) + "\n"
             "Pools: "   + ", ".join(_pool) + "\n"
             "Economy: " + ", ".join(_econ) + "\n"
+            "Input (use ONLY these action names with MidwayInput.IsActionDown): "
+            + ", ".join(_input) + "\n"
         )
     except Exception as _e:
         return ""

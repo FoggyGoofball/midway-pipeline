@@ -165,7 +165,7 @@ def _stream_messages_payload(
     payload = {
         "model": model,
         "stream": True,
-        "keep_alive": "0",
+        "keep_alive": KEEP_ALIVE,
         "options": {
             "num_ctx": ctx_size,
             "num_predict": MAX_TOKENS,   # Full generation window  no premature cutoffs
@@ -261,7 +261,7 @@ from ollama_config import (
     CODER_MODEL, REVIEWER_MODEL, FALLBACK_REVIEWER_MODEL, PRE_SUMMARIZER_MODEL,
     LIBRARIAN_MODEL, SYNTAX_GATE_MODEL, INTENT_CLASSIFIER_MODEL, CHAT_MODEL,
     EXECUTION_MODEL, REASONING_MODEL, MODEL, DIRECTOR_MODEL,
-    MAX_TOKENS, _MODEL_CTX_PRECEDENCE, resolve_ctx_size,
+    MAX_TOKENS, KEEP_ALIVE, _MODEL_CTX_PRECEDENCE, resolve_ctx_size,
     _TPS_BASELINE, _TPS_WINDOW_SEC, _TPS_WINDOW_TOKENS, _TPS_MIN_STREAM_SEC,
     _TpsWatchdog,
 )
@@ -343,6 +343,14 @@ def _do_evict(model: str) -> None:
         pass
 
 
+def prepare_model(model: str) -> None:
+    """Update the VRAM guard so `model` is tracked as active (evicting any other
+    loaded model).  The actual load happens lazily on the next request to
+    Ollama.  Call this before using StructuredClient so the budget tracker and
+    eviction bookkeeping stay in sync with Ollama's real state."""
+    _evict_previous_model(model)
+
+
 def call_ollama_streamed(
     system: str, user: str, label: str, model: Optional[str] = None, params: Optional[dict] = None
 ) -> Generator[str, None, None]:
@@ -352,7 +360,8 @@ def call_ollama_streamed(
     Handles errors by yielding an error message string and stopping.
 
     Payload features:
-    - keep_alive: "0"  model unloads instantly after each call to free VRAM.
+    - keep_alive: KEEP_ALIVE  — model stays warm between calls; evicted only
+      on a model switch (avoids repeated offload/reload churn on the eMMC).
     - kv_cache_type: "q8_0"  halves KV cache memory vs the f16 Ollama default.
 
     Args:
@@ -371,23 +380,12 @@ def call_ollama_streamed(
     _evict_previous_model(use_model)
     ctx_size = resolve_ctx_size(use_model)
 
-    # -- Adaptive num_ctx: size KV cache to actual input, not always max --
-    # Allocating the full 32K KV cache for a 3K-token prompt wastes VRAM
-    # and adds seconds to the prefill phase on unified-memory hardware.
-    # Strategy: estimate input tokens at 3 chars/token (code-heavy heuristic),
-    # add the full output budget, round up to the next power-of-two-friendly
-    # multiple of 2048, then clamp to the model ceiling.
-    # Minimum floor: 8192 so small prompts still have room for paging tokens.
-    _input_chars = len(system) + len(user)
-    _input_tokens_est = max(512, int(_input_chars / 3))
-    _adaptive_ctx = min(
-        ctx_size,
-        max(8192, ((_input_tokens_est + MAX_TOKENS + 2047) // 2048) * 2048)
-    )
-    if _adaptive_ctx < ctx_size:
-        print(f"  [Adaptive ctx] Input ~{_input_tokens_est} tok → num_ctx={_adaptive_ctx} "
-              f"(model max={ctx_size})")
-    ctx_size = _adaptive_ctx
+    # -- Stable KV cache: pin num_ctx to the model's resolved ceiling ---------
+    # A per-request "adaptive" num_ctx changes the KV-cache allocation between
+    # calls; when the requested window exceeds the currently-loaded window,
+    # Ollama reloads the model to grow the cache.  Pinning to one stable size
+    # keeps a single KV allocation for the lifetime of the load (no reload).
+    print(f"  [Stable ctx] num_ctx={ctx_size} (pinned to model ceiling)")
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*60}")
@@ -419,7 +417,7 @@ def call_ollama_streamed(
     payload = {
         "model": use_model,
         "stream": True,
-        "keep_alive": "0",
+        "keep_alive": KEEP_ALIVE,
         "options": {
             "num_ctx": ctx_size,
             "num_predict": MAX_TOKENS,   # Full generation window  no premature cutoffs
@@ -769,8 +767,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
         )
         if _presumm_adaptive_ctx < _presumm_ctx:
             print(f"  [Adaptive ctx] Pre-summarizer input ~{_presumm_input_est} tok → "
-                  f"num_ctx={_presumm_adaptive_ctx} (model max={_presumm_ctx})")
-        _presumm_ctx = _presumm_adaptive_ctx
+                  f"KV cache pinned at {_presumm_ctx} (stable allocation, no resize).")
         _presumm_system = (
             "You are an expert context compressor. "
             "You will be given a large context payload destined for a deep-reasoning model. "
@@ -857,17 +854,17 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
         max(8192, ((_e_input_tokens_est + MAX_TOKENS + 2047) // 2048) * 2048)
     )
     if _e_adaptive_ctx < _e_model_ctx:
-        print(f"  [Adaptive ctx] Input ~{_e_input_tokens_est} tok → num_ctx={_e_adaptive_ctx} "
-              f"(model max={_e_model_ctx})")
+        print(f"  [Adaptive ctx] Input ~{_e_input_tokens_est} tok → KV cache pinned at "
+              f"{_e_model_ctx} (stable allocation, no resize).")
     _e_params = dict(params or {})
-    _e_params.setdefault("num_ctx", _e_adaptive_ctx)
+    _e_params.setdefault("num_ctx", _e_model_ctx)
 
     _evict_previous_model(use_model)
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*60}")
     print(f"  [{ts}] [START] [{label}] Calling Ollama ({use_model})...")
-    print(f"  [VRAM Guard] num_ctx={_e_adaptive_ctx}, user={len(user)} chars")
+    print(f"  [VRAM Guard] num_ctx={_e_model_ctx}, user={len(user)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
     full: list[str] = []

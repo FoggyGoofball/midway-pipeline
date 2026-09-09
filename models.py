@@ -165,11 +165,10 @@ class SignalType(str, Enum):
 class OrchestrationConfig(BaseModel):
     """Decoupled boundary parameters dynamically injected via Cartridge layer."""
     ollama_host: str = "http://192.168.0.16:11434"
-    # Qwen Coder 3.5 profile (9B)  uncomment when backend hardware supports it
-    # coder_model: str = "qwen3.5:9b",
+    # Qwen Coder 2.5 (7B) — temporary revert for speed test.
     coder_model: str = "qwen2.5-coder:7b"
-    reviewer_model: str = "phi3:14b"
-    analyst_model: str = "phi3:14b"
+    reviewer_model: str = "qwen3.5:9b"
+    analyst_model: str = "qwen3.5:9b"
     fallback_reviewer_model: str = "llama3.1:8b-instruct-q4_K_M"
     pre_summarizer_model: str = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
     librarian_model: str = "llama3.1:8b-instruct-q4_K_M"
@@ -182,10 +181,9 @@ class OrchestrationConfig(BaseModel):
     review_max_iterations: int = 3
     scope_file_limit: int = 5
     scope_line_limit: int = 400
-    ollama_timeout: int = 600
-    # Synchronize default schema boundaries with hardware execution targets
-    # qwen3.5:9b was 16384; qwen2.5-coder:7b has more headroom
-    # ollama_num_ctx: int = 16384
+    ollama_timeout: int = 1200
+    # Synchronize default schema boundaries with hardware execution targets.
+    # Temporary: coder (7B) at 32K for the speed test.
     ollama_num_ctx: int = 32768
     max_tokens: int = 12000
 

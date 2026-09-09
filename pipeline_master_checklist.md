@@ -24,3 +24,12 @@
 - [x] **Task 13 (Payload-Aware Chunking):** `execute_page_in()` dynamically queries active context ceiling before byte transfers. Files exceeding cap require `<lines>` or `<search>` targeting tags.
 - [x] **Task 14 (Active Topology Forwarding):** Wave handlers in `mesh_loops.py` extract model context capacities (65536/32768/8192) and forward to `extract_signals()` as `active_context_limit`.
 - [x] **Task 15 (Ghost Buffer Continuity):** `PagingController.build_resume_payload()` appends pre-fault ghost buffers (`_ghost_buffer_text`) directly into active prompt payloads as contiguous assistant entries, not discrete turns.
+
+
+## Phase 8: Structured Output Modernization (COMPLETED — verified 2026-09-02)
+- [x] **Task 16 (Pydantic Schemas):** `structured_schemas.py` — rigid `BaseModel` contracts for architect design, task decomposition, review verdict, patches, syntax check, and intent classification.
+- [x] **Task 17 (Instructor + Tenacity):** `structured_client.py` — instructor-wrapped extraction with tenacity retry (exponential backoff, 3 attempts) feeding the exact `ValidationError` text back for self-correction.
+- [x] **Task 18 (Two-Turn Extraction):** `structured_client.two_turn_extract()` — raw chain-of-thought turn then schema extraction; wired into `mesh_architect.py` with graceful fallback to the legacy JSON parser.
+- [x] **Task 19 (xgrammar Serving):** `serve_xgrammar.py` — vLLM/SGLang deployment using the `xgrammar` backend for constrained decoding driven by the Pydantic schemas.
+- [x] **Task 20 (Locked QLoRA + dynamic seq):** `lora generator/lora_fine_tune.py` — `load_in_4bit=True`, `r=16`, batch 2, accumulation 4, `optim="adamw_8bit"`, `use_gradient_checkpointing="unsloth"`; `max_seq_length` computed from the longest training item.
+- Full details: `STRUCTURED_ARCHITECTURE.md`

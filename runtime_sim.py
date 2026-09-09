@@ -117,8 +117,11 @@ _HANDLE_CREATE_RE = re.compile(
     re.MULTILINE,
 )
 
-# hFoo: used anywhere on the right side of an expression or in a call
-_HANDLE_USE_RE = re.compile(r"\b(h[A-Za-z0-9_]+)\b")
+# hFoo: used anywhere on the right side of an expression or in a call.
+# CamelCase h-prefix only — a bare lowercase 'h' word (heat, heatEffect,
+# hand) is an ordinary identifier, not a handle; flagging it is a false
+# positive.
+_HANDLE_USE_RE = re.compile(r"\b(h[A-Z][A-Za-z0-9_]*)\b")
 
 # function OnLoad()
 _ONLOAD_RE = re.compile(
@@ -212,8 +215,13 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
                 "verify spelling against the bridge contract."
             )
         else:
-            # Grab the call text (50 chars past the match for arity heuristic)
+            # Grab the call text (200 chars past the match for arity heuristic)
             call_text = lua_text[pm.start(): pm.start() + 200]
+            if "function" in call_text:
+                # A function-literal argument (e.g. OnStep(function(dt)...end))
+                # breaks the comma-count heuristic and may be truncated by the
+                # 200-char window — skip arity validation for these calls.
+                continue
             nargs = _count_args(call_text)
             lo, hi = _MIDWAY_PHYSICS_API[fn]
             if nargs < lo or nargs > hi:
@@ -276,6 +284,10 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
 
     # 5. Detect bare globals set inside OnStep (risk of accidental global pollution).
     # Pattern: identifier = value where identifier is NOT local and NOT a known handle.
+    # File-wide `local` declarations (module-level state like currentScore,
+    # powerLevel) are NOT accidental globals — collect them first so the check
+    # doesn't false-positive on module-scoped state.
+    _declared_locals = set(re.findall(r'\blocal\s+([A-Za-z_]\w*)\s*=', lua_text))
     _GLOBAL_SET_RE = re.compile(
         r"^(?!\s*local\s)(\s*)([a-z][A-Za-z0-9_]+)\s*=(?!=)",
         re.MULTILINE,
@@ -284,8 +296,9 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
         body = step_match.group(1)
         for gm in _GLOBAL_SET_RE.finditer(body):
             varname = gm.group(2)
-            # Ignore known handle names, loop vars, standard Lua globals
+            # Ignore known handle names, file-scope locals, standard Lua globals
             if (varname not in handles_created_in_load
+                    and varname not in _declared_locals
                     and varname not in {"true", "false", "nil", "self"}
                     and len(varname) > 2):
                 errors.append(
@@ -671,6 +684,27 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
     _COLON_ECONOMY_RE_FINAL = re.compile(
         r"\beconomy:([A-Za-z][A-Za-z0-9_]*)\s*\(", re.MULTILINE
     )
+    # Bug Q: bare-call detection — catch PoolAcquire, DestroyBody, etc. without MidwayPhysics. prefix
+    # NOTE: SpawnSharedBooth() is deliberately excluded — it is a legitimate bare
+    #       global defined by booth_shared.lua, NOT a MidwayPhysics.* function.
+    #       Engine.* calls are also excluded (they are legit bare globals too).
+    _BARE_PHYSICS_CALL_RE = re.compile(
+        r"(?<!MidwayPhysics\.)\b(PoolAcquire|PoolReturn|PoolFree|PoolTotal|PoolCullBelow|CreatePool|"
+        r"DestroyBody|"
+        r"SpawnStaticBox|SpawnStaticSphere|SpawnStaticCapsule|SpawnStaticCylinder|SpawnStaticMesh|"
+        r"SpawnStaticBoxR|SpawnStaticSphereR|SpawnStaticCapsuleR|SpawnStaticCylinderR|"
+        r"SpawnDynamicBox|SpawnDynamicSphere|SpawnDynamicCapsule|SpawnDynamicCylinder|"
+        r"SpawnDynamicMesh|SpawnDynamicBoxR|SpawnDynamicSphereR|SpawnDynamicCapsuleR|SpawnDynamicCylinderR|"
+        r"SpawnKinematicBox|SpawnKinematicSphere|SpawnKinematicCapsule|SpawnKinematicCylinder|"
+        r"SpawnKinematicBoxR|"
+        r"SpawnSensorBox|SpawnSensorSphere|"
+        r"ApplyImpulse|ApplyAngularImpulse|GetPosition|GetVelocity|GetRotation|"
+        r"IsActive|IsSensorTriggered|"
+        r"SetLinearVelocity|AddLinearVelocity|MoveKinematic|"
+        r"SetFriction|SetRestitution|SetGravityFactor|SetMass|"
+        r"SetLinearDamping|SetAngularDamping)\s*\(",
+        re.MULTILINE,
+    )
 
     try:
         for task_id, output in (ctx.all_results_dict or {}).items():
@@ -720,6 +754,20 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
                         f"[{task_id}][PhantomAPIGate] Phantom colon-method: "
                         f"`economy:{cm.group(1)}`  use Engine.AwardTickets / "
                         "Engine.AwardTokens (flat namespace, no colon)."
+                    )
+
+                # -- 3b. Bare-call phantom-API check (Bug Q) --------------------
+                # Some physics API functions are valid ONLY when called as
+                # MidwayPhysics.FuncName(...).  A bare `DestroyBody(ball)` or
+                # `PoolAcquire(name, ...)` without the MidwayPhysics. prefix is
+                # a phantom call that will fail at runtime.
+                for bm in _BARE_PHYSICS_CALL_RE.finditer(lua_code):
+                    fn = bm.group(1)
+                    errors.append(
+                        f"[{task_id}][PhantomAPIGate] Bare phantom API: `{fn}(...)` "
+                        f"at position {bm.start()} — this function requires the "
+                        f"MidwayPhysics. namespace prefix. Write as "
+                        f"`MidwayPhysics.{fn}(...)`."
                     )
 
                 # Checks 4 & 5 (modifier consumption, economy hook) are evaluated

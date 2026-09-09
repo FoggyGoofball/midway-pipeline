@@ -68,7 +68,21 @@ LORA_R = 16
 LORA_ALPHA = 32
 LORA_DROPOUT = 0
 
-MAX_SEQ_LENGTH = 2048
+# ---------------------------------------------------------------------------
+# LOCKED QLoRA hyperparameters (16 GB VRAM constraint — DO NOT MODIFY).
+#   load_in_4bit                = True           (enforced at load time)
+#   r                           = 16             (LORA_R)
+#   per_device_train_batch_size = 2              (TRAIN_BATCH_SIZE)
+#   gradient_accumulation_steps = 4              (GRADIENT_ACCUM_STEPS)
+#   optim                       = "adamw_8bit"   (TrainingArguments)
+#   use_gradient_checkpointing  = "unsloth"      (enforced at load time)
+# ---------------------------------------------------------------------------
+# max_seq_length is NEVER hardcoded — it is computed dynamically from the
+# longest training item (see compute_dynamic_max_seq_length).  Allocating a
+# fixed 4096/8192 window wastes VRAM on padded empty tokens.
+MAX_SEQ_LENGTH_FLOOR = 512
+MAX_SEQ_LENGTH_CEILING = 32768  # native window of the base model
+
 LEARNING_RATE = 2e-5
 WARMUP_STEPS = 50
 NUM_EPOCHS = 3
@@ -99,6 +113,56 @@ def load_and_format_dataset(path: str) -> List[Dict]:
 
     print(f"Loaded {len(samples)} training samples from {path}")
     return samples
+
+
+def compute_dynamic_max_seq_length(
+    samples: List[Dict],
+    tokenizer,
+    floor: int = MAX_SEQ_LENGTH_FLOOR,
+    ceiling: int = MAX_SEQ_LENGTH_CEILING,
+    multiple_of: int = 8,
+) -> int:
+    """Dynamically size ``max_seq_length`` to the longest training item.
+
+    Architectural Standard #3: ``max_seq_length`` must never be hardcoded to a
+    large default (4096/8192).  Allocating a fixed window pads every sample with
+    empty tokens that still consume KV cache and activation memory, exhausting the
+    16 GB budget.  We tokenize every sample through the chat template and return
+    the EXACT length of the longest one (rounded up to ``multiple_of`` for GPU
+    alignment, clamped to [floor, ceiling]).
+    """
+    lengths: List[int] = []
+    for sample in samples:
+        messages = sample.get("messages")
+        if not messages:
+            continue
+        text = tokenizer.apply_chat_template(messages, tokenize=False)
+        if text is None:
+            text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=False
+            )
+        if text is None:
+            text = json.dumps(messages, ensure_ascii=False)
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        lengths.append(len(ids))
+
+    if not lengths:
+        print(f"  WARNING: no tokenizable samples; falling back to floor={floor}")
+        return floor
+
+    longest = max(lengths)
+    seq = ((longest + multiple_of - 1) // multiple_of) * multiple_of
+    seq = max(floor, min(ceiling, seq))
+    if longest > ceiling:
+        print(
+            f"  WARNING: longest sample ({longest} tok) exceeds ceiling "
+            f"({ceiling}); clamping. Consider truncating this sample."
+        )
+    print(
+        f"  [Dynamic max_seq_length] longest sample = {longest} tok "
+        f"-> max_seq_length = {seq} (floor={floor}, ceiling={ceiling})"
+    )
+    return seq
 
 
 # -- Main training routine ------------------------------------------------
@@ -197,14 +261,27 @@ def main():
     print(f"\n[3/5] Loading {BASE_MODEL_NAME} with 4-bit QLoRA...")
     print("  (downloads ~4 GB on first run)")
 
+    # -- Standard #3: dynamic max_seq_length -------------------------------
+    # Load the tokenizer up-front to measure the longest training item BEFORE
+    # allocating the model's KV/activation buffers.  A hardcoded 4096/8192
+    # window pads every sample with empty tokens that waste VRAM.
+    print("  Loading tokenizer to compute dynamic max_seq_length...")
+    _measure_tokenizer = transformers.AutoTokenizer.from_pretrained(BASE_MODEL_NAME)
+    if _measure_tokenizer.pad_token is None:
+        _measure_tokenizer.pad_token = _measure_tokenizer.eos_token
+    max_seq_length = compute_dynamic_max_seq_length(samples, _measure_tokenizer)
+
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=BASE_MODEL_NAME,
-        max_seq_length=MAX_SEQ_LENGTH,
+        max_seq_length=max_seq_length,
         dtype=None,
         load_in_4bit=True,
         device_map="auto",
+        # Unsloth-native gradient checkpointing — recomputes activations on the
+        # backward pass so batch_size=2 x grad_accum=4 fits in 16 GB VRAM.
+        use_gradient_checkpointing="unsloth",
     )
-    print("  Model loaded successfully")
+    print(f"  Model loaded successfully (max_seq_length={max_seq_length})")
 
     # Verify tokenizer has a chat_template
     if tokenizer.chat_template is None:
@@ -301,7 +378,7 @@ def main():
         tokenizer=tokenizer,
         args=training_args,
         train_dataset=dataset,
-        max_seq_length=MAX_SEQ_LENGTH,
+        max_seq_length=max_seq_length,
         dataset_num_proc=1,
         packing=False,
         data_collator=collator,  # <-- CRITICAL: masks non-assistant tokens
@@ -312,6 +389,7 @@ def main():
     print(f"  Epochs:    {num_epochs}")
     print(f"  LR:        {learning_rate}")
     print(f"  Batch:     {TRAIN_BATCH_SIZE} (accum {GRADIENT_ACCUM_STEPS})")
+    print(f"  Seq len:   {max_seq_length} (dynamic — longest training item)")
     print(f"  Loss mask: assistant-only (<|im_start|>assistant template)")
     print()
 

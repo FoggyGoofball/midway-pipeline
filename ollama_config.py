@@ -14,7 +14,7 @@ OLLAMA_HOST: str = "http://192.168.0.16:11434"
 
 # -- Model Names
 CODER_MODEL: str = "qwen2.5-coder:7b"
-REVIEWER_MODEL: str = "phi3:14b"
+REVIEWER_MODEL: str = "qwen3.5:9b"
 FALLBACK_REVIEWER_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL: str = "phi3.5:latest"
 LIBRARIAN_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
@@ -28,11 +28,21 @@ DIRECTOR_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 
 # -- Timeouts & VRAM-Guarded Context Window Sizes
 # All values calibrated for 12 GB unified memory (Steam Deck).
-OLLAMA_TIMEOUT: int = 600
-OLLAMA_NUM_CTX: int = 32768         # 7B/8B models -- ~6-7 GB at q8_0 KV
-OLLAMA_NUM_CTX_LARGE: int = 16384   # 14B models   -- ~9.0 GB at 16K (75% budget)
-OLLAMA_NUM_CTX_UPPER_MID: int = 16384  # 9B models
-OLLAMA_NUM_CTX_MASSIVE: int = 16384    # phi3.5 3.8B pre-summarizer
+# Native maxima: qwen2.5-coder 32K, qwen3.5 256K, phi3 128K, llama 128K.
+# We clamp to the largest power-of-2 that fits the 12 GB budget.
+# Timeout is a per-read SOCKET timeout, not a total-request budget: it fires
+# only when NO data arrives for this long (e.g. the first token during a cold
+# load).  The 9B review model is evicted + reloaded every fix cycle and its
+# cold load can take ~140-590s (worse over the USB 2.0 dock), so 600s was too
+# tight and produced false "timed out" verdicts.  1200s = 2x worst-case headroom.
+OLLAMA_TIMEOUT: int = 1200
+OLLAMA_NUM_CTX: int = 32768          # 7B coder -- native max 32K (~6.6 GB)
+OLLAMA_NUM_CTX_LARGE: int = 4096     # 14B models -- llama runner crashes >4K (native rope 4K)
+OLLAMA_NUM_CTX_UPPER_MID: int = 65536   # 9B models -- 64K (native 256K, ~10.3 GB)
+OLLAMA_NUM_CTX_MASSIVE: int = 32768    # phi3.5 pre-summarizer -- 32K (128K needs 43.7 GB = OOM)
+OLLAMA_NUM_CTX_SMALL: int = 32768    # 1.5B micro -- native max 32K (~1.9 GB)
+OLLAMA_NUM_CTX_8B: int = 65536       # 8B librarian/director -- 64K (native 128K, ~9.0 GB)
+OLLAMA_NUM_CTX_1B: int = 131072      # 1B intent -- native 128K (~6.8 GB)
 
 # -- Centralized Model-to-Context Resolution
 _MODEL_CTX_PRECEDENCE: list[tuple[str, int]] = [
@@ -40,11 +50,13 @@ _MODEL_CTX_PRECEDENCE: list[tuple[str, int]] = [
     ("phi-3.5",    OLLAMA_NUM_CTX_MASSIVE),
     ("phi-mini",   OLLAMA_NUM_CTX_MASSIVE),
     ("phi3:14b",   OLLAMA_NUM_CTX_LARGE),
+    ("qwen3.5:14b", OLLAMA_NUM_CTX_LARGE),
     ("14b",        OLLAMA_NUM_CTX_LARGE),
     ("9b",         OLLAMA_NUM_CTX_UPPER_MID),
+    ("8b",         OLLAMA_NUM_CTX_8B),
     ("7b",         OLLAMA_NUM_CTX),
-    ("8b",         OLLAMA_NUM_CTX),
-    ("3b",         OLLAMA_NUM_CTX_MASSIVE),
+    ("1.5b",       OLLAMA_NUM_CTX_SMALL),
+    ("1b",         OLLAMA_NUM_CTX_1B),
 ]
 
 
@@ -58,6 +70,12 @@ def resolve_ctx_size(model_name: str) -> int:
 
 
 MAX_TOKENS: int = 4096
+
+# How long a loaded model stays resident in VRAM between calls.  "0" unloads
+# after EVERY call (repeated offload/reload churn wears the eMMC).  A long TTL
+# keeps the single active model warm; _evict_previous_model() still unloads it
+# the moment a DIFFERENT model is requested, so only ONE model is resident.
+KEEP_ALIVE: str = "30m"
 
 # -- TPS Watchdog constants
 _TPS_BASELINE: float = 2.0         # tok/s floor

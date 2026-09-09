@@ -30,18 +30,16 @@ VRAM_CRITICAL_RATIO: float = 0.80
 #   14B at 16384: ~10-11GB (was 9-10GB at 8192)
 #   phi3.5 at 16384: ~11-12GB (tight  was exceeding at 32768)
 MODEL_TOKEN_LIMITS: dict = {
-    # Thresholds = 80% of context window
-    "qwen3.5:9b":          (6553, 8192),   # 80% of 8K
-    "qwen2.5-coder:7b":    (26214, 32768), # 80% of 32K  unlocked
-    "qwen2.5-coder:1.5b":  (6553, 8192),
-    # Pre-summarizer: 3.8B mini  larger window is fine; it's ~2.5 GB
-    "phi3.5":              (13107, 16384),  # 80% of 16K
-    "phi-3.5":             (13107, 16384),  # format alias
-    # phi3:14b bumped from 8K to 16K
-    "phi3:14b":            (13107, 16384),  # 80% of 16K  was 8192
-    "llama3.1:8b":         (26214, 32768),  # 80% of 32K  unlocked
-    "llama3.2:1b":         (6553, 8192),
-    "qwen3.5:14b":         (6553, 8192),
+    # Threshold = 80% of context window; hard = context window (working ceilings)
+    "qwen3.5:9b":          (52428, 65536),    # 64K (native 256K, VRAM-capped)
+    "qwen2.5-coder:7b":    (26214, 32768),    # 32K native max
+    "qwen2.5-coder:1.5b":  (26214, 32768),    # 32K native max
+    "phi3.5":              (26214, 32768),    # 32K (128K needs 43.7 GB = OOM)
+    "phi-3.5":             (26214, 32768),    # format alias
+    "phi3:14b":            (3276, 4096),      # 4K (llama runner crashes >4K)
+    "llama3.1:8b":         (52428, 65536),    # 64K (native 128K, VRAM-capped)
+    "llama3.2:1b":         (104857, 131072),  # 128K native max
+    "qwen3.5:14b":         (3276, 4096),      # 4K (same 14B runner limit)
 }
 
 

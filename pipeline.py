@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 import urllib.error
 import shutil
@@ -142,10 +143,9 @@ _CTX = PipelineContext(
 # -- Configuration ----------------------------------------------------------
 OLLAMA_HOST = "http://192.168.0.16:11434"
 
-# Qwen Coder 3.5 profile (9B)  uncomment when backend hardware supports it
-# CODER_MODEL = "qwen3.5:9b"
+# Qwen Coder 2.5 (7B) — temporary revert for speed test.
 CODER_MODEL = "qwen2.5-coder:7b"
-REVIEWER_MODEL = "qwen2.5-coder:7b"
+REVIEWER_MODEL = "qwen3.5:9b"
 ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
@@ -163,6 +163,10 @@ PROJECT_ROOT = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().pa
 MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
 MAX_SUBTASKS_PER_AGENT = 5
+# Review-fix loop headroom.  The deterministic post-processor runs inside every
+# cycle, so structural defects clear fast; extra cycles give semantic fixes
+# room to land.  The per-task circuit breaker (3 failures) still caps infinite
+# retries, so this is safe.
 REVIEW_MAX_ITERATIONS = 4
 # Max review-fix failures per task before the circuit breaker trips the loop.
 CIRCUIT_BREAKER_MAX_FAILURES = 3
@@ -171,12 +175,16 @@ CIRCUIT_BREAKER_MAX_FAILURES = 3
 FA_MAX_RETRY = 2
 SCOPE_FILE_LIMIT = 5
 SCOPE_LINE_LIMIT = 400
-OLLAMA_TIMEOUT = 420
+OLLAMA_TIMEOUT = 1200
 # Set True to skip all intermediate human-in-the-loop gates (blueprint, architect,
 # wireframe, reconciliation, memory archive).  The final merge/integrate gate in
 # mesh_finalize.py is intentionally excluded and always requires explicit authorisation.
 AUTO_APPROVE_GATES = True
-# Qwen2.5-Coder:7B @ 32768 — safe at q8_0 KV on this hardware (verified 2026-06-10)
+# Pre-blueprint clarification gate: when the feature request is too vague, present
+# the user with concrete implementation options and require a choice before
+# blueprinting.  Runs on the already-resident director model (no extra reload).
+CLARIFY_VAGUE_REQUESTS = True
+# Temporary: 7B/8B coder back at 32K for the speed test.
 OLLAMA_NUM_CTX = 32768
 MAX_TOKENS = 12000
 CHECKPOINT_DIR = PROJECT_ROOT / ".pipeline_checkpoints"
@@ -403,9 +411,20 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     ctx.session_mgr = session_mgr
 
     # -- Pre-Flight: Ollama Health Check ------------------------------------
-    try:
-        urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=1.0)
-    except Exception as e:
+    # Post-sleep/wake Wi-Fi reassociation and Steam Deck warm-up can push the
+    # first response well past 1s, which used to emit a false "Cannot connect"
+    # FATAL.  Retry a few times with a generous timeout before giving up.
+    _ollama_ok = False
+    for _attempt in range(3):
+        try:
+            with urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=6.0) as _resp:
+                _resp.read(1)
+            _ollama_ok = True
+            break
+        except Exception:
+            if _attempt < 2:
+                time.sleep(2.0)
+    if not _ollama_ok:
         print(f"\n[FATAL ERROR] Cannot connect to Ollama at {OLLAMA_HOST}. Is it running?")
         ctx.final_output = "Error: Ollama is offline."
         return ctx.final_output

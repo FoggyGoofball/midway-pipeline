@@ -54,3 +54,5 @@ Thumbs.db
 .vs/
 *.swp
 *.suo
+# ── 9. Liveness monitor runtime log ─────────────────────────────────────
+pipeline_status.log

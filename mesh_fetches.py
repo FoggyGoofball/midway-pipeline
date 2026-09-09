@@ -478,7 +478,30 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
     if not is_auto_feed_request:
         gdd_snippet = TokenBudget._block_aware_collapse(ctx.gdd_context, 2500) if ctx.gdd_context else "(no GDD context)"
         state_snippet = TokenBudget._block_aware_collapse(ctx.project_state, 2000) if ctx.project_state else "(no project state)"
-        if is_read_only_question:
+
+        # ── Pre-Blueprint Clarification Gate ─────────────────────────────────
+        # If the feature request is too vague to blueprint safely, present the
+        # user with concrete implementation options and require a choice.  Runs
+        # on DIRECTOR_MODEL (llama3.1:8b), which is still resident from intent
+        # classification, so this adds latency but NO extra model reload.
+        from pipeline import CLARIFY_VAGUE_REQUESTS as _clarify_enabled
+        if _clarify_enabled:
+            from clarification_gate import run_clarification_gate
+            if not run_clarification_gate(ctx, gdd_snippet, state_snippet):
+                return ctx
+
+        if getattr(ctx, '_scope_mode', 'GENERAL') == "NEW_ATTRACTION":
+            # NEW_ATTRACTION ALWAYS routes to the blueprint phase regardless of
+            # the scope-gate verdict (TOO_BROAD / NARROW / None all force
+            # blueprint in the routing below), so the LLM scope gate is pure
+            # wasted latency for these requests.  Skip it and go straight to
+            # the blueprint phase.
+            print(f"\n  [Lead Producer] Scope is NEW_ATTRACTION — scope gate skipped "
+                  f"(blueprint is mandatory for new attractions).")
+            ctx = _run_blueprint_phase(ctx, blueprint_path, gdd_snippet, state_snippet)
+            if getattr(ctx, 'final_output', None) in ("Pipeline abandoned by user at Blueprint Gate.", "Blueprint complete."):
+                return ctx
+        elif is_read_only_question:
             print(f"\n  [Lead Producer] Prompt looks like a read-only question. "
                   f"Passing through to Phase 1 (Librarian) instead of blueprint generation.")
             print(f"  [Lead Producer] Prompt: {ctx.user_prompt[:80]}")
@@ -544,7 +567,8 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                     scope_system_persona,
                     current_scope_prompt,
                     f"Scope Gate (Attempt {attempt})",
-                    REASONING_MODEL
+                    REASONING_MODEL,
+                    params={"num_predict": 1024},
                 )
 
                 from ollama_client import is_fatal_ollama_error as _is_fatal_scope
@@ -565,9 +589,11 @@ def run_fetches(ctx: PipelineContext) -> PipelineContext:
                     scope_eval,
                     re.IGNORECASE | re.MULTILINE | re.VERBOSE,
                 ))
-                analysis_end = scope_eval.rfind("</analysis>")
-
-                if all_verdicts and analysis_end != -1 and all_verdicts[-1].start() > analysis_end:
+                if all_verdicts:
+                    # Accept the verdict wherever the model placed it.  Requiring
+                    # it strictly AFTER the </analysis> tag made verbose models
+                    # retry pointlessly when they emitted a readable verdict
+                    # earlier in the output.
                     final_verdict = all_verdicts[-1].group(1).upper()
                     break
                 else:

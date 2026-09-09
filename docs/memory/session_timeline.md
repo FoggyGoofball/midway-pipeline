@@ -1,3 +1,1529 @@
+## Session Event  2026-09-09T03:17:21.533114
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protocal)  i just want to test your capabilities since i've upgraded.  refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Create structural scaffold defining all four lifecycle entry points (OnLoadStatic, OnLoad, OnStep, OnUnload) with TODO placeholders for permanent geometry, object pools, modifier hooks, input handling, scoring callbacks, and diagnostics - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction Development
+
+### Task 1: [Lua] - Define attraction lifecycle methods within "skeebal.lua"
+(DependsOn: None)
+Inputs: skeebal
+Outputs: skeebal, strongman_streak_protocol
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Implement OnLoadStatic to initialize the skeeball game state
+(DependsOn: Task 1)
+Inputs: skeebal, strongman_streak_protocol
+Outputs: skeebal, strongman_game_state, pool_counter
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Implement OnLoad to create game state tables and register OnStep callback
+(DependsOn: Task 2)
+Inputs: skeebal, strongman_game_state, pool_counter
+Outputs: skeebal, strongman_game_state, pool_counter
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Implement OnStep callback for physics tick and scoring callbacks
+(DependsOn: Task 3)
+Inputs: skeebal, strongman_game_state, pool_counter
+Outputs: skeebal, strongman_streak_protocol, score_table
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Implement win/loss scoring callbacks and streak reward logic
+(DependsOn: Task 4)
+Inputs: skeebal, strongman_streak_protocol, score_table
+Outputs: skeebal, strongman_streak_protocol, score_table
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 6: [Lua] - Implement input handling for MidwayInput.IsActionDown("fire") and aiming mechanism setup
+(DependsOn: Task 5)
+Inputs: skeebal, strongman_game_state, pool_counter
+Outputs: skeebal, strongman_game_state, pool_counter
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 7: [Lua] - Implement sensor triggers for hole collision and Echo Strikes consecutive hit tracking
+(DependsOn: Task 6)
+Inputs: skeebal, strongman_game_state, pool_counter
+Outputs: skeebal, strongman_game_state, pool_counter
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 8: [Lua] - Implement scoring callbacks and streak reward logic using Engine.AwardTickets(n, label) and Engine.GetStreak()
+(DependsOn: Task 7)
+Inputs: skeebal, strongman_streak_protocol, score_table
+Outputs: skeebal, strongman_streak_protocol, score_table
+Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 9: [Lua] - Implem
+[... output truncated ...]
+---
+## Session Event  2026-09-08T19:27:45.797028
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement the strongman high striker.   this is a test of your abilities i do not want you to add or modify any existing features, just work with what we have already got set up and implement the striker as fully as you can without worrying about audio/dialog/ other unimplemented things
+  </macro_invariants>
+  <target_subtask_scope>
+    Define attraction scaffold with OnLoadStatic spawning shared booth geometry, OnLoad creating object pools and registering MidwayPhysics.OnStep callback, OnUnload printing diagnostics, and OnStep implementing all game logic with TODO placeholders for booth walls, lever fulcrum, bell sensor, shock plates, and scoring hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/audio/
+  - environment/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### resources/
+  - dialog.json
+  - models/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman High Striker Implementation
+
+### Task 1: [Lua] - Define attraction scaffold with OnLoadStatic spawning shared booth geometry (DependsOn: None)
+Inputs: None
+Outputs: attractions/strongman/strongman.lua
+Hooks: OnLoadStatic, OnLoad, OnUnload, OnStep
+File: attractions/strongman/strongman.lua
+
+### Task 2: [Lua] - Create object pools for puck and mallet in OnLoad (DependsOn: Task 1)
+Inputs: None
+Outputs: attractions/strongman/strongball.lua
+Hooks: OnLoad
+File: attractions/strongman/strongman.lua
+
+### Task 3: [Lua] - Register MidwayPhysics.OnStep callback to implement game logic in OnStep (DependsOn: Task 2)
+Inputs: None
+Outputs: attractions/strongman/strongman.lua
+Hooks: OnStep
+File: attractions/strongman/strongman.lua
+
+### Task 4: [Lua] - Implement scoring hooks and track remaining balls with Lua counter in OnStep (DependsOn: Task 3)
+Inputs: None
+Outputs: attractions/strongman/strongman.lua
+Hooks: OnStep
+File: attractions/strongman/strongman.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+Carnival-style high striker attraction with physics-based ball mechanics, height scoring, and award ticket redemption system
+
+### Declared Handles
+  hBall (userdata)  The striker ball physics object [owner: physics, lifecycle: OnLoad]
+  hStriker (userdata)  Striker arm mechanism handle [owner: physics, lifecycle: OnLoad]
+  hBell (userdata)  Bell trigger object [owner: physics, lifecycle: OnLoad]
+  nHeight (number)  Current ball height score [owner: economy, lifecycle: runtime]
+  nMaxHeight (number)  Maximum recorded height [owner: economy, lifecycle: runtime]
+  bActive (boolean)  Attraction active state [owner: economy, lifecycle: runtime]
+
+### OnLoad Registration Order
+  1. OnLoadStatic
+  2. OnLoad
+  3. OnStep
+  4. OnUnload
+
+### Event Flow
+  MidwayPhysics:hitDetected(hBall, hStriker) → AttractionConstants.modifiers:applyForce(hBall, 1.5)
+  MidwayPhysics:ballReachesTop(hBall) → MidwayPhysics:triggerBell(hBell)
+  MidwayPhysics:ballFalls(hBall) → AttractionConstants.modifiers:resetHeight(nHeight)
+  MidwayPhysics:bellRings(hBell) → Engine.AwardTickets/AwardTokens:awardTicket(nHeight)
+  MidwayPhysics:playerHitsStriker(hStriker) → AttractionConstants.modifiers:activateAttraction(bActive)
+
+### Pool Requirements
+  physics_objects: 3
+  economy_hooks: 2
+  award_tokens: 1
+
+### Economy Hooks: awardTicket, resetHeight
+
+### Feature Checklist
+  - ball_physics
+  - striker_mechanism
+  - bell_trigger
+  - height_scoring
+  - award_redemption
+  - reset_mechanism
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred p
+[... output truncated ...]
+---
+## Session Event  2026-09-08T11:07:17.723698
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement the strongman high striker.   this is a test of your abilities i do not want you to add or modify any existing features, just work with what we have already got set up and implement the striker as fully as you can without worrying about audio/dialog/ other unimplemented things
+  </macro_invariants>
+  <target_subtask_scope>
+    Define the complete structural scaffold with all four lifecycle entry points OnLoadStatic, OnLoad, OnStep, and OnUnload including TODO placeholders for gameplay bodies, input handling, and scoring hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/audio/
+  - environment/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### resources/
+  - dialog.json
+  - models/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman High Striker
+
+
+### Task 1: [Lua] - Define the complete structural scaffold with all four lifecycle entry points OnLoadStatic, OnLoad, OnStep, and OnUnload (DependsOn: None)
+Inputs: 
+Outputs:
+Hooks: OnLoadStatic, OnLoad, OnStep, OnUnload
+File: attractions/strongman/strongman.lua
+
+
+### Task 2: [Lua] - Spawn permanent booth geometry using SpawnStaticBox and SpawnStaticCylinder for the strongman cabinet, lever platform, and tower structure in OnLoadStatic (DependsOn: Task 1)
+Inputs: 
+Outputs:
+Hooks: OnLoadStatic
+File: attractions/strongman/strongman.lua
+
+
+### Task 3: [Lua] - Create object pools for the puck/ball using MidwayPhysics.CreatePool with configurable hot and cold pool sizes in OnLoad (DependsOn: Task 2)
+Inputs: 
+Outputs:
+Hooks: OnLoad
+File: attractions/strongman/strongball.lua
+
+### Task 4: [Lua] - Implement score detection logic that checks puck height against bell position using IsSensorTriggered and calls Engine.AwardTickets with Engine.GetStreak() as multiplier on win in OnStep (DependsOn: Task 3)
+Inputs:
+Outputs:
+Hooks: OnStep
+File: attractions/strongman/strongball.lua
+
+
+### Task 5: [Lua] - Implement puck launch physics using AddLinearVelocity on the puck body when player presses fire input in OnStep (DependsOn: Task 4)
+Inputs: 
+Outputs:
+Hooks: OnStep
+File: attractions/strongman/strongball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: StrongmanHighStriker
+A physics-based arcade mechanism where a heavy striker swings down to hit a target peg, triggering an immediate economic payout. The system calculates score multipliers and awards tickets on impact events.
+
+### Declared Handles
+  StrikerBody (CPhysicsBase)  The swinging striker physics object. [owner: physics, lifecycle: runtime]
+  TargetPeg (CPhysicsBase)  The stationary target peg that detects strikes. [owner: physics, lifecycle: OnLoad]
+  ScoreListener (CLogicBase)  Logic listener to capture win events and award tickets. [owner: economy, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. Physics.CreateTargetPeg
+  2. Economy.RegisterScoreListener
+  3. Logic.SubscribeToWinEvent
+
+### Event Flow
+  TargetPeg:ImpactDetected() → domain:Economy.AwardTickets()
+  StrikerBody:VelocityExceeded() → domain:Logic.CalculateMultiplier()
+
+### Pool Requirements
+  Physics.StrikerPool: 1
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets or Engine.AwardTokens called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket/token payouts
+
+
+## Phase 
+[... output truncated ...]
+---
+## Session Event  2026-09-05T00:27:49.578335
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement the strongman high striker.   this is a test of your abilities i do not want you to add or modify any existing features, just work with what we have already got set up and implement the striker as fully as you can without worrying about audio/dialog/ other unimplemented things
+  </macro_invariants>
+  <target_subtask_scope>
+    Define structural scaffold with all four lifecycle entry points (OnLoadStatic, OnLoad, OnStep, OnUnload) with TODO placeholders for booth geometry, object pools, physics callbacks, and scoring hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/audio/
+  - environment/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### resources/
+  - dialog.json
+  - models/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman High Striker Implementation
+### Task 1: [Lua] - Define structural scaffold with four lifecycle entry points and placeholders for booth geometry, object pools, physics callbacks, and scoring hooks (DependsOn: None)
+Inputs: none
+Outputs: strongman.lua file
+Hooks: OnLoadStatic, OnLoad, OnStep, OnUnload
+
+### Task 2: [Lua] - Spawn permanent booth geometry using SpawnStaticBox for base platform, tower walls, and bell mount fixture inside OnLoadStatic (DependsOn: Task 1)
+Inputs: AttractionConstants.modifiers
+Outputs: static booth geometry handles
+Hooks: OnLoadStatic
+
+### Task 3: [Lua] - Create object pools for mallet and bell striker using MidwayPhysics.CreatePool with SpawnDynamicBox for mallet body and SpawnDynamicBox for bell striker (DependsOn: Task 2)
+Inputs: AttractionConstants.modifiers
+Outputs: pooled mallet and bell striker handles
+Hooks: OnLoad
+
+### Task 4: [Lua] - Implement mallet launch physics by applying upward velocity to pooled mallet when lever is released via AddLinearVelocity with gravity enabled (DependsOn: Task 3)
+Inputs: pooled mallet handle, AttractionConstants.modifiers
+Outputs: none
+Hooks: OnStep
+
+### Task 5: [Lua] - Spawn bell striker as dynamic sensor box at tower top using SpawnDynamicBox with IsSensorTriggered callback for bell collision detection (DependsOn: Task 4)
+Inputs: AttractionConstants.modifiers
+Outputs: bell striker handle
+Hooks: OnLoad, OnStep
+
+### Task 6: [Lua] - Implement input handling for lever pull using MidwayInput.IsActionDown("fire") to trigger mallet swing (DependsOn: Task 5)
+Inputs: pooled mallet handle, AttractionConstants.modifiers
+Outputs: none
+Hooks: OnStep
+
+### Task 7: [Lua] - Implement win condition check on bell sensor trigger and call Engine.AwardTickets with Engine.GetStreak() as multiplier for streak protocol payouts (DependsOn: Task 6)
+Inputs: pooled mallet handle, AttractionConstants.modifiers, Engine
+Outputs: Tickets awarded
+Hooks: OnStep
+
+### Task 8: [Lua] - Track gameplay counters (swing count, current tier, active modifier, round index) as Lua local variables within OnStep scope (DependsOn: Task 7)
+Inputs: pooled mallet handle, AttractionConstants.modifiers
+Outputs: none
+Hooks: OnStep
+
+### Task 9: [Lua] - Read AttractionConstants.modifiers every frame inside OnStep callback to apply variable difficulty and friction to mallet (DependsOn: Task 8)
+Inputs: pooled mallet handle, AttractionConstants.modifiers
+Outputs: none
+Hooks: OnStep
+
+### Task 10: [Lua] - Implement score gauge tracking with Engine.GetTickets() and Engine.GetTokens() for display state updates every frame in OnStep (DependsOn: Task 9)
+Inputs: pooled mallet handle, Attracti
+[... output truncated ...]
+---
+## Session Event  2026-09-04T19:15:20.541880
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement the strongman high striker.   this is a test of your abilities i do not want you to add or modify any existing features, just work with what we have already got set up and implement the striker as fully as you can without worrying about audio/dialog/ other unimplemented things
+  </macro_invariants>
+  <target_subtask_scope>
+    Create the overarching structural scaffold defining all lifecycle hooks (OnLoadStatic, OnLoad, OnStep, OnUnload) with TODO comment placeholders for booth spawning, rack/tower geometry, lever setup, puck physics, bell placement, sensor triggers, input handling, modifier reads, scoring calls, and cleanup diagnostics - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/audio/
+  - environment/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### resources/
+  - dialog.json
+  - models/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction Implementation
+
+### Task 1: [Lua] - Define skeeball game rules and scoring system (DependsOn: None)
+Inputs: nil
+Outputs: nil
+Hooks: OnLoadStatic, OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Implement initial round setup, creating 6 static spheres representing balls (DependsOn: Task 1)
+Inputs: nil
+Outputs: nil
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Define score counter for tracking successful hole landings (DependsOn: Task 2)
+Inputs: nil
+Outputs: nil
+Hooks: OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Add functionality to initialize and register with physics engine using OnLoadStatic (DependsOn: Task 3)
+Inputs: nil
+Outputs: nil
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+
+
+### Domain Agent Fix Cycle 1
+
+### Review Cycle 2
+
+
+### Domain Agent Fix Cycle 2
+
+### Review Cycle 3
+
+
+### Domain Agent Fix Cycle 3
+
+### Review Cycle 4
+
+
+
+## ⚡ Pipeline Auto-Approved  Review did not fully converge
+Tribunal reached max cycles (4) without consensus, but AUTO_APPROVE_GATES=True and no TTY.
+Review the pipeline output for non-critical warnings. Manually verify code generation quality.
+
+
+## Phase 6b: Independent Observability Pass
+
+
+## Phase 6c: Phantom API Final Gate
+
+### ❌ Phantom API violations found
+
+- [task_monolithic][PhantomAPIGate] Bare phantom API: `SpawnStaticBox(...)` at position 1175 — this function requires the MidwayPhysics. namespace prefix. Write as `MidwayPhysics.SpawnStaticBox(...)`.
+
+- [task_monolithic][PhantomAPIGate] Bare phantom API: `SpawnStaticCapsule(...)` at position 1271 — this function requires the MidwayPhysics. namespace prefix. Write as `MidwayPhysics.SpawnStaticCapsule(...)`.
+
+- [task_monolithic][PhantomAPIGate] Bare phantom API: `SpawnStaticCapsule(...)` at position 1350 — this function requires the MidwayPhysics. namespace prefix. Write as `MidwayPhysics.SpawnStaticCapsule(...)`.
+
+- [task_monolithic][PhantomAPIGate] Bare phantom API: `SpawnStaticCapsule(...)` at position 1428 — this function requires the MidwayPhysics. namespace prefix. Write as `MidwayPhysics.SpawnStaticCapsule(...)`.
+
+- [task_monolithic][PhantomAPIGate] Bare phantom API: `SpawnStaticCylinder(...)` at position 1596 — this function requires the MidwayPhysics. namespace prefix. Write as `MidwayPhysics.SpawnStaticCylinder(...)`.
+
+- [task_monolithic][PhantomAPIGate] Bare phantom API: `SpawnStaticBox(...)`
+[... output truncated ...]
+---
+## Session Event  2026-09-04T17:13:46.043148
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement the strongman high striker.   this is a test of your abilities i do not want you to add or modify any existing features, just work with what we have already got set up and implement the striker as fully as you can without worrying about audio/dialog/ other unimplemented things
+  </macro_invariants>
+  <target_subtask_scope>
+    Define full lifecycle scaffold with OnLoadStatic, OnLoad, OnStep, OnUnload entry points and TODO placeholders for booth geometry, object pools, physics systems, input handling, and scoring hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/audio/
+  - environment/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### resources/
+  - dialog.json
+  - models/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman High Striker Attraction
+
+### Task 1: [Lua] - Define full lifecycle scaffold (DependsOn: None)
+### Task 2: [Lua] - Spawn permanent booth walls and floor in OnLoadStatic using MidwayPhysics.SpawnStaticBox (DependsOn: Task 1)
+### Task 3: [Lua] - Spawn tower structure and player platform in OnLoadStatic using MidwayPhysics.SpawnStaticBox and MidwayPhysics.SpawnStaticCylinder (DependsOn: Task 2)
+### Task 4: [Lua] - Create ball object pools in OnLoad using MidwayPhysics.CreatePool with hot/cold sizing parameters for dynamic sphere bodies (DependsOn: Task 3)
+### Task 5: [Lua] - Spawn initial dynamic ball and mallet in OnLoad using MidwayPhysics.SpawnDynamicSphere and MidwayPhysics.SpawnDynamicBox with configured mass and physics properties (DependsOn: Task 4)
+### Task 6: [Lua] - Spawn bell collision sensor in OnLoad using MidwayPhysics.SpawnSensorBox at tower top for detecting strikes (DependsOn: Task 5)
+### Task 7: [Lua] - Register MidwayPhysics.OnStep callback inside OnLoad with function closure for per-frame physics simulation (DependsOn: Task 6)
+### Task 8: [Lua] - Implement swing input handling in OnStep by checking MidwayInput.IsActionDown("fire") and applying ApplyImpulse to mallet (DependsOn: Task 7)
+### Task 9: [Lua] - Implement gravity and damping adjustments in OnStep using SpawnDynamicSphere/Box friction and gravity factor settings (DependsOn: Task 8)
+### Task 10: [Lua] - Implement bell collision detection in OnStep using IsSensorTriggered on bell sensor handle for win condition (DependsOn: Task 9)
+### Task 11: [Lua] - Implement Economy Mandate by reading AttractionConstants.modifiers in OnStep every frame and calling Engine.AwardTickets with Engine.GetStreak() multiplier on win events (DependsOn: Task 10)
+
+[MATH_HEAVY]
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A physics-based arcade attraction where a heavy striker is launched by a pendulum or spring mechanism to hit a target bell, triggering an economy award system based on the number of hits and streak multipliers.
+
+### Declared Handles
+  StrikerBody (rbx)  The heavy swinging arm or striker used to hit the bell. [owner: physics, lifecycle: runtime]
+  BellTarget (rbx)  The target bell that registers collision and awards points. [owner: physics, lifecycle: runtime]
+  CollisionMonitor (rbx)  Service object monitoring collision events for strike validation. [owner: physics, lifecycle: runtime]
+  ScoreState (rbx)  Service tracking current streak and score state for payout calculation. [owner: economy, lifecycle: runtime]
+
+### OnLoad Registration Order
+  1. Physics:InitializeBodies()
+  2. Collision
+[... output truncated ...]
+---
+## Session Event  2026-09-03T16:59:12.396964
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement the strongman high striker.  do not tie it to a booth, i believe the naming convention says that an underscore before the name mweans the booth lgic ignores it.  this is a test of your abilities
+  </macro_invariants>
+  <target_subtask_scope>
+    Define OnLoadStatic() and create booth geometry - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman High Striker
+
+### Task 1: [Lua] - Define OnLoadStatic() and Create Booth Geometry (DependsOn: None)
+Inputs: attraction constants
+Outputs: booth handle, geometry table
+Hooks: OnLoadStatic
+File: attractions/strongman/strongman.lua
+
+### Task 2: [Lua] - Initialize Object Pools for Pucks and Levers (DependsOn: Task 1)
+Inputs: object pool parameters
+Outputs: puck handle, lever handle
+Hooks: None
+File: attractions/strongman/strongman.lua
+
+### Task 3: [Lua] - Register MidwayPhysics.OnStep Callback in OnLoad() (DependsOn: Task 2)
+Inputs: physics callback function
+Outputs: None
+Hooks: OnStep
+File: attractions/strongman/strongman.lua
+
+### Task 4: [Lua] - Implement Ball Launch Mechanics on Player Input using SpawnDynamicSphere and ApplyImpulse (DependsOn: Task 3)
+Inputs: player input, physics parameters
+Outputs: ball handle
+Hooks: OnStep
+File: attractions/strongman/strongman.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: StrongmanHighStriker
+A physics-based attraction where participants throw objects at targets, aiming to score points based on accuracy and force.
+
+### Declared Handles
+  _StrongmanHighStrikerPhysics (MidwayPhysics)  Handles physics calculations for the high striker game. [owner: physics, lifecycle: OnLoadStatic]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(...)
+  2. _StrongmanHighStrikerPhysics.OnStep(dt)
+
+### Event Flow
+  player.throw_attempt_detected() → MidwayPhysics.ApplyForceToObject(player.projectile, throw_direction)
+  player.projectile.hits_target(target) → Engine.AwardTickets(player.score * Engine.GetStreak())
+
+### Pool Requirements
+  strongman_high_striker_targets: 10
+  strongman_high_striker_projectiles: 5
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+## Phase 4: Mesh Execution (13 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Issue 1: The function `DestroyBody` is used without the `MidwayPhysics.` namespace prefix, violating Rule V3 (PHANTOM APIS). Offending line:
+  ```lua
+  DestroyBody(puck)
+  ```
+### Verdict
+[VERDICT: FAIL]
+
+### Domain Agent Fix Cycle 1
+
+### Review Cycle 2
+## Integration Review
+### Issues
+- Issue 1: The function `DestroyBody` is called withou
+[... output truncated ...]
+---
+## Session Event  2026-06-13T10:32:59.196374
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Implement OnLoadStatic() - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+
+### Task 1: [Lua] - Define Module-Level State (DependsOn: None)
+Inputs: none
+Outputs: balls, remainingBalls, currentScore
+Hooks: OnLoadStatic, OnLoad, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+
+### Task 2: [Lua] - Initialize Shared Constants Table (DependsOn: Task 1)
+Inputs: balls, remainingBalls, currentScore
+Outputs: CONST table with geometry, physics, gameplay values
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+
+### Task 3: [Lua] - Object Pool Creation and Round State Init (DependsOn: Task 2)
+Inputs: balls, remainingBalls, currentScore, CONST table
+Outputs: pool handles for dynamic balls and other moving objects
+Hooks: OnLoadStatic, OnLoad
+File: attractions/skeeball/skeeball.lua
+
+
+### Task 4: [Lua] - Input Handling and Aim Mechanism Setup (DependsOn: Task 3)
+Inputs: CONST table, pool handles
+Outputs: initialized game state with six balls available at start of round
+Hooks: OnLoadStatic, OnLoad
+File: attractions/skeeball/skeeball.lua
+
+
+### Task 5: [Lua] - Scoring Logic and Ball Launch (DependsOn: Task 4)
+Inputs: CONST table, pool handles, game state
+Outputs: score values for each hole landed in, ball launch on player input
+Hooks: OnLoadStatic, OnStep
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball game where players aim, set power, and shoot balls into targets to score points.
+
+### Declared Handles
+  skeeballPhysics (table)  Handles all physics-related calculations for the skeeball game. [owner: physics, lifecycle: OnLoadStatic]
+  skeeballUI (table)  Manages the user interface elements such as aim, power control, and score display. [owner: ui, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. SkeeballPhysics.OnInitialize(...)
+  2. SkeeballUI.OnInitialize(...)
+
+### Event Flow
+  skeeballUI.IsAimModeActive() → SkeeballPhysics.SetBallAimAngle(skeeballUI.GetAimAngle())
+  skeeballUI.IsPowerSet() → SkeeballPhysics.SetBallPower(skeeballUI.GetPowerLevel())
+  skeeballPhysics.BallIsShot() → SkeeballPhysics.LaunchBall()
+  skeeballPhysics.BallHoleScored(score) → Engine.AwardTickets(score)
+
+### Pool Requirements
+  ballPool: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Scoring system applies Engine.GetStreak() multiplier to ticket payouts
+
+
+## Phase 4: Mesh Execution (12 ta
+[... output truncated ...]
+---
+## Session Event  2026-06-11T20:43:32.878286
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define skeeball attraction lifecycle entry points - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction Lifecycle Entry Points
+
+### Task 1: [Lua] - Define skeeball attraction lifecycle entry points (DependsOn: None)
+Inputs: 
+Outputs: 
+Hooks: OnLoadStatic, OnLoad, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Implement OnLoadStatic to define initial setup of skeeball arena and magnets (DependsOn: Task 1)
+Inputs: MidwayPhysics.SpawnSharedBooth(), AttractionConstants.modifiers 
+Outputs: balls table, remainingBalls counter
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Implement OnLoad to initialize round state and object pools (DependsOn: Task 2)
+Inputs: Engine.AwardTokens(), MidwayPhysics.CreatePool()
+Outputs: balls table, remainingBalls counter
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Implement OnUnload to release resources and reset game state (DependsOn: Task 3)
+Inputs: MidwayPhysics.DestroyBody(), Engine.GetTickets()
+Outputs: balls table, remainingBalls counter
+Hooks: OnUnload
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A single-player skeeball game where players aim and set power on balls to knock over targets.
+
+### Declared Handles
+  skeeballPhysics (ModuleHandle)  Handles the physics for ball collisions and movements. [owner: physics, lifecycle: OnLoadStatic]
+  playerInput (ModuleHandle)  Handles player input for aiming and setting power on the balls. [owner: input, lifecycle: OnLoad]
+  scoreManager (ModuleHandle)  Manages the scoring system and updates the player's score based on hits. [owner: economy, lifecycle: runtime]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(...)
+
+### Event Flow
+  playerInput.IsAimComplete() == true → skeeballPhysics.ThrowBall(playerInput.GetAimDirection(), playerInput.GetPower())
+  scoreManager.IsGameEndConditionMet() == true → MidwayEconomy.AwardTickets(scoreManager.CalculateScore())
+
+### Pool Requirements
+  balls: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets, Engine.GetStreak()
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+## Phase 4: Mesh Execution (10 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Iss
+[... output truncated ...]
+---
+## Session Event  2026-06-11T17:36:31.645811
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define OnLoadStatic() - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+
+### Task 1: [Lua] - Define module-level state and constants
+(DependsOn: None)
+Inputs: None
+Outputs: balls (table), remainingBalls (int), currentScore (int), aimAngle (float), powerLevel (float)
+Hooks: OnLoadStatic, OnLoad, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Implement input handling for aiming and power setting of the ball launcher
+(DependsOn: Task 1)
+Inputs: user_input (table), aimAngle (float), powerLevel (float)
+Outputs: balls (table), remainingBalls (int), currentScore (int)
+Hooks: OnLoad, OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Spawn initial game geometry using SpawnStaticBox() or equivalent static body type functions
+(DependsOn: Task 2)
+Inputs: None
+Outputs: handle (handle), balls (table), remainingBalls (int)
+Hooks: OnLoad, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Implement scoring logic with AttractionConstants modifiers and integrate Engine.AwardTickets(n, label) for win events
+(DependsOn: Task 3)
+Inputs: balls (table), remainingBalls (int), currentScore (int), AttractionConstants.modifiers (table)
+Outputs: currentScore (int)
+Hooks: OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - Define OnLoad() to register MidwayPhysics.OnStep callback and initialize game state
+(DependsOn: Task 4)
+Inputs: None
+Outputs: balls (table), remainingBalls (int), currentScore (int)
+Hooks: OnLoad, OnUnload
+File: attractions/skeeball/skeeball.lua
+
+[MATH_HEAVY]
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A skeeball attraction where players aim, set power, and knock over targets to earn points.
+
+### Declared Handles
+  skeeballGame (table)  Stores the game state and logic. [owner: game, lifecycle: OnLoadStatic]
+  ballSpawner (function)  Spawns a ball at the start of each round. [owner: physics, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(...)
+
+### Event Flow
+  skeeballGame.isRoundOver → Engine.AwardTickets(skeeballGame.score * Engine.GetStreak())
+
+### Pool Requirements
+  balls: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket payouts
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Pha
+[... output truncated ...]
+---
+## Session Event  2026-06-11T15:14:00.143256
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    build me the skeeball attraction as outlined in the docs.  make sure that the etire game is containd within a single "skeeball.lua"  also include the ability for the user to aim and set power on the balls.  each round should start with 6 balls and end when the last ball is thrown
+  </macro_invariants>
+  <target_subtask_scope>
+    Define OnLoadStatic() - attractions/skeeball/skeeball.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - plinko/
+  - skeeball/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Skeeball Attraction
+### Task 1: [Lua] - Define OnLoadStatic() (DependsOn: None)
+Inputs: Attractions, Constants
+Outputs: Handle
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+### Task 2: [Lua] - Register MidwayPhysics.OnStep(fn) in OnLoad() (DependsOn: Task 1)
+Inputs: MidwayPhysics, Constants
+Outputs: None
+Hooks: OnStep
+File: attractions/skeeball/skeeball.lua
+
+### Task 3: [Lua] - Define OnUnload() (DependsOn: Task 2)
+Inputs: Attractions, Constants
+Outputs: None
+Hooks: OnUnload
+File: attractions/skeeball/skeeball.lua
+
+### Task 4: [Lua] - Create object pools for balls in OnLoad() (DependsOn: Task 3)
+Inputs: MidwayPhysics, Constants
+Outputs: Handle
+Hooks: OnLoad
+File: attractions/skeeball/skeeball.lua
+
+### Task 5: [Lua] - SpawnStaticBoxes as the permanent booth geometry on game load (DependsOn: Task 4)
+Inputs: MidwayPhysics, Constants
+Outputs: Handle
+Hooks: OnLoadStatic
+File: attractions/skeeball/skeeball.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Skeeball
+A classic skeeball attraction where players aim and set power on balls to knock off targets, scoring points based on their performance.
+
+### Declared Handles
+  skeeballPhysics (table)  Table containing physics-related constants and settings. [owner: physics, lifecycle: OnLoadStatic]
+  ballManager (table)  Manages the creation, movement, and scoring of balls. [owner: logic, lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. skeeballPhysics.OnStep(...)
+  2. ballManager.OnStep(dt)
+
+### Event Flow
+  gameRoundStart → ballManager.ResetBalls()
+  playerAimAndPowerSet → ballManager.LaunchBall(playerAim, playerPower)
+  ballHitsTarget → ballManager.ScorePoints(points)
+  lastBallThrown → gameRoundEnd()
+
+### Pool Requirements
+  balls: 6
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - Player can aim and set power on balls
+  - Each round starts with 6 balls
+  - Game ends when the last ball is thrown
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets called on win/score events
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+## Integration Review
+### Issues
+- Issue 1: The use of `SpawnStaticBox` is a phantom API. It should be replaced with `MidwayPhysics.SpawnStaticBox`.
+- Issue 2: The variable `heat`, `hand`, `hooks`, and `powerLevel` are declare
+[... output truncated ...]
+---
 ## Session Event  2026-06-06T20:59:38.676905
 **Agent Assigned:** 
 **User Input:** <execution_environment>

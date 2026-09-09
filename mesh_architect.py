@@ -80,6 +80,61 @@ ARCHITECT_SYSTEM = (
     "to ticket/token payouts' as a third feature_checklist item."
 )
 
+# -- Two-turn cognitive-load separation (Standard #2) ----------------------------
+# Turn 1: raw, unstructured chain-of-thought (no formatting pressure).
+ARCHITECT_COT_SYSTEM = (
+    "You are the ATTRACTION ARCHITECT for 'Midway to Nowhere', a Lua-based arcade game. "
+    "Attractions are single Lua files wired to the MidwayPhysics bridge — there is NO "
+    "C++ class hierarchy: no Entity, GameObject, InputDevice, EconomyService, EventBus, "
+    "GameSession, CreditSystem, or StateMachine classes. Never invent such architecture.\n"
+    "Ground every idea ONLY in these real APIs:\n"
+    "- Lifecycle: global Lua functions OnLoadStatic(), OnLoad(), OnStep(dt), OnUnload().\n"
+    "- Physics: MidwayPhysics.SpawnStaticBox/Sphere/Capsule/Cylinder, SpawnDynamic*, "
+    "SpawnKinematic*, SpawnSensor*, CreatePool/PoolAcquire/PoolReturn, ApplyImpulse, "
+    "GetPosition, MoveKinematic, IsSensorTriggered, DestroyBody.\n"
+    "- Input: MidwayInput.IsActionDown('fire' | 'power_up' | 'power_down' | ...).\n"
+    "- Modifiers: read AttractionConstants.modifiers (or ENGINE_MOD_* globals) INSIDE "
+    "OnStep every frame — never cache at load time.\n"
+    "- Economy: Engine.AwardTickets(n, label) / Engine.AwardTokens(n, label), with "
+    "Engine.GetStreak() as the multiplier.\n"
+    "Handles are Lua-local userdata values returned by Spawn*/CreatePool calls.\n"
+    "Be CONCISE: give 5-8 short bullet points covering handles, lifecycle order, event "
+    "flow, pools, and economy. Do NOT output JSON yet — this is only the thinking step."
+)
+
+# Turn 2: clean extraction into the Pydantic schema (instructor + tenacity).
+ARCHITECT_EXTRACT_SYSTEM = (
+    "You are the ATTRACTION ARCHITECT. Convert the supplied raw analysis into the "
+    "exact JSON schema requested, using ONLY the Lua/MidwayPhysics APIs named above "
+    "(MidwayPhysics.*, MidwayInput.*, AttractionConstants.modifiers, Engine.AwardTickets/"
+    "AwardTokens). Do NOT introduce C++ classes, managers, services, or any engine "
+    "architecture. Return valid JSON only."
+)
+
+# Single-turn structured extraction system.  The two-turn CoT protocol was
+# removed: the freeform turn rambled, returned empty output, and tripped the
+# 60-minute socket timeout.  The schema + instructor validation + tenacity
+# self-correction is more reliable than an unvalidated reasoning turn.
+ARCHITECT_STRUCTURED_SYSTEM = (
+    "You are the ATTRACTION ARCHITECT for 'Midway to Nowhere', a Lua-based arcade game. "
+    "Attractions are single Lua files wired to the MidwayPhysics bridge — there is NO "
+    "C++ class hierarchy: no Entity, GameObject, InputDevice, EconomyService, EventBus, "
+    "GameSession, CreditSystem, or StateMachine classes. Never invent such architecture.\n"
+    "Ground every idea ONLY in these real APIs:\n"
+    "- Lifecycle: global Lua functions OnLoadStatic(), OnLoad(), OnStep(dt), OnUnload().\n"
+    "- Physics: MidwayPhysics.SpawnStaticBox/Sphere/Capsule/Cylinder, SpawnDynamic*, "
+    "SpawnKinematic*, SpawnSensor*, CreatePool/PoolAcquire/PoolReturn, ApplyImpulse, "
+    "GetPosition, MoveKinematic, IsSensorTriggered, DestroyBody.\n"
+    "- Input: MidwayInput.IsActionDown('fire' | 'power_up' | 'power_down' | ...).\n"
+    "- Modifiers: read AttractionConstants.modifiers (or ENGINE_MOD_* globals) INSIDE "
+    "OnStep every frame — never cache at load time.\n"
+    "- Economy: Engine.AwardTickets(n, label) / Engine.AwardTokens(n, label), with "
+    "Engine.GetStreak() as the multiplier.\n"
+    "Handles are Lua-local userdata values returned by Spawn*/CreatePool calls.\n"
+    "Produce the attraction design as a single JSON object matching the provided schema. "
+    "Return ONLY the JSON object — no prose, no markdown fences."
+)
+
 # -- JSON extractor -------------------------------------------------------------
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
@@ -202,6 +257,41 @@ def _seed_integration_schema(design: AttractionDesign) -> IntegrationSchema:
     return schema
 
 
+def _try_structured_architect(prompt: str) -> Optional[AttractionDesign]:
+    """Standard #1/#2: extract the design via instructor + tenacity (two-turn).
+
+    Returns None if the structured path is unavailable or fails, so the caller
+    falls back to the legacy regex parser without disturbing the pipeline.
+    """
+    try:
+        from structured_client import StructuredClient
+        from structured_schemas import AttractionDesignOutput
+    except Exception as e:
+        print(f"  [Architect] ℹ Structured extraction unavailable ({e}); using legacy parser.")
+        return None
+
+    try:
+        from pipeline import REASONING_MODEL
+        from ollama_config import OLLAMA_HOST
+
+        client = StructuredClient(model=REASONING_MODEL, base_url=OLLAMA_HOST, temperature=0.0)
+        output = client.extract(
+            schema=AttractionDesignOutput,
+            system=ARCHITECT_STRUCTURED_SYSTEM,
+            user=prompt,
+            # The design schema carries task_anchors (up to 11+ entries), handles,
+            # event flow and a checklist, so a full JSON can exceed 2048 tokens
+            # and trigger an "incomplete" truncation.  6144 is generous enough
+            # for a verbose design while still bounding generation well under
+            # the 60-minute socket timeout.
+            max_tokens=6144,
+        )
+        return output.to_attraction_design()
+    except Exception as e:
+        print(f"  [Architect] ⚠ Structured extraction failed ({e}); falling back to legacy parser.")
+        return None
+
+
 # -- Main entry point ----------------------------------------------------------
 
 def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
@@ -232,6 +322,21 @@ def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
     print("=" * 60)
 
     try:
+        # -- Standard #1/#2: instructor + tenacity two-turn extraction first. --
+        # Falls back to the legacy regex JSON parser if unavailable or failed.
+        _structured_design = _try_structured_architect(prompt)
+        if _structured_design is not None:
+            ctx.attraction_design = _structured_design
+            ctx.integration_schema = _seed_integration_schema(_structured_design)
+            print(f"  [Architect] ✅ Design doc created (structured): '{_structured_design.title}'")
+            print(f"             {len(_structured_design.handles)} handles, "
+                  f"{len(_structured_design.event_flow)} event edges, "
+                  f"{len(_structured_design.feature_checklist)} checklist items")
+            ctx.output_parts.append(
+                f"\n## 🏗 Attraction Design Document\n{_structured_design.to_context_block()}\n"
+            )
+            return ctx
+
         from pipeline import call_ollama, REASONING_MODEL
         from ollama_client import is_fatal_ollama_error
 

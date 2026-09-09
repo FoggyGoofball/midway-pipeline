@@ -650,6 +650,38 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
         if _bp_issues and _retry_count >= _MAX_RETRIES:
             print(f"  [Blueprint Validator] ⚠ {_retry_count} retries exhausted — force-accepting blueprint despite {len(_bp_issues)} issue(s)")
             print(f"  [Blueprint Validator] Issues bypassed: {'; '.join(_bp_issues[:3])}")
+
+            # -- Programmatic injection: add missing mandatory tasks directly --
+            # The LLM model physically cannot output 11+ tasks, so we inject
+            # economy/modifier tasks into the blueprint text before saving.
+            _bp_text_lower = blueprint.lower()
+            _injected_count = 0
+
+            # Check for modifier task
+            if not any(kw in _bp_text_lower for kw in ("modifier", "attractionconstants", "engine_mod_")):
+                _mod_line = (
+                    f"- [ ] Integrate modifier system — read AttractionConstants.modifiers every OnStep "
+                    f"frame and apply to gameplay variables"
+                    + (f" - {_user_file_constraint_canonical}" if _user_file_constraint_canonical else "")
+                )
+                blueprint += "\n" + _mod_line
+                _injected_count += 1
+                print(f"  [Blueprint Validator] 🔧 Programmatically injected missing modifier task")
+
+            # Check for economy task
+            if not any(kw in _bp_text_lower for kw in ("awardtickets", "awardtokens", "economy", "tickets", "tokens")):
+                _eco_line = (
+                    f"- [ ] Implement economy hooks — call Engine.AwardTickets(n, label) "
+                    f"with Engine.GetStreak() multiplier on win/score events"
+                    + (f" - {_user_file_constraint_canonical}" if _user_file_constraint_canonical else "")
+                )
+                blueprint += "\n" + _eco_line
+                _injected_count += 1
+                print(f"  [Blueprint Validator] 🔧 Programmatically injected missing economy task")
+
+            if _injected_count:
+                print(f"  [Blueprint Validator] 🔧 Injected {_injected_count} mandatory task(s) into blueprint")
+
             _bp_issues = []  # Clear issues so we fall through to the accept path
 
         if _bp_issues:

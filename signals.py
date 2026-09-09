@@ -185,6 +185,37 @@ def get_verdict(review_text: str) -> str:
         if _pass_lines:
             return "PASS"
 
+    # Semantic fallback: the reviewer frequently omits an explicit PASS/FAIL
+    # tag but still states an unambiguous judgement in prose ("no issues
+    # found", "must fix the loop").  Approval phrases are checked FIRST so
+    # that "no issues" is not swallowed by a generic rejection; hedged lines
+    # are skipped (same guard as the standalone-word fallback above).
+    _HEDGE_RE = re.compile(
+        r"\b(?:could|would|might|may|should|will|can|if|when|unless|avoid|prevent|cause)\b",
+        re.IGNORECASE,
+    )
+    _APPROVE_RE = re.compile(
+        r"\b(?:approve(?:d)?|lgtm|looks (?:good|correct)|ready to merge|ship it|"
+        r"no (?:issues|problems|errors|violations|concerns)|nothing to fix|"
+        r"all (?:checks pass|good)|correct and complete)\b",
+        re.IGNORECASE,
+    )
+    _REJECT_RE = re.compile(
+        r"\b(?:reject(?:ed)?|must fix|needs? (?:fix(?:ing)?|to be fixed)|"
+        r"does not compile|fails? to compile|won't compile|broken|incorrect|"
+        r"not (?:correct|valid|ready)|"
+        r"(?:issues?|errors?|problems?|violations?) (?:found|remain|to fix|must)|"
+        r"(?:there are|has|contains?) (?:an? )?(?:issues?|errors?|problems?))\b",
+        re.IGNORECASE,
+    )
+    for _ln in review_text.splitlines():
+        if _HEDGE_RE.search(_ln):
+            continue
+        if _APPROVE_RE.search(_ln):
+            return "PASS"
+        if _REJECT_RE.search(_ln):
+            return "FAIL"
+
     return "UNKNOWN"
         
 

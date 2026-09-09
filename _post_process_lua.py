@@ -163,42 +163,96 @@ def _strip_module_level_mod(content: str) -> str:
 
 
 # ==============================================================================
-#  Fix #3: Strip pipeline artifacts
+#  Fix #3: Convert surviving pipeline artifacts to visible TODOs
 # ==============================================================================
-# Removes:
-#   - [TASK_x_INSERT_HOOK] markers
-#   - <fix-plan>...</fix-plan> blocks
-#   - ### [Anchor] and similar anchor header artifacts
+# Replaces (does NOT silently remove):
+#   - [TASK_x_INSERT_HOOK] markers → `-- TODO [TASK_x]: implement` (visible TODOs)
+#   - <fix-plan>...</fix-plan> blocks → removed (these are never useful in output)
+#   - ### [Anchor] headers → removed
+#   - bare [TASK_x] markers → removed
+#
+# Rationale: If the LLM preserved an anchor marker as a comment, silently
+# stripping it produces valid Lua with zero functionality.  Converting it to
+# a TODO line ensures the reviewer catches it.
+
+def _artifact_to_todo(line: str):
+    """Convert an artifact line into a visible `-- TODO [TASK_x]: ...` comment.
+    Returns:
+      - None if the artifact should be removed entirely.
+      - A replacement string (TODO comment) if artifact converted.
+      - The original line unchanged otherwise.
+    """
+    # <fix-plan> blocks → remove entirely
+    if re.match(r'^\s*<fix-plan>', line):
+        return None
+    # ### [Anchor] headers → remove
+    if re.match(r'^\s*###\s*\[Anchor\]', line, re.IGNORECASE):
+        return None
+    # Bare [TASK_x] lines → remove (no description to preserve)
+    if re.match(r'^\s*\[TASK_\d+\]\s*$', line):
+        return None
+
+    # [TASK_x_INSERT_HOOK] markers → convert to TODO
+    m = re.match(
+        r'^\s*(?:--?\s*)?\[TASK_(\d+)_INSERT_HOOK\]\s*--\s*(.*)',
+        line
+    )
+    if m:
+        task_num = m.group(1)
+        description = m.group(2).strip()
+        return f"    -- TODO [TASK_{task_num}]: {description}"
+    # Also match markers without leading `-- description` part
+    m = re.match(r'^\s*(?:--?\s*)?\[TASK_(\d+)_INSERT_HOOK\]', line)
+    if m:
+        task_num = m.group(1)
+        return f"    -- TODO [TASK_{task_num}]: implement this section"
+    return line  # not an artifact — pass through
+
+
 
 def _strip_pipeline_artifacts(content: str) -> str:
-    """Remove pipeline artifact markers that leaked into output."""
-    original = content
-    lines = content.splitlines()
-    filtered: list[str] = []
-    removed_count = 0
+    """Replace pipeline artifact markers with visible TODO comments.
 
-    # Remove <fix-plan>...</fix-plan> blocks (may span multiple lines)
+    Surviving anchor markers indicate the LLM failed to implement that
+    section.  Rather than silently removing them (which produces empty
+    code), we convert them to `-- TODO [TASK_x]:` lines that the
+    reviewer can flag.
+    """
+    original = content
+
+    # Phase 1: Remove <fix-plan>...</fix-plan> blocks (may span multiple lines)
     content = re.sub(r'<fix-plan>.*?</fix-plan>', '', content, flags=re.DOTALL)
 
-    for line in content.splitlines():
-        # Remove [TASK_x_INSERT_HOOK] markers (with or without leading --)
-        if re.match(r'^\s*(?:--?\s*)?\[TASK_\d+_INSERT_HOOK\]', line):
-            removed_count += 1
-            continue
+    # Phase 2: Process line-by-line
+    lines = content.splitlines()
+    converted: list[str] = []
+    removed_count = 0
+    todo_count = 0
 
-        # Remove ### [Anchor] header artifacts
-        if re.match(r'^\s*###\s*\[Anchor\]', line, re.IGNORECASE):
+    for line in lines:
+        result = _artifact_to_todo(line)
+        if result is None:
             removed_count += 1
-            continue
-        # Remove bare [TASK_x] markers left behind
-        if re.match(r'^\s*\[TASK_\d+\]\s*$', line):
-            removed_count += 1
-            continue
-        filtered.append(line)
+        elif result != line:
+            # Marker was converted to a TODO
+            todo_count += 1
+            converted.append(result)
+        else:
+            converted.append(result)
 
-    result = "\n".join(filtered)
+
+    result = "\n".join(converted)
+
+    # Collapse runs of 3+ blank lines (can happen after removal)
+    result = re.sub(r'\n{4,}', '\n\n\n', result)
+
     if result != original:
-        print(f"  [Post-Process Fix #3] Removed {removed_count} pipeline artifact(s)")
+        parts = []
+        if removed_count:
+            parts.append(f"removed {removed_count}")
+        if todo_count:
+            parts.append(f"converted {todo_count} to TODO")
+        print(f"  [Post-Process Fix #3] {'; '.join(parts)} pipeline artifact(s)")
     return result
 
 
@@ -279,70 +333,50 @@ _KNOWN_BARE_SYMBOLS: frozenset[str] | None = None
 
 
 def _build_bare_symbols_from_contract() -> frozenset[str]:
-    """Dynamically build the set of symbols that need a MidwayPhysics. prefix
-    by reading the contract validator's bare_name_to_namespace map.
+    """Return the bare symbols that need a ``MidwayPhysics.`` prefix.
 
-    Falls back to a minimal built-in set if the contract validator cannot
-    be imported (e.g. during unit testing without the full cartridge).
-
-    Returns:
-        frozenset of symbol names (e.g. "DestroyBody", "SpawnDynamicSphere").
+    Uses a static PascalCase set as the single source of truth.  The bridge
+    contract stores symbol names in LOWERCASE (both ``bare_name_to_namespace``
+    keys and ``approved_calls`` entries), so deriving canonical casing from it
+    is lossy — "spawnstaticbox" cannot be reliably re-cased to
+    "SpawnStaticBox" — which silently disabled the prefixer.
     """
     global _KNOWN_BARE_SYMBOLS
     if _KNOWN_BARE_SYMBOLS is not None:
         return _KNOWN_BARE_SYMBOLS
 
-    symbols: set[str] = set()
-
-    # Try to build from the contract validator
-    try:
-        # Attempt to get a contract from the pipeline context if available
-        from pipeline import _CTX as _contract_ctx
-        if _contract_ctx is not None:
-            _build_fn = getattr(_contract_ctx, '_cartridge_build_bridge_contract', None)
-            if callable(_build_fn):
-                _bridge = _build_fn()
-                if _bridge and isinstance(_bridge, dict):
-                    from contract_validator import build_lua_contract
-                    _lc = build_lua_contract(_bridge)
-                    if hasattr(_lc, 'bare_name_to_namespace'):
-                        for _bare_name, _ns in _lc.bare_name_to_namespace.items():
-                            if _ns.lower() == "midwayphysics":
-                                # Re-capitalize from the contract's canonical form
-                                # (the map stores lowercase keys, so look up the original)
-                                symbols.add(_bare_name.capitalize() if _bare_name[0].islower() else _bare_name)
-    except Exception:
-        pass
-
-    # Fallback: minimal static set if contract is unavailable
-    if not symbols:
-        symbols = {
-            # Spawn functions
-            "SpawnDynamicSphere", "SpawnDynamicBox", "SpawnDynamicCapsule",
-            "SpawnDynamicCylinder", "SpawnDynamicMesh",
-            "SpawnStaticSphere", "SpawnStaticBox", "SpawnStaticCapsule",
-            "SpawnStaticCylinder", "SpawnStaticMesh",
-            "SpawnKinematicBox", "SpawnKinematicSphere",
-            "SpawnKinematicCapsule", "SpawnKinematicCylinder",
-            "SpawnSensorBox", "SpawnSensorSphere",
-            "SpawnDynamicBoxR", "SpawnDynamicSphereR",
-            "SpawnDynamicCapsuleR", "SpawnDynamicCylinderR",
-            "SpawnStaticBoxR", "SpawnStaticSphereR",
-            "SpawnStaticCapsuleR", "SpawnStaticCylinderR",
-            "SpawnKinematicBoxR", "SpawnKinematicBoxR",
-            # Physics manipulation
-            "ApplyImpulse", "DestroyBody", "GetVelocity",
-            "SetVelocity", "MoveKinematic", "IsSensorTriggered",
-            "GetPosition", "SetPosition", "GetAngle", "SetAngle",
-            "GetTransform", "SetTransform", "ApplyForce",
-            "SetGravityScale", "GetGravityScale",
-            # Callback registration
-            "OnStep", "OnCollision", "OnSensorEnter", "OnSensorExit",
-            # Query
-            "RayCast", "OverlapSphere", "OverlapBox",
-        }
-
-    _KNOWN_BARE_SYMBOLS = frozenset(symbols)
+    _KNOWN_BARE_SYMBOLS = frozenset({
+        # Spawn functions
+        "SpawnDynamicMesh", "SpawnDynamicBox", "SpawnDynamicSphere",
+        "SpawnDynamicCapsule", "SpawnDynamicCylinder",
+        "SpawnDynamicBoxR", "SpawnDynamicSphereR",
+        "SpawnDynamicCapsuleR", "SpawnDynamicCylinderR",
+        "SpawnStaticMesh", "SpawnStaticBox", "SpawnStaticSphere",
+        "SpawnStaticCapsule", "SpawnStaticCylinder",
+        "SpawnStaticBoxR", "SpawnStaticSphereR",
+        "SpawnStaticCapsuleR", "SpawnStaticCylinderR",
+        "SpawnKinematicBox", "SpawnKinematicSphere",
+        "SpawnKinematicCapsule", "SpawnKinematicCylinder",
+        "SpawnKinematicBoxR",
+        "SpawnSensorBox", "SpawnSensorSphere",
+        # Pool operations
+        "CreatePool", "PoolAcquire", "PoolReturn",
+        "PoolCullBelow", "PoolFree", "PoolTotal",
+        # Physics manipulation
+        "ApplyImpulse", "ApplyAngularImpulse",
+        "SetLinearVelocity", "AddLinearVelocity",
+        "DestroyBody", "GetVelocity",
+        "SetVelocity", "MoveKinematic", "IsSensorTriggered",
+        "IsActive",
+        "GetPosition", "SetPosition", "GetRotation",
+        "SetFriction", "SetRestitution",
+        "SetGravityFactor", "SetMass",
+        "SetLinearDamping", "SetAngularDamping",
+        # Callback registration
+        "OnStep", "OnCollision", "OnSensorEnter", "OnSensorExit",
+        # Query
+        "RayCast", "OverlapSphere", "OverlapBox",
+    })
     return _KNOWN_BARE_SYMBOLS
 
 
@@ -404,89 +438,266 @@ def search_exactly_once_gate(file_content: str, search_block: str) -> bool:
 
 
 # ==============================================================================
-#  Fix #8: Phantom API call stripper
+#  Fix #8: Phantom API call replacement (safe in-place)
 # ==============================================================================
-# Strips or comments-out calls to MidwayPhysics APIs that don't exist in
-# the bridge contract (hallucinated by the LLM).  Fail-open when no cartridge
-# is mounted.
+# Replaces calls to MidwayPhysics APIs that don't exist in the bridge contract
+# (hallucinated by the LLM) with safe placeholder values instead of destroying
+# the entire line.  Fail-open when no cartridge is mounted.
+#
+# IMPORTANT: Previous behaviour commented out the ENTIRE LINE, which broke
+# Lua syntax when the phantom call appeared inside an if/for/while condition
+# (e.g. `if ball:IsActive() then` became a dangling `if`).  Now we replace
+# ONLY the phantom call with a safe no-op expression that preserves the
+# surrounding statement structure.
 
 def _strip_phantom_api_calls(content: str) -> str:
-    """Strip or comment-out calls to MidwayPhysics APIs not in the bridge contract.
-
-    When no cartridge is mounted (no bridge contract available), the function
-    is a no-op -- it does NOT strip any calls.
+    """Repair phantom MidwayPhysics.XXX() calls (hallucinated by the LLM).
 
     Strategy:
-      1. Build the known-good API set from the cartridge bridge contract.
-         If no cartridge is mounted, return content unchanged (fail-open).
+      1. Build the known-good API set from the same static PascalCase
+         whitelist the prefixer uses, plus lifecycle hooks and helpers.
       2. Scan for every MidwayPhysics.XXXXX( pattern in the content.
-      3. For each call found, check if XXXXX is in the known-good set.
-      4. If not, comment out the entire line with a [PHANTOM API] marker.
+      3. For calls to a known phantom alias (CreateDynamicBox etc.), rewrite
+         to the correct API name.
+      4. For other unknown calls, comment out the whole line when the call is
+         a bare statement (a bare `false` is invalid Lua), and replace with
+         `false` when the call sits inside an expression.
     """
-    # Phase 1: Build known-good API set
-    _known_apis: set[str] = set()
-    try:
-        from pipeline import _CTX as _ctx8
-        if _ctx8 is not None:
-            _build_fn = getattr(_ctx8, '_cartridge_build_bridge_contract', None)
-            if callable(_build_fn):
-                _bc8 = _build_fn()
-                if _bc8 and isinstance(_bc8, dict):
-                    _physics = _bc8.get("midwayphysics_spawn_api") or {}
-                    _pools   = _bc8.get("object_pools") or {}
-                    _economy = _bc8.get("economy_api") or {}
-                    _known_apis.update(_physics.keys())
-                    _known_apis.update(_pools.keys())
-                    _known_apis.update(_economy.keys())
-    except Exception:
-        pass
-
-    # Also add the known-good functions the engine always exports:
+    # Phase 1: Build known-good API set from the SAME static PascalCase
+    # whitelist the prefixer uses, plus lifecycle hooks and shared helpers.
+    # The old contract-derived list was incomplete and lower-cased, so it
+    # wrongly flagged real APIs like SpawnStaticBox / SetFriction as phantom.
+    _known_apis = set(_build_bare_symbols_from_contract())
     _known_apis.update({
-        "OnLoadStatic", "OnLoad", "OnStep", "OnUnload",
-        "SpawnDynamicSphere", "SpawnDynamicBox", "SpawnDynamicCapsule",
-        "SpawnStaticPlane", "SpawnStaticMesh",
-        "DestroyBody", "GetVelocity", "GetPosition", "GetRotation",
-        "ApplyImpulse", "MoveKinematic", "IsSensorTriggered",
-        "RayCast", "GetCollisionGroup", "SetCollisionGroup",
-        "PoolAcquire", "PoolReturn", "PoolFree", "CreatePool",
+        "OnLoadStatic", "OnLoad", "OnStep", "OnUnload", "OnCollision",
+        "OnSensorEnter", "OnSensorExit", "OnInput",
+        "SpawnSharedBooth",
         "GetModifiers", "GetModifier", "GetCurrentScore", "AddScore",
         "ResetScore", "GetTokens", "DeductTokens", "AwardTokens",
         "GRAVITY", "PHYSICS_SCALE",
     })
 
-    if not _known_apis:
-        return content  # fail-open
-
-    # Phase 2: Scan and strip
-    lines = content.splitlines()
-    new_lines: list[str] = []
+    # Phase 2: collect all phantom function names found in the content.
     modifications = 0
+    _phantom_names_found: set[str] = set()
+    for _pm in re.finditer(r'MidwayPhysics\.(\w+)\s*\(', content):
+        _fn = _pm.group(1)
+        if _fn not in _known_apis:
+            _phantom_names_found.add(_fn)
 
-    for line in lines:
-        calls = re.findall(r'MidwayPhysics\.(\w+)\s*\(', line)
-        stripped = False
-        for call in calls:
-            if call not in _known_apis:
-                new_lines.append(f"-- [PHANTOM API] {line.strip()}  -- MidwayPhysics.{call}() does not exist")
-                stripped = True
-                modifications += 1
-                break
-        if not stripped:
-            new_lines.append(line)
+    if not _phantom_names_found:
+        return content
 
-    if modifications:
-        print(f"  [Post-Process Fix #8] Commented out {modifications} phantom API call(s) (not in bridge contract)")
+    _commented = 0
 
-    return "\n".join(new_lines)
+    # Known phantom aliases -> correct API (substitute, never drop).
+    _phantom_substitutions = {
+        "CreateDynamicBox": "SpawnDynamicBox",
+        "CreateDynamicSphere": "SpawnDynamicSphere",
+        "CreateDynamicCapsule": "SpawnDynamicCapsule",
+        "CreateDynamicCylinder": "SpawnDynamicCylinder",
+        "CreateStaticBox": "SpawnStaticBox",
+        "CreateStaticSphere": "SpawnStaticSphere",
+        "CreateStaticCapsule": "SpawnStaticCapsule",
+        "CreateStaticCylinder": "SpawnStaticCylinder",
+        "CreateKinematicBox": "SpawnKinematicBox",
+        "CreateKinematicSphere": "SpawnKinematicSphere",
+        "DestroyDynamicBody": "DestroyBody",
+        "DestroyStaticBody": "DestroyBody",
+    }
+
+    for _pn in sorted(_phantom_names_found, key=len, reverse=True):
+        # 1. Substitute known aliases (keep a valid MidwayPhysics call).
+        if _pn in _phantom_substitutions:
+            _sub_pat = re.compile(r'MidwayPhysics\.' + re.escape(_pn) + r'\s*\(')
+            _new_content, _count = _sub_pat.subn(
+                'MidwayPhysics.' + _phantom_substitutions[_pn] + '(', content
+            )
+            if _count > 0:
+                modifications += _count
+                content = _new_content
+            continue
+
+        # 2. Comment out phantom calls that are whole statements — a bare
+        # `false` is NOT valid Lua statement syntax and breaks compilation.
+        # The comment omits the call text so the expression pass below does
+        # not re-match the call inside the comment.
+        _line_pat = re.compile(
+            r'^(\s*)MidwayPhysics\.' + re.escape(_pn) + r'\s*\([^\n]*\)\s*$',
+            re.MULTILINE,
+        )
+        _new_content, _count = _line_pat.subn(
+            r'\1-- [phantom removed: ' + _pn + ']', content
+        )
+        if _count > 0:
+            _commented += _count
+            content = _new_content
+
+        # 3. Remaining (expression) calls become `false` (valid expression).
+        _phantom_pat = re.compile(
+            r'MidwayPhysics\.' + re.escape(_pn) + r'\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)'
+        )
+        _new_content, _count = _phantom_pat.subn('false', content)
+        if _count > 0:
+            modifications += _count
+            content = _new_content
+
+    if modifications or _commented:
+        print(f"  [Post-Process Fix #8] Phantom cleanup: {modifications} call(s) substituted/replaced, "
+              f"{_commented} statement(s) commented out (not in bridge contract): "
+              f"{', '.join(sorted(_phantom_names_found))}")
+
+    return content
 
 
 # ==============================================================================
 #  Main entry point: apply all 8 fixes
 # ==============================================================================
 
+# ==============================================================================
+#  Fix #9: Sanitize modifier key accesses
+# ==============================================================================
+# The coder model hallucinates modifier key names:
+#   MOD.gravity_factor                      (no such modifier)
+#   MOD.engine_mod_friction                 (table keys have no 'engine_mod_' prefix)
+#   MOD[AttractionConstants.modifier_heat]  (malformed field lookup)
+# Canonical keys are the snake_case names from the ENGINE_MODIFIERS table
+# (bridge contract §4.1-4.3): mass, volume, friction, karma, luck,
+# persuasion, heat, sleight_of_hand, nerve.
+
+_MODIFIER_CANONICAL_KEYS = frozenset({
+    "mass", "volume", "friction", "karma", "luck",
+    "persuasion", "heat", "sleight_of_hand", "nerve",
+})
+
+# lowercase alias -> canonical key (covers engine_mod_* and modifier_* forms)
+_MODIFIER_KEY_ALIASES = {
+    "engine_mod_mass": "mass",
+    "engine_mod_volume": "volume",
+    "engine_mod_friction": "friction",
+    "engine_mod_karma": "karma",
+    "engine_mod_luck": "luck",
+    "engine_mod_persuasion": "persuasion",
+    "engine_mod_heat": "heat",
+    "engine_mod_sleight_of_hand": "sleight_of_hand",
+    "engine_mod_nerve": "nerve",
+    "modifier_mass": "mass",
+    "modifier_volume": "volume",
+    "modifier_friction": "friction",
+    "modifier_karma": "karma",
+    "modifier_luck": "luck",
+    "modifier_persuasion": "persuasion",
+    "modifier_heat": "heat",
+    "modifier_sleight_of_hand": "sleight_of_hand",
+    "modifier_nerve": "nerve",
+    "sleightofhand": "sleight_of_hand",
+    "sleight-of-hand": "sleight_of_hand",
+}
+
+
+def _resolve_modifier_key(raw: str):
+    """Return the canonical modifier key for raw, or None if unknown."""
+    k = raw.strip().lower()
+    if k in _MODIFIER_CANONICAL_KEYS:
+        return k
+    return _MODIFIER_KEY_ALIASES.get(k)
+
+
+def _sanitize_modifier_keys(content: str) -> str:
+    """Rewrite malformed modifier accesses to canonical keys.
+
+    Known aliases (engine_mod_friction, modifier_heat, ...) are rewritten to
+    their canonical snake_case key.  Truly unknown keys (gravity_factor,
+    gravity) are neutralized to 1.0 so they never silently read nil.
+    """
+    _rewrites = 0
+    _neutralized = 0
+
+    # 1. MOD[AttractionConstants.modifier_X]  ->  MOD.X
+    _mod_idx_re = re.compile(
+        r'\bMOD\s*\[\s*(AttractionConstants\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)\s*\]',
+        re.IGNORECASE,
+    )
+
+    def _fix_mod_index(m):
+        nonlocal _rewrites, _neutralized
+        key_m = re.search(r'[A-Za-z_][A-Za-z0-9_]*$', m.group(1))
+        if not key_m:
+            return m.group(0)
+        canon = _resolve_modifier_key(key_m.group(0))
+        if canon is None:
+            _neutralized += 1
+            return "1.0"
+        _rewrites += 1
+        return f"MOD.{canon}"
+
+    content = _mod_idx_re.sub(_fix_mod_index, content)
+
+    # 2. MOD["key"] / MOD['key']  ->  MOD.<canonical>
+    _mod_str_idx_re = re.compile(
+        r'\bMOD\s*\[\s*(["\'])([A-Za-z_][A-Za-z0-9_]*)\1\s*\]',
+        re.IGNORECASE,
+    )
+
+    def _fix_mod_str_index(m):
+        nonlocal _rewrites, _neutralized
+        canon = _resolve_modifier_key(m.group(2))
+        if canon is None:
+            _neutralized += 1
+            return "1.0"
+        _rewrites += 1
+        return f"MOD.{canon}"
+
+    content = _mod_str_idx_re.sub(_fix_mod_str_index, content)
+
+    # 3. MOD.key  ->  MOD.<canonical> (or 1.0 if unknown)
+    _mod_dot_re = re.compile(
+        r'\bMOD\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)',
+        re.IGNORECASE,
+    )
+
+    def _fix_mod_dot(m):
+        nonlocal _rewrites, _neutralized
+        raw = m.group(1)
+        canon = _resolve_modifier_key(raw)
+        if canon is None:
+            _neutralized += 1
+            return "1.0"
+        if canon != raw.lower():
+            _rewrites += 1
+            return f"MOD.{canon}"
+        return m.group(0)
+
+    content = _mod_dot_re.sub(_fix_mod_dot, content)
+
+    # 4. AttractionConstants.modifiers.key  ->  canonicalize / neutralize
+    _ac_mod_dot_re = re.compile(
+        r'\bAttractionConstants\s*\.\s*modifiers\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)',
+        re.IGNORECASE,
+    )
+
+    def _fix_ac_mod_dot(m):
+        nonlocal _rewrites, _neutralized
+        raw = m.group(1)
+        canon = _resolve_modifier_key(raw)
+        if canon is None:
+            _neutralized += 1
+            return "1.0"
+        if canon != raw.lower():
+            _rewrites += 1
+            return f"AttractionConstants.modifiers.{canon}"
+        return m.group(0)
+
+    content = _ac_mod_dot_re.sub(_fix_ac_mod_dot, content)
+
+    if _rewrites or _neutralized:
+        print(f"  [Post-Process Fix #9] Canonicalized {_rewrites} modifier key(s), "
+              f"neutralized {_neutralized} unknown key(s) to 1.0")
+    return content
+
+
 def post_process_lua(content: str) -> str:
-    """Apply all 8 deterministic fixes to a Lua attraction script.
+    """Apply all 9 deterministic fixes to a Lua attraction script.
 
     Args:
         content: Raw Lua source text.
@@ -502,6 +713,7 @@ def post_process_lua(content: str) -> str:
     # structural fixes, then fix structure, then add missing pieces.
     content = _strip_pipeline_artifacts(content)      # Fix #3 first
     content = _strip_module_level_mod(content)         # Fix #2
+    content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
@@ -569,6 +781,17 @@ def post_process_ctx(ctx) -> object:
 
         # Only process Lua files
         is_lua = tid.endswith('.lua') or tid.startswith('merged:')
+        if not is_lua:
+            # Monolithic tasks stored under task_monolithic key contain Lua code
+            # even though the key isn't a .lua path.  Check for Lua content
+            # heuristically when the key starts with "task_".
+            if tid.startswith('task_') and (
+                'MidwayPhysics.' in content
+                or 'function OnLoad' in content
+                or 'AttractionConstants' in content
+                or 'SpawnSharedBooth' in content
+            ):
+                is_lua = True
         if not is_lua:
             # Check the task map for target_file hint
             task_obj = ctx.task_map.get(tid) if hasattr(ctx, 'task_map') else None

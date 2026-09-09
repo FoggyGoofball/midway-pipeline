@@ -394,7 +394,7 @@ class PagingController:
         payload = {
             "model": "",  # caller must set this
             "stream": True,
-            "keep_alive": "0",
+            "keep_alive": "30m",  # warm keep-alive — avoid offload churn (see ollama_config.KEEP_ALIVE)
             "options": {
                 "num_ctx": _resume_ctx,
                 # Throttle output buffer pre-allocation during active context resumption loops

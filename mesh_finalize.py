@@ -17,6 +17,7 @@ Exported:
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
@@ -231,6 +232,7 @@ def _run_consensus_and_finalization(ctx: PipelineContext) -> PipelineContext:
         "Review passed": review_passed,
         "No RECOURSE pending": not has_recourses,
         "Phantom API check": not bool(getattr(ctx, 'phantom_pass_errors', None)),
+        "No runtime errors": not bool(getattr(ctx, 'runtime_errors', None)),
     }
 
     ctx.all_checks_pass = all(ctx.consensus_checks.values())
@@ -507,9 +509,13 @@ def _handle_approved(ctx: PipelineContext) -> None:
                 print(f"  |     and {len(_bp_pending) - 10} more (see docs/project_blueprint.md)")
         print(f"  +--------------------------------------------------------------------+")
     print()
-    _integrate = input(
-        "  Integrate the new code into the project? (y/N): "
-    ).strip().lower()
+    if bool(os.environ.get("MIDWAY_FORCED_DETERMINISTIC", "")):
+        _integrate = "y"
+        print("  [Integration] ⚡ Server mode — auto-integrating (MIDWAY_FORCED_DETERMINISTIC=1).")
+    else:
+        _integrate = input(
+            "  Integrate the new code into the project? (y/N): "
+        ).strip().lower()
     if _integrate in ("y", "yes"):
         if is_staging_active():
             committed = commit_staging(ctx.project_root)
@@ -726,6 +732,10 @@ def enforce_human_approval_gate(staged_changes_summary: str) -> bool:
     print("The orchestration mesh has proposed the following modifications:")
     print(staged_changes_summary)
     print("-" * 70)
+
+    if bool(os.environ.get("MIDWAY_FORCED_DETERMINISTIC", "")):
+        print("  [Verification Gate] ⚡ Server mode — auto-authorizing commit (MIDWAY_FORCED_DETERMINISTIC=1).")
+        return True
 
     while True:
         try:

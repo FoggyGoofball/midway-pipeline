@@ -59,7 +59,7 @@ function OnLoad()
     -- [TASK_2_INSERT_HOOK] -- shared constants table (geometry, physics, gameplay values)
     -- [TASK_4_INSERT_HOOK] -- object pool creation (MidwayPhysics.CreatePool with shape/mass/restitution)
     -- [TASK_5_INSERT_HOOK] -- round state init (ball counters, timers, round variables)
-    -- [TASK_6_INSERT_HOOK] -- input handling / aiming mechanism setup (use MidwayInput.IsActionDown)
+    -- [TASK_6_INSERT_HOOK] -- input handling: use AttractionConstants.modifiers or ENGINE_MOD_* globals for tuning; no Engine.GetInputState() — that API does not exist
     MidwayPhysics.OnStep(function(dt)
         local MOD = AttractionConstants.modifiers  -- INSIDE callback
     -- [TASK_7_INSERT_HOOK] -- modifier read: AttractionConstants.modifiers every frame, apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND
