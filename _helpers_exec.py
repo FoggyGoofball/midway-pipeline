@@ -1059,33 +1059,39 @@ def execute_task(task, user_prompt: str, director_output: str,
             # re-prompt tells the model to fix its SEARCH block and try again.
             _anchor_marker_guard = getattr(task, 'anchor_marker', None)
             if _anchor_marker_guard and _blocks:
+                # Token-only comparison: only ``-- [TASK_N_INSERT_HOOK]`` is
+                # authoritative.  The trailing title is a hint that may differ
+                # between the canonical anchor list and the skeleton template,
+                # so full-line matching previously caused false rejections.
+                import re as _re_guard
+                _token_m = _re_guard.search(r"--\s*\[TASK_\d+_INSERT_HOOK\]", _anchor_marker_guard)
+                _guard_token = _token_m.group(0) if _token_m else _anchor_marker_guard.strip()
                 _blocks_have_correct_anchor = True
                 for _idx_g, _block_g in enumerate(_blocks):
                     _search_g = _block_g.get("search", "")
-                    if _anchor_marker_guard not in _search_g:
+                    if _guard_token not in _search_g:
                         _blocks_have_correct_anchor = False
                         print(f"  [Anchor Guard] ⛔ {task.task_id} SEARCH block {_idx_g+1} "
-                              f"targets wrong anchor. Expected '{_anchor_marker_guard[:80]}' "
+                              f"targets wrong anchor. Expected '{_guard_token}' "
                               f"but found '{_search_g[:80]}'. Re-prompting...")
                         break
                 if not _blocks_have_correct_anchor:
                     _fix_prompt = (
                         f"## Your Task\n{getattr(task, 'spec', user_prompt)}\n\n"
                         f"## Correction Required\n"
-                        f"Your previous output targeted the WRONG anchor marker in the file. "
-                        f"Your assigned anchor marker is:\n\n"
+                        f"Your previous output targeted the WRONG anchor marker in the file.\n"
+                        f"The EXACT line you must SEARCH for (and then REPLACE) is:\n\n"
                         f"  `{_anchor_marker_guard}`\n\n"
-                        f"That is the EXACT line you must SEARCH for and REPLACE. "
-                        f"Your output MUST contain a SEARCH/REPLACE block where the SEARCH "
-                        f"line contains that exact marker string. "
-                        f"Do NOT search for any other anchor marker.\n\n"
-                        f"## Your Previous (Wrong) Output\n"
-                        f"The SEARCH block did not contain '{_anchor_marker_guard}'. "
-                        f"Fix it now and output ONLY the corrected SEARCH/REPLACE block:\n"
+                        f"That is the anchor assigned to your task. REPLACE it with your "
+                        f"REAL implementation code, and re-emit the SAME marker line at the "
+                        f"end of the replacement so the next task can still find it.\n\n"
+                        f"Do NOT search for any other anchor.  Do NOT emit placeholder text "
+                        f"or empty stubs — write the actual code for your task.\n"
+                        f"Output ONLY a valid SEARCH/REPLACE block:\n"
                         f"<<<<<<< SEARCH\n"
                         f"    {_anchor_marker_guard}\n"
                         f"=======\n"
-                        f"    -- your implementation code (a few lines only)\n"
+                        f"    <your real implementation code>\n"
                         f"    {_anchor_marker_guard}\n"
                         f">>>>>>> REPLACE"
                     )

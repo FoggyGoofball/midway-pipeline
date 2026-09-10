@@ -4926,5 +4926,60 @@
     "status": "completed",
     "message_count": 0,
     "session_id": "pipeline_20260910_072424_b4f3bdfc"
+  },
+  "pipeline_20260910_082713_def20321": {
+    "start_time": "2026-09-10T08:27:13.920440",
+    "user_prompt": "i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protoc",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260910_082713_def20321"
+  },
+  "pipeline_20260910_101354_f4b17743": {
+    "start_time": "2026-09-10T10:13:54.078004",
+    "user_prompt": "i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protoc",
+    "model": "qwen2.5-coder:7b",
+    "phase": "COMPLETED",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "completed",
+    "message_count": 0,
+    "session_id": "pipeline_20260910_101354_f4b17743"
+  },
+  "pipeline_20260910_124520_e353d59c": {
+    "start_time": "2026-09-10T12:45:20.797356",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260910_124520_e353d59c"
+  },
+  "pipeline_20260910_124738_ca698277": {
+    "start_time": "2026-09-10T12:47:38.199544",
+    "user_prompt": "Add a test feature to the engine.",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260910_124738_ca698277"
+  },
+  "pipeline_20260910_125514_0c6c5eaa": {
+    "start_time": "2026-09-10T12:55:14.167708",
+    "user_prompt": "i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protoc",
+    "model": "qwen2.5-coder:7b",
+    "phase": "INIT",
+    "checkpoint_id": null,
+    "token_estimate": 0,
+    "status": "active",
+    "message_count": 0,
+    "session_id": "pipeline_20260910_125514_0c6c5eaa"
   }
 }

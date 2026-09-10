@@ -443,6 +443,16 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                               f"{ctx.retry_counts[_owning_tid]} (luac syntax failure)")
                 else:
                     print(f"  [luac] ✅ {lf.name}  syntax OK")
+                    # Snapshot the luac-clean content so the fix loop can revert
+                    # a later regression (mirrors the monolithic revert path).
+                    _clean_map = getattr(ctx, '_last_luac_clean_anchor', None)
+                    if _clean_map is not None and _owning_tid and _owning_tid in ctx.task_map:
+                        _tf_rel = str(getattr(ctx.task_map[_owning_tid], 'target_file', '')).replace('\\', '/')
+                        if _tf_rel:
+                            try:
+                                _clean_map[_tf_rel] = lf.read_text(encoding="utf-8", errors="replace")
+                            except Exception:
+                                pass
 
             except subprocess.TimeoutExpired:
                 ctx.pre_flight_errors += (
@@ -527,18 +537,18 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
         _new_errors = ""
         if not applied_tids:
             return _new_errors
-        # Collect target files from fixed tasks
-        _affected_files = set()
+        # Collect target files from fixed tasks (abs path → relative key).
+        _affected_files: dict = {}
         for _tid in applied_tids:
             _task_obj = ctx.task_map.get(_tid)
             if _task_obj and getattr(_task_obj, 'target_file', None):
                 _tf = str(_task_obj.target_file).replace('\\', '/')
                 _abs = ctx.project_root / _tf
                 if _abs.is_file():
-                    _affected_files.add(_abs)
+                    _affected_files[_abs] = _tf
         if not _affected_files:
             return _new_errors
-        for _lf in _affected_files:
+        for _lf, _lf_rel in _affected_files.items():
             try:
                 _lua_proc = subprocess.run(
                     ["luac", "-p", str(_lf)],
@@ -549,9 +559,22 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     _tid_hint = ""
                     for _tid in applied_tids:
                         _task_obj = ctx.task_map.get(_tid)
-                        if _task_obj and str(getattr(_task_obj, 'target_file', '')).replace('\\', '/') == _lf.name:
+                        if _task_obj and str(getattr(_task_obj, 'target_file', '')).replace('\\', '/') == _lf_rel:
                             _tid_hint = f" (regression from fix for {_tid})"
                             break
+                    # Revert-on-regression: restore the last luac-clean snapshot
+                    # (or the clean scaffold baseline) so a bad fix cycle can never
+                    # persist a syntax-broken file.  Mirrors the monolithic path.
+                    _clean_map = getattr(ctx, '_last_luac_clean_anchor', None) or {}
+                    _clean_snap = _clean_map.get(_lf_rel)
+                    if _clean_snap:
+                        try:
+                            atomic_write_text(_lf, _clean_snap)
+                            print(f"  [Post-Fix luac] ⛔ Syntax error  REVERTED {_lf.name} "
+                                  f"to last luac-clean snapshot ({len(_clean_snap)} chars).")
+                            continue
+                        except Exception as _rv_e:
+                            print(f"  [Post-Fix luac] \u26a0 revert failed for {_lf.name}: {_rv_e}")
                     _new_errors += (
                         f"\n## ⛔ Post-Fix Lua Syntax Error  {_lf.name}{_tid_hint}\n"
                         f"**File:** `{_lf.name}`\n"
@@ -562,6 +585,13 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     print(f"  [Post-Fix luac] ⛔ Syntax error in {_lf.name} after fix cycle{_tid_hint}")
                 else:
                     print(f"  [Post-Fix luac] ✅ {_lf.name}  syntax OK after fix cycle")
+                    # Refresh the clean snapshot when the fix kept the file valid.
+                    _clean_map = getattr(ctx, '_last_luac_clean_anchor', None)
+                    if _clean_map is not None:
+                        try:
+                            _clean_map[_lf_rel] = _lf.read_text(encoding="utf-8", errors="replace")
+                        except Exception:
+                            pass
             except subprocess.TimeoutExpired:
                 _new_errors += f"\n## ⛔ Post-Fix Lua Syntax Error  {_lf.name}\nluac timed out after 30s\n"
             except FileNotFoundError:

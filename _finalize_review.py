@@ -434,8 +434,14 @@ def _ask_more_review_cycles(ctx: PipelineContext) -> bool:
     Returns False in unattended/server mode so the pipeline never blocks.
     """
     _forced = bool(os.environ.get("MIDWAY_FORCED_DETERMINISTIC", ""))
+    # MIDWAY_REVIEW_PROMPT=1 re-enables this prompt even in forced/server mode
+    # (still requires a TTY), for users who run the stream server in a terminal
+    # and want to extend review/fix rounds interactively.
+    _interactive_override = bool(os.environ.get("MIDWAY_REVIEW_PROMPT", ""))
     _has_tty = hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
-    if _forced or not _has_tty:
+    if not _has_tty:
+        return False
+    if _forced and not _interactive_override:
         return False
     _ext_rounds = int(getattr(ctx, 'review_extension_rounds', 0) or 0)
     if _ext_rounds >= 5:
@@ -1324,17 +1330,39 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 if not _mono_found:
                     ctx.all_results.append({"task_id": "task_monolithic", "output": _mono_fixed})
 
-                # Re-run luac
+                # Re-run luac — and REVERT on regression.  A fix cycle that
+                # introduces a syntax error must never persist: the surgical
+                # loop previously degraded a luac-clean file into a
+                # syntax-broken one, cycle over cycle.
                 import subprocess as _mono_sp
                 _mono_luac = _mono_sp.run(
                     ["luac", "-p", str(_mono_read_path)],
                     capture_output=True, text=True, timeout=15,
                 )
                 if _mono_luac.returncode == 0:
+                    ctx._last_luac_clean_mono = _mono_fixed
                     print(f"  [Monolithic Fix] ✅ luac syntax check passed")
                 else:
                     _mono_err = _mono_luac.stderr.strip()
-                    print(f"  [Monolithic Fix] ⚠ luac syntax error: {_mono_err[:200]}")
+                    _last_good = getattr(ctx, '_last_luac_clean_mono', None)
+                    if _last_good and _last_good.strip():
+                        _mono_fixed = _last_good
+                        atomic_write_text(_mono_abs, _mono_fixed)
+                        ctx.all_results_dict["task_monolithic"] = _mono_fixed
+                        ctx.final_output = _mono_fixed
+                        _rg_found = False
+                        for _rg_i, _rg_e in enumerate(ctx.all_results):
+                            if _rg_e.get("task_id") == "task_monolithic":
+                                ctx.all_results[_rg_i] = {"task_id": "task_monolithic", "output": _mono_fixed}
+                                _rg_found = True
+                                break
+                        if not _rg_found:
+                            ctx.all_results.append({"task_id": "task_monolithic", "output": _mono_fixed})
+                        print(f"  [Monolithic Fix] ⛔ luac syntax error — REVERTED to last luac-clean "
+                              f"version ({len(_last_good)} chars). Error was: {_mono_err[:120]}")
+                    else:
+                        print(f"  [Monolithic Fix] ⚠ luac syntax error (no clean baseline to revert to): "
+                              f"{_mono_err[:200]}")
 
                 # Refresh static checks so next review cycle sees current state
                 try:

@@ -724,11 +724,11 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
                         "4": "pool",       # object pool creation
                         "5": "state",      # round state init
                         "6": "input",      # input handling / aiming
-                        "7": "lifecycle",  # OnStep registration
-                        "8": "modifier",   # modifier read
-                        "9": "economy",    # scoring / award tickets
-                        "10": "modifier",  # advanced modifier read
-                        "11": "economy",   # advanced economy hooks
+                        "7": "modifier",   # modifier read
+                        "8": "economy",    # gameplay tick & scoring
+                        "9": "modifier",   # advanced modifier read
+                        "10": "economy",   # advanced economy hooks
+                        "11": "cleanup",   # cleanup & diagnostics
                     }
                     _task_categories_hint = set()
                     _title_lower_check = title.lower()
@@ -759,8 +759,8 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
                         _domain_bonus = 0.3 if _task_hook_match and (
                             (_task_hook_match == "onload" and _atid in {"4", "5", "6"}) or
                             (_task_hook_match == "onloadstatic" and _atid == "3") or
-                            (_task_hook_match == "onstep" and _atid in {"7", "8", "10", "11"}) or
-                            (_task_hook_match == "onunload" and _atid == "9")
+                            (_task_hook_match == "onstep" and _atid in {"7", "8", "9", "10"}) or
+                            (_task_hook_match == "onunload" and _atid == "11")
                         ) else 0.0
                         # Anchor-specific semantic bonuses
                         _bonus = 0.0

@@ -69,6 +69,13 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
         )
         ctx.task_map[task_obj.task_id] = task_obj
 
+    # -- Invariant: 1 task ↔ 1 anchor -------------------------------------
+    # The canonical scaffold has 11 anchors.  The blueprint may legitimately
+    # plan MORE tasks; each extra task gets a NEW anchor inserted into the
+    # scaffold so every task has exactly one SEARCH target for the current
+    # and future iterative fix loops.
+    _enforce_one_anchor_per_task(ctx)
+
     # -- Phase A: Deterministic Skeleton Builder (MUST run BEFORE tasks) --
     # Ensure every .lua target file has a valid canonical skeleton before
     # any SEARCH/REPLACE patch tries to target its anchor markers.
@@ -918,15 +925,128 @@ def _process_task_signals(ctx: PipelineContext, task, work_queue: deque) -> None
 # Detection: _detect_monolithic_lua_candidate(tasks_list) -> str | None
 # Execution: _run_monolithic_lua_generation(ctx, target_file) -> PipelineContext
 
+def _enforce_one_anchor_per_task(ctx: PipelineContext) -> None:
+    """Invariant: every Lua task has exactly one UNIQUE anchor marker.
+
+    Canonical anchors (TASK_1..TASK_11) cover the first 11 tasks by lifecycle
+    bucket.  The blueprint may legitimately plan MORE tasks; each extra task
+    gets a NEW ``-- [TASK_N_INSERT_HOOK] -- <title>`` marker inserted into the
+    scaffold at its bucket, so this run and every future iterative fix loop
+    have a stable, unique SEARCH target.
+
+    The scaffold is ALWAYS regenerated from the canonical anchors + extras so
+    the on-disk markers can never drift out of sync with the assigned markers
+    (the previous stale-skeleton failure mode).  A clean baseline is snapshotted
+    so the fix loop can revert-on-regression.
+    """
+    import re as _re_enf
+    from _anchors import CANONICAL_ANCHORS
+    from _build_skeleton import build_skeleton_with_anchors, write_skeleton_content
+
+    _lua_tasks = [
+        t for t in (ctx.tasks_list or [])
+        if isinstance(t, dict) and (t.get("target_file") or "").endswith(".lua")
+    ]
+    if not _lua_tasks:
+        return
+
+    # Canonical markers keyed by marker string → bucket (single source of truth).
+    _marker_bucket = {_m.strip(): _b for (_b, _loc, _m) in CANONICAL_ANCHORS}
+    _canonical_markers = list(_marker_bucket.keys())
+
+    def _bucket_for(_t: dict) -> str:
+        _hooks = _t.get("hooks") or []
+        _hook = (_hooks[0] if isinstance(_hooks, list) and _hooks else "") or ""
+        _hl = _hook.lower()
+        return (
+            "onloadstatic" if "onloadstatic" in _hl else
+            "onload" if "onload" in _hl else
+            "onstep" if "onstep" in _hl else
+            "onunload" if "onunload" in _hl else
+            "module"
+        )
+
+    # ── Pass 1: keep enricher-assigned canonical markers, but only once. ──
+    _used: set = set()
+    for _t in _lua_tasks:
+        _m = (_t.get("anchor_marker") or _t.get("_anchor_marker") or "").strip()
+        _token = _re_enf.search(r"--\s*\[TASK_\d+_INSERT_HOOK\]", _m)
+        if _token and _m in _marker_bucket and _m not in _used:
+            _used.add(_m)
+            _t["anchor_marker"] = _m
+            _t["_anchor_marker"] = _m
+        else:
+            _t["anchor_marker"] = None
+            _t["_anchor_marker"] = None
+
+    # ── Pass 2: assign every unassigned task a unique marker. ──
+    _extras: list = []
+    _extra_id = len(CANONICAL_ANCHORS) + 1
+    for _t in _lua_tasks:
+        if _t.get("anchor_marker"):
+            continue
+        _bucket = _bucket_for(_t)
+        # Prefer an unused canonical marker in the same lifecycle bucket.
+        _candidate = next(
+            (_m for _m in _canonical_markers if _m not in _used and _marker_bucket[_m] == _bucket),
+            None,
+        )
+        if _candidate is None:
+            _candidate = next((_m for _m in _canonical_markers if _m not in _used), None)
+        if _candidate:
+            _marker = _candidate
+        else:
+            _title = (_t.get("title") or "").strip()
+            _short = _title[:80] if _title else f"task {_extra_id}"
+            _marker = f"-- [TASK_{_extra_id}_INSERT_HOOK] -- {_short}"
+            _extras.append((_bucket, "", _marker))
+            _extra_id += 1
+        _used.add(_marker)
+        _t["anchor_marker"] = _marker
+        _t["_anchor_marker"] = _marker
+
+    # Sync Task objects so execute_task() / Anchor Guard read the same marker.
+    for _t in _lua_tasks:
+        _tobj = ctx.task_map.get(f"task_{_t['id']}")
+        if _tobj is not None:
+            _tobj.anchor_marker = _t["anchor_marker"]
+
+    # ── Always regenerate the scaffold so on-disk markers match assignment. ──
+    _target_files = sorted({t.get("target_file") for t in _lua_tasks if t.get("target_file")})
+    ctx._anchor_baseline = getattr(ctx, "_anchor_baseline", {})
+    ctx._last_luac_clean_anchor = getattr(ctx, "_last_luac_clean_anchor", {})
+    for _tf in _target_files:
+        _target_path = (ctx.project_root / _tf).resolve()
+        _content = build_skeleton_with_anchors(_target_path.stem, _extras)
+        write_skeleton_content(_target_path, _content)
+        _rel = _tf.replace("\\", "/")
+        ctx._anchor_baseline[_rel] = _content
+        ctx._last_luac_clean_anchor[_rel] = _content
+        print(f"  [Anchor Invariant] ✓ {_tf}: {len(_canonical_markers)} canonical + "
+              f"{len(_extras)} extra anchor(s) — one per task. "
+              f"(baseline snapshotted for revert)")
+
+
 def _detect_monolithic_lua_candidate(tasks_list: list) -> str | None:
-    """Return target_file if ALL tasks write to the same .lua file."""
+    """Return target_file only when a same-file Lua job is small enough to
+    generate in one shot.
+
+    Per-anchor (chunked) execution is the default and the original design
+    intent: each task fills its own ``-- [TASK_N_INSERT_HOOK]`` anchor with a
+    small SEARCH/REPLACE patch.  A single whole-file generation call for a
+    12+ task attraction is too large for the coder model — it produced thin
+    stubs, and the fix loop then degraded them.  Collapse only when the task
+    count is tiny, or when MIDWAY_MONOLITHIC=1 is explicitly set.
+    """
+    import os as _os_mono
+    _force = bool(_os_mono.environ.get("MIDWAY_MONOLITHIC", ""))
+    if len(tasks_list) > 3 and not _force:
+        return None
     target_files = set()
     for t in tasks_list:
         tf = (t.get("target_file") or "").replace("\\", "/").lower().strip()
         if not tf:
-            # Task didn't declare a file.  Skip rather than abort: an empty
-            # field must never defeat monolithic collapse (it previously caused
-            # N same-file tasks to regenerate the file N times, clobbering).
+            # Task didn't declare a file — skip rather than abort.
             continue
         if not tf.endswith(".lua"):
             return None
@@ -1183,6 +1303,10 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
         print(f"  [Monolithic] Post-processed content loaded ({len(_generated_code)} chars).")
     except Exception as e:
         print(f"  [Monolithic] Post-process error: {e}")
+
+    # Record the luac-clean baseline so the review-fix loop can revert to it
+    # if a surgical fix later introduces a syntax error (prevents degradation).
+    ctx._last_luac_clean_mono = _generated_code
 
     # -- Store monolithic target for downstream detection (Bugs B/C) --
     ctx._monolithic_lua_target = target_file

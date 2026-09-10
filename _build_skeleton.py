@@ -59,19 +59,19 @@ function OnLoad()
     -- [TASK_2_INSERT_HOOK] -- shared constants table (geometry, physics, gameplay values)
     -- [TASK_4_INSERT_HOOK] -- object pool creation (MidwayPhysics.CreatePool with shape/mass/restitution)
     -- [TASK_5_INSERT_HOOK] -- round state init (ball counters, timers, round variables)
-    -- [TASK_6_INSERT_HOOK] -- input handling: use AttractionConstants.modifiers or ENGINE_MOD_* globals for tuning; no Engine.GetInputState() — that API does not exist
+    -- [TASK_6_INSERT_HOOK] -- input handling / aiming mechanism setup
     MidwayPhysics.OnStep(function(dt)
         local MOD = AttractionConstants.modifiers  -- INSIDE callback
     -- [TASK_7_INSERT_HOOK] -- modifier read: AttractionConstants.modifiers every frame, apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND
     -- [TASK_8_INSERT_HOOK] -- gameplay tick & scoring: Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier
-    -- [TASK_10_INSERT_HOOK] -- advanced modifier read: AttractionConstants.modifiers every OnStep frame, compute dynamic heat/luck/sleight-of-hand effects per game event
-    -- [TASK_11_INSERT_HOOK] -- advanced economy hooks: Engine.AwardTickets or Engine.AwardTokens with streak multiplier on each score event, wire modifier scalars into payout
+    -- [TASK_9_INSERT_HOOK] -- advanced modifier read: AttractionConstants.modifiers every OnStep frame, compute dynamic heat/luck/sleight-of-hand effects per game event
+    -- [TASK_10_INSERT_HOOK] -- advanced economy hooks: Engine.AwardTickets or Engine.AwardTokens with streak multiplier on each score event, wire modifier scalars into payout
     end)
 end
 
 -- ─── INVARIANT 5: OnUnload ─────────────────────────────
 function OnUnload()
-    -- [TASK_9_INSERT_HOOK] -- cleanup & diagnostics (DestroyDynamicBody, print stats)
+    -- [TASK_11_INSERT_HOOK] -- cleanup & diagnostics (DestroyDynamicBody, print stats)
 end
 """
 
@@ -198,6 +198,52 @@ def inject_skeleton(target_path: Path, attraction_name: str = "") -> Path:
         The Path that was written to (same as target_path).
     """
     content = build_skeleton(attraction_name)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(content, encoding="utf-8")
+    return target_path
+
+
+# -- Extra-anchor support (1-task ↔ 1-anchor invariant) -----------------------
+
+_BUCKET_REF_MARKERS: dict[str, str] = {
+    "module": "-- [TASK_1_INSERT_HOOK]",
+    "onloadstatic": "-- [TASK_3_INSERT_HOOK]",
+    "onload": "-- [TASK_6_INSERT_HOOK]",
+    "onstep": "-- [TASK_10_INSERT_HOOK]",
+    "onunload": "-- [TASK_11_INSERT_HOOK]",
+}
+
+
+def _insert_anchor_into_template(content: str, bucket: str, anchor_text: str) -> str:
+    """Insert *anchor_text* into the skeleton at the correct lifecycle bucket,
+    immediately after the bucket's canonical reference marker (preserving its
+    indentation).  Falls back to appending at end of file when the reference
+    marker is absent."""
+    _ref = _BUCKET_REF_MARKERS.get(bucket)
+    if _ref and _ref in content:
+        _idx = content.index(_ref)
+        _line_start = content.rfind("\n", 0, _idx) + 1
+        _indent = content[_line_start:_idx]
+        _eol = content.find("\n", _idx)
+        if _eol == -1:
+            _eol = len(content)
+        _insert_line = _indent + anchor_text + "\n"
+        return content[:_eol + 1] + _insert_line + content[_eol + 1:]
+    return content.rstrip() + "\n" + anchor_text + "\n"
+
+
+def build_skeleton_with_anchors(attraction_name: str = "",
+                                 extra_anchors: list | None = None) -> str:
+    """Build the canonical skeleton and insert any extra anchors at their
+    lifecycle buckets so every planned task has a stable SEARCH target."""
+    content = build_skeleton(attraction_name)
+    for (_bucket, _loc, _text) in (extra_anchors or []):
+        content = _insert_anchor_into_template(content, _bucket, _text)
+    return content
+
+
+def write_skeleton_content(target_path: Path, content: str) -> Path:
+    """Write arbitrary skeleton content (canonical + extra anchors) to disk."""
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(content, encoding="utf-8")
     return target_path

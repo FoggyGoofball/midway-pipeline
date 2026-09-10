@@ -41,13 +41,13 @@ CANONICAL_ANCHORS: list[tuple[str, str, str]] = [
     ("onstep", "",
      "-- [TASK_8_INSERT_HOOK] -- gameplay tick & scoring: Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier"),
     ("onstep", "",
-     "-- [TASK_10_INSERT_HOOK] -- advanced modifier read: AttractionConstants.modifiers every OnStep frame, compute dynamic heat/luck/sleight-of-hand effects per game event"),
+     "-- [TASK_9_INSERT_HOOK] -- advanced modifier read: AttractionConstants.modifiers every OnStep frame, compute dynamic heat/luck/sleight-of-hand effects per game event"),
     ("onstep", "",
-     "-- [TASK_11_INSERT_HOOK] -- advanced economy hooks: Engine.AwardTickets or Engine.AwardTokens with streak multiplier on each score event, wire modifier scalars into payout"),
+     "-- [TASK_10_INSERT_HOOK] -- advanced economy hooks: Engine.AwardTickets or Engine.AwardTokens with streak multiplier on each score event, wire modifier scalars into payout"),
 
     # ── OnUnload ─────────────────────────────────────────────────────────────
     ("onunload", "",
-     "-- [TASK_9_INSERT_HOOK] -- cleanup & diagnostics (DestroyDynamicBody, print stats)"),
+     "-- [TASK_11_INSERT_HOOK] -- cleanup & diagnostics (DestroyDynamicBody, print stats)"),
 ]
 
 # Pre-built lookup for fast access
@@ -76,7 +76,8 @@ def get_all_anchor_tasks() -> list[tuple[str, str, str, str, str]]:
     results: list[tuple[str, str, str, str, str]] = []
 
     for _bucket, _loc, _marker in CANONICAL_ANCHORS:
-        _id_str = str(_task_id)
+        _num_m = _re_anchor.search(r"TASK_(\d+)_INSERT_HOOK", _marker)
+        _id_str = _num_m.group(1) if _num_m else str(_task_id)
         _hook = "OnLoadStatic" if _bucket == "onloadstatic" else (
                 "OnStep" if _bucket == "onstep" else (
                 "OnUnload" if _bucket == "onunload" else (
@@ -232,3 +233,33 @@ def get_anchor_count() -> int:
     that would leave some lifecycle markers unfilled.
     """
     return len(CANONICAL_ANCHORS)
+
+
+def generate_extra_anchors(lua_tasks: list, start_id: int = 12) -> list[tuple[str, str, str]]:
+    """Generate one NEW anchor per task that has no canonical anchor.
+
+    The blueprint is allowed to plan MORE tasks than the 11 canonical anchors.
+    Each such task gets a fresh ``-- [TASK_N_INSERT_HOOK] -- <title>`` marker
+    placed in the lifecycle bucket inferred from its hooks, keeping the
+    1-task ↔ 1-anchor invariant for the current and future iterative loops.
+
+    Returns a list of ``(bucket, location, anchor_text)`` tuples in task order.
+    """
+    extras: list[tuple[str, str, str]] = []
+    _id = start_id
+    for _t in lua_tasks:
+        _hooks = _t.get("hooks") or []
+        _hook = (_hooks[0] if isinstance(_hooks, list) and _hooks else "") or ""
+        _hl = _hook.lower()
+        _bucket = (
+            "onloadstatic" if "onloadstatic" in _hl else
+            "onload" if "onload" in _hl else
+            "onstep" if "onstep" in _hl else
+            "onunload" if "onunload" in _hl else
+            "module"
+        )
+        _title = (_t.get("title") or "").strip()
+        _short = _title[:80] if _title else f"task {_id}"
+        extras.append((_bucket, "", f"-- [TASK_{_id}_INSERT_HOOK] -- {_short}"))
+        _id += 1
+    return extras
