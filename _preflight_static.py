@@ -357,10 +357,7 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                 _file_content = _merged_block
             else:
                 try:
-                    from _helpers_io import get_staging_path, is_staging_active
                     _mf = ctx.project_root / str(task_obj.target_file)
-                    if is_staging_active():
-                        _mf = get_staging_path(_mf, project_root=ctx.project_root)
                     if _mf.is_file():
                         _file_content = _mf.read_text(encoding="utf-8", errors="replace")
                 except Exception:

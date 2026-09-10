@@ -113,7 +113,10 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
                 "\n\n## APPROVED BLUEPRINT - MANDATORY TASK LIST (DO NOT OMIT ANY ITEM)\n"
                 "The following checklist was reviewed and approved. "
                 "You MUST generate exactly one Director task for every unchecked item below. "
-                "Do NOT collapse, merge, or drop any item:\n"
+                "Do NOT collapse, merge, or drop any item. "
+                "Generate ALL items in a single response - do NOT stop early, truncate, "
+                "or omit trailing items; keep going until every item has its own "
+                "### Task N block:\n"
                 + _bp_text
                 + "\n"
             )
