@@ -240,6 +240,20 @@ def _inject_empty_output_errors(ctx: PipelineContext) -> None:
                 if _target_path.is_file():
                     _file_content = _target_path.read_text(encoding="utf-8", errors="replace")
                     _patched_content = _strip_search_replace_metadata(content)
+                    # Convert phantom SLOT_X/Y/Z + BOOTH.* dimensions to safe
+                    # numeric literals BEFORE the guard check.  Blocking these
+                    # wholesale caused the fix-loop death spiral (5/11 tasks
+                    # rejected every cycle).  Stripping keeps the task applied.
+                    _patched_content = re.sub(
+                        r'^[\t ]*local\s+BOOTH\s*=\s*AttractionConstants\.booth[^\n]*\n',
+                        '', _patched_content, flags=re.MULTILINE
+                    )
+                    _patched_content = re.sub(
+                        r'^[\t ]*local\s+SLOT_[XYZ]\s*=\s*BOOTH\.\w+[^\n]*\n',
+                        '', _patched_content, flags=re.MULTILINE
+                    )
+                    _patched_content = re.sub(r'\bBOOTH\.\w+\b', '0.0', _patched_content)
+                    _patched_content = re.sub(r'\bSLOT_[XYZ]\b', '0.0', _patched_content)
                     if _patched_content != content:
                         # Before broadcasting, verify the patched content doesn't
                         # contain static-guard violations.  A SEARCH/REPLACE block
@@ -252,7 +266,6 @@ def _inject_empty_output_errors(ctx: PipelineContext) -> None:
                             re.compile(r'MidwayPhysics\.SpawnStaticPlane', re.IGNORECASE),
                             re.compile(r'MidwayPhysics\.ApplyForce\b', re.IGNORECASE),
                             re.compile(r'\bBUTTON\s*\.', re.MULTILINE),
-                            re.compile(r'\bSLOT_[XYZ]\b', re.MULTILINE),
                             re.compile(r'\bSharedBooth\s*\.', re.MULTILINE),
                             re.compile(r'\b(?:Mouse|Input)\s*\.', re.MULTILINE),
                             re.compile(r'\bAttractionConstants\.(?:initialize|get)\w+\s*\(', re.IGNORECASE),

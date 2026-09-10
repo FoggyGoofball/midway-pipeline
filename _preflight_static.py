@@ -346,6 +346,26 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
         task_obj = ctx.task_map.get(tid) if ctx.task_map else None
         domain = getattr(task_obj, "agent", None) if task_obj else None
 
+        # FILE-LEVEL checks (C13 OnLoadStatic, C14 module-level spawn/poll)
+        # must run against the MERGED file, not this task's SEARCH/REPLACE
+        # fragment (which legitimately lacks OnLoadStatic and contains
+        # OnStep-bound code that reads as "module level" in isolation).
+        _file_content = content
+        if task_obj is not None and getattr(task_obj, 'target_file', None):
+            _merged_block = ctx.all_results_dict.get("merged:" + str(task_obj.target_file))
+            if _merged_block:
+                _file_content = _merged_block
+            else:
+                try:
+                    from _helpers_io import get_staging_path, is_staging_active
+                    _mf = ctx.project_root / str(task_obj.target_file)
+                    if is_staging_active():
+                        _mf = get_staging_path(_mf, project_root=ctx.project_root)
+                    if _mf.is_file():
+                        _file_content = _mf.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
+
         for (guard_domain, pattern, label, explanation) in _GUARDS:
             if guard_domain and domain and domain != guard_domain:
                 continue
@@ -751,7 +771,7 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
         if domain == "Lua":
             _has_load_static = bool(re.search(
                 r'\bfunction\s+OnLoadStatic\s*\(',
-                content, re.MULTILINE
+                _file_content, re.MULTILINE
             ))
             if not _has_load_static:
                 _dedup_key = ("lua:onloadstatic", getattr(task_obj, 'target_file', None) or tid)
@@ -778,7 +798,7 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             # Strip all function bodies so we only inspect module-level lines.
             # Strategy: remove lines that are inside any 'function  end' block.
             # A simple heuristic: mark lines inside a function scope.
-            _lines = content.splitlines()
+            _lines = _file_content.splitlines()
             _depth = 0
             _module_lines: list[str] = []
             for _ln in _lines:
