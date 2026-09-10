@@ -171,14 +171,40 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
             task.context = context_extra
 
             file_context = ""
+            shared_file_context = ""
             try:
                 files = find_relevant_files(task.spec, task.agent)
-                file_context = format_file_context(files, domain_key=task.agent)
+                _full_context = format_file_context(files, domain_key=task.agent)
                 if ctx.snapshot:
                     try:
-                        ctx.snapshot.save_originals_from_context(file_context)
+                        ctx.snapshot.save_originals_from_context(_full_context)
                     except Exception as e:
                         print(f"  [Snapshot] save_originals_from_context error: {e}")
+                # -- Split stable vs per-task reference files ------------------
+                # find_relevant_files() returns the same ~15 stubs for almost
+                # every task; only tiny files (economy_state.json,
+                # modifier_state.json) vary.  Memoize the first task's context
+                # per domain as the byte-identical SHARED block (KV-cache
+                # prefix) and pass only the newly-appearing files as the
+                # per-task delta, shrinking the re-prefilled tail.
+                _fc_state = getattr(ctx, '_file_context_state', None)
+                if _fc_state is None:
+                    _fc_state = {}
+                    ctx._file_context_state = _fc_state
+                _fc_dom = _fc_state.get(task.agent)
+                if _fc_dom is None:
+                    _fc_dom = {"shared": _full_context, "seen": {p for p, _ in files}}
+                    _fc_state[task.agent] = _fc_dom
+                    file_context = ""
+                    shared_file_context = _full_context
+                else:
+                    _new_files = [(p, c) for p, c in files if p not in _fc_dom["seen"]]
+                    _fc_dom["seen"].update(p for p, _ in files)
+                    file_context = (
+                        format_file_context(_new_files, domain_key=task.agent)
+                        if _new_files else ""
+                    )
+                    shared_file_context = _fc_dom["shared"]
             except Exception as e:
                 print(f"  [FileReader] Error: {e}")
 
@@ -391,6 +417,7 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     ctx.all_results_dict, file_context, ctx.gdd_context,
                     sibling_context=sibling_context,
                     ollama_params=ollama_params,
+                    shared_file_context=shared_file_context,
                 )
 
                 # -- VRAM Circuit Breaker --------------------------------------

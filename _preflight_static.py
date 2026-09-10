@@ -24,6 +24,13 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
     # ── Guard patterns ────────────────────────────────────────────────────
     # Each entry: (domain_filter, regex, short_label, explanation)
     # domain_filter: None = all domains, otherwise only tasks for that agent.
+    # Per-run dedupe: file-level rules (OnLoadStatic missing, static MOD
+    # cache) fire ONCE per target file, not once per task sharing the file.
+    _reported = getattr(ctx, '_static_guard_reported', None)
+    if _reported is None:
+        _reported = set()
+        ctx._static_guard_reported = _reported
+
     _GUARDS = [
         # Lua: require('nlohmann.json')  nlohmann is a C++ library.
         (
@@ -605,6 +612,11 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                     _cv_violations = validate_lua_content(content, _lua_contract)
                     _cv_phantom_names: set = set()
                     for _viol in _cv_violations:
+                        if _viol.label.startswith("static cache of modifiers"):
+                            _dedup_key = ("mod_cache", getattr(task_obj, 'target_file', None) or tid)
+                            if _dedup_key in _reported:
+                                continue
+                            _reported.add(_dedup_key)
                         ctx.pre_flight_errors += (
                             f"\n## Static Pattern Violation  Task {tid} [Lua]\n"
                             f"**Rule:** {_viol.label}\n"
@@ -742,16 +754,19 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                 content, re.MULTILINE
             ))
             if not _has_load_static:
-                ctx.pre_flight_errors += (
-                    f"\n## Static Pattern Violation  Task {tid} [Lua]\n"
-                    f"**Rule:** OnLoadStatic() is missing\n"
-                    f"**Why this is always wrong:** Every attraction script MUST define "
-                    f"OnLoadStatic(). If there is no permanent geometry, add an empty stub:\n"
-                    f"  function OnLoadStatic() end\n"
-                    f"Omitting OnLoadStatic() will cause a missing-hook engine error at runtime.\n"
-                    f"Fix this before the reviewer sees the code.\n"
-                )
-                print(f"  [Static Guard] ❌ Task {tid} [Lua]: OnLoadStatic() is missing")
+                _dedup_key = ("lua:onloadstatic", getattr(task_obj, 'target_file', None) or tid)
+                if _dedup_key not in _reported:
+                    _reported.add(_dedup_key)
+                    ctx.pre_flight_errors += (
+                        f"\n## Static Pattern Violation  Task {tid} [Lua]\n"
+                        f"**Rule:** OnLoadStatic() is missing\n"
+                        f"**Why this is always wrong:** Every attraction script MUST define "
+                        f"OnLoadStatic(). If there is no permanent geometry, add an empty stub:\n"
+                        f"  function OnLoadStatic() end\n"
+                        f"Omitting OnLoadStatic() will cause a missing-hook engine error at runtime.\n"
+                        f"Fix this before the reviewer sees the code.\n"
+                    )
+                    print(f"  [Static Guard] ❌ Task {tid} [Lua]: OnLoadStatic() is missing")
 
         # ── C14: Module-level physics spawn or live-poll at script load time ──
         # SpawnDynamic* / SpawnStatic* calls and Engine.GetStreak() at the top

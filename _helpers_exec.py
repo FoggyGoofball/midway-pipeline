@@ -519,7 +519,8 @@ def execute_task(task, user_prompt: str, director_output: str,
 
                  all_results: dict, file_context: str, gdd_context: str,
                  sibling_context: str = "",
-                 ollama_params: Optional[dict] = None) -> str:
+                 ollama_params: Optional[dict] = None,
+                 shared_file_context: str = "") -> str:
     """Execute a single task by calling the appropriate agent.
 
     Args:
@@ -691,6 +692,12 @@ def execute_task(task, user_prompt: str, director_output: str,
     if refs_block:
         _shared_parts.append(refs_block)
 
+    # Stable reference-file context (memoized per domain upstream).  It is
+    # byte-identical across tasks, so it belongs in the shared KV-cache prefix,
+    # not the per-task tail.  The per-task delta files arrive via file_context.
+    if shared_file_context:
+        _shared_parts.append(shared_file_context)
+
     # -- Directive A: Stateless Parent Context ------------------------------
     # Parent context is stripped to code artifacts only to prevent linear
     # conversational bloat from bleeding across tasks.
@@ -829,7 +836,7 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"<<<<<<< SEARCH\n"
                             f"    {_anchor_marker}\n"
                             f"=======\n"
-                            f"    -- your implementation code (a few lines only)\n"
+                            f"    <your REAL implementation code for this task>\n"
                             f"    {_anchor_marker}\n"
                             f">>>>>>> REPLACE\n\n"
                             f"Do NOT output the entire file. "
@@ -1324,7 +1331,7 @@ def execute_task(task, user_prompt: str, director_output: str,
                         f"<<<<<<< SEARCH\n"
                         f"    {_anchor_marker_splice}\n"
                         f"=======\n"
-                        f"    -- your implementation code (a few lines only)\n"
+                        f"    <your REAL implementation code for this task>\n"
                         f"    {_anchor_marker_splice}\n"
                         f">>>>>>> REPLACE\n\n"
                         f"Output ONLY that SEARCH/REPLACE block. No file content, no explanation."

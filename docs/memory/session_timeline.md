@@ -1,3 +1,148 @@
+## Session Event  2026-09-10T16:02:35.539312
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protocal)  i just want to test your capabilities since i've upgraded.  refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Create the complete structural scaffold defining OnLoadStatic, OnLoad, OnStep, and OnUnload entry points with explicit TODO placeholders for all subsystems - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman Striker
+
+### Task 1: [Lua] - Create Structural Scaffold (DependsOn: None)
+### Task 2: [Lua] - Implement OnLoadStatic for Shared Booth Geometry (DependsOn: Task 1)
+Inputs: handle, geometry
+Outputs: sharedBoothHandle
+Hooks: OnLoadStatic
+File: attractions/strongman/strongman.lua
+
+### Task 3: [Lua] - Implement Tower Physics System with Shift Mechanics (DependsOn: Task 2)
+Inputs: kinematicBodyHandle, impulseValue, shiftDirection
+Outputs: towerPhysicsState
+Hooks: OnStep
+File: attractions/strongman/strongman.lua
+
+### Task 4: [Lua] - Implement Mallet Input Listener and Swing Mechanic (DependsOn: Task 3)
+Inputs: malletInputHandle, swingVelocityHandle
+Outputs: puckDynamicBodyHandle
+Hooks: OnLoad
+File: attractions/strongman/strongman.lua
+
+### Task 5: [Lua] - Implement Puck Physics System with Weighted Variants (DependsOn: Task 4)
+Inputs: puckDynamicBodyHandle, gravityValue, frictionValue, restitutionValue, massValue
+Outputs: puckPhysicsState
+Hooks: OnStep
+File: attractions/strongman/strongball.lua
+
+### Task 6: [Lua] - Implement Bell Scoring Logic with Collision Detection and Win Condition Evaluation (DependsOn: Task 5)
+Inputs: bellSensorHandle, collisionThreshold, winConditionValue
+Outputs: ticketAwardState
+Hooks: OnStep
+File: attractions/strongman/strongball.lua
+
+### Task 7: [Lua] - Implement Dual-Currency Economy with Ticket Awards and Wager Events (DependsOn: Task 6)
+Inputs: ticketAwardState, wagerEventHandle
+Outputs: economyState
+Hooks: OnStep
+File: attractions/strongman/strongball.lua
+
+### Task 8: [Lua] - Implement Object Pool Management for Pucks, Mallets, and Bells (DependsOn: Task 7)
+Inputs: objectPoolHandle, puckDynamicBodyHandle, malletInputHandle, bellSensorHandle
+Outputs: poolState
+Hooks: OnUnload
+File: attractions/strongman/strongball.lua
+
+### Task 9: [Lua] - Implement Game State Tracking for Ball Count, Score, and Round Index (DependsOn: Task 8)
+Inputs: ballCountValue, scoreValue, roundIndexValue
+Outputs: gameStateState
+Hooks: OnStep
+File: attractions/strongman/strongball.lua
+
+### Task 10: [Lua] - Implement OnUnload Handler for Diagnostics and Resource Cleanup (DependsOn: Task 9)
+Inputs: poolState, economyState, gameStateState
+Outputs: diagnosticsState
+Hooks: OnUnload
+File: attractions/strongman/strongball.lua
+
+[MATH_HEAVY]
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like physics arcade attraction where players swing a mallet to launch pucks toward a moving be
+[... output truncated ...]
+---
 ## Session Event  2026-09-10T12:09:02.635105
 **Agent Assigned:** Lua, Lua, Lua, Lua, Lua
 **User Input:** <execution_environment>

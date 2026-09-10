@@ -1354,6 +1354,23 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 )
                 if _rc_proc.returncode != 0:
                     _rc_err = _rc_proc.stderr.strip().replace(str(_rc_lf), _rc_lf.name)
+                    # Revert-on-regression: restore the last luac-clean snapshot
+                    # (seeded from the clean scaffold by the anchor invariant) so a
+                    # broken arch-fix can never persist into the next review cycle.
+                    _clean_map = getattr(ctx, '_last_luac_clean_anchor', None) or {}
+                    try:
+                        _rc_rel = _rc_lf.relative_to(ctx.project_root).as_posix()
+                    except ValueError:
+                        _rc_rel = _rc_lf.name
+                    _clean_snap = _clean_map.get(_rc_rel)
+                    if _clean_snap:
+                        try:
+                            atomic_write_text(_rc_lf, _clean_snap)
+                            print(f"  [Arch-Fix Revert] \u26d4 Syntax error \u2014 REVERTED "
+                                  f"{_rc_lf.name} to last luac-clean snapshot ({len(_clean_snap)} chars).")
+                            continue
+                        except Exception as _rc_rv_e:
+                            print(f"  [Arch-Fix Revert] \u26a0 revert failed: {_rc_rv_e}")
                     ctx.pre_flight_errors += (
                         f"\n## ✅ Lua Syntax Error (post-fix) -- {_rc_lf.name}\n"
                         f"```\n{_rc_err}\n```\n"
