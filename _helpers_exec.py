@@ -488,28 +488,31 @@ def _anchor_splice_fallback(
 
 # -- Task Execution ----------------------------------------------------------
 
-def _slice_director_for_task(director_output: str, task_id: str) -> str:
-    """Return only the Director breakdown entry for *task_id*.
+# Declarative order of the SHARED (byte-identical) context blocks.  These must
+# stay in this order and must NEVER contain task-specific content, or Ollama's
+# KV-cache prefix is broken and every task re-prefills the whole prompt.
+_SHARED_BLOCK_LABELS = (
+    "feature_request",
+    "director_breakdown",
+    "bridge_cheatsheet",
+    "referenced_files",
+)
 
-    The full N-task Director breakdown is byte-identical for every task, so it
-    lives in the shared KV-cache prefix; slimming it to this task's own entry
-    still shaves VRAM pressure.  Falls back to the full breakdown when the
-    entry cannot be located (e.g. Director-Guard-injected tasks 14/15 that are
-    absent from the original Director output).
+# Upper bound for the shared Director block (identical across tasks).
+_DIRECTOR_SHARED_CAP = 8000  # chars
+
+
+def _cap_shared_block(text: str, cap: int) -> str:
+    """Truncate a shared block to *cap* chars, identically across tasks.
+
+    Capping is applied to the SAME bytes every task so the KV-cache prefix
+    stays reusable while remaining bounded for VRAM.
     """
-    if not director_output:
+    if not text:
         return ""
-    _num = "".join(ch for ch in (task_id or "") if ch.isdigit())
-    if not _num:
-        return director_output
-    _pat = re.compile(
-        rf"###\s+Task\s+{_num}\b.*?(?=###\s+Task\s+\d+\b|\Z)",
-        re.DOTALL | re.IGNORECASE,
-    )
-    _m = _pat.search(director_output)
-    if _m and len(_m.group(0).strip()) > 40:
-        return _m.group(0).strip()
-    return director_output
+    if len(text) <= cap:
+        return text
+    return text[:cap] + "\n[... shared block truncated identically across tasks ...]"
 
 
 def execute_task(task, user_prompt: str, director_output: str,
@@ -551,7 +554,7 @@ def execute_task(task, user_prompt: str, director_output: str,
     system = get_agent_system(agent_key)
 
     # Build context.  Ordering matters for performance: the SHARED blocks
-    # (feature request, director slice, bridge cheatsheet, referenced files)
+    # (feature request, director breakdown, bridge cheatsheet, referenced files)
     # form a byte-identical prefix across every task of the same domain so
     # Ollama's resident KV cache is reused instead of re-prefilling ~26k
     # tokens per task.  The TASK-SPECIFIC blocks go LAST in _task_parts.
@@ -559,13 +562,10 @@ def execute_task(task, user_prompt: str, director_output: str,
         f"## Original Feature Request\n{user_prompt}",
     ]
 
-    # Slim the full N-task Director breakdown to this task's own entry.
-    # (Falls back to the full breakdown when the entry cannot be located.)
-    _director_block = (
-        _slice_director_for_task(director_output, getattr(task, "task_id", ""))
-        if director_output else ""
-    )
-    if _director_block:
+    # FULL Director breakdown  byte-identical for every task, so it stays in
+    # the shared prefix (cached once).  Capped identically to bound VRAM.
+    if director_output:
+        _director_block = _cap_shared_block(director_output, _DIRECTOR_SHARED_CAP)
         _shared_parts.append(f"## Director's Task Breakdown\n{_director_block}")
 
     _task_parts: list = []
@@ -648,8 +648,17 @@ def execute_task(task, user_prompt: str, director_output: str,
     try:
         from pipeline import _CTX as _exec_ctx
         if _exec_ctx is not None:
-            from _finalize_review import build_fix_bridge_snippet as _bfbs_exec
-            _base = _bfbs_exec(_exec_ctx)
+            # Memoize the bridge snippet per run + domain so the cheatsheet is
+            # byte-identical across tasks (KV-prefix reuse guarantee).
+            _shared_cache = getattr(_exec_ctx, '_shared_block_cache', None)
+            if _shared_cache is None:
+                _shared_cache = {}
+                _exec_ctx._shared_block_cache = _shared_cache
+            _cheat_key = f"bridge_snippet:{agent_key}"
+            if _cheat_key not in _shared_cache:
+                from _finalize_review import build_fix_bridge_snippet as _bfbs_exec
+                _shared_cache[_cheat_key] = _bfbs_exec(_exec_ctx)
+            _base = _shared_cache[_cheat_key]
             if _base:
                 _subst_guide = (
                     "Substitution quick-ref (common wrong -> correct):\n"
@@ -903,6 +912,34 @@ def execute_task(task, user_prompt: str, director_output: str,
 
     context_parts = _shared_parts + _task_parts
     user_message = "\n\n".join(context_parts)
+
+    # -- KV-cache guardrail ------------------------------------------------
+    # The shared prefix must be byte-identical across tasks of the same domain
+    # or Ollama's prefix cache stops reusing and every task re-prefills the
+    # full prompt.  Hash (system + shared blocks) and warn on any drift, and
+    # log the shared/tail split so cache reuse can be eyeballed per wave.
+    try:
+        import hashlib as _hashlib_guard
+        from pipeline import _CTX as _guard_ctx
+        if _guard_ctx is not None:
+            _shared_prefix_text = "\n\n".join(_shared_parts)
+            _prefix_payload = f"{system}\n\n{_shared_prefix_text}"
+            _prefix_hash = _hashlib_guard.sha256(
+                _prefix_payload.encode("utf-8", errors="replace")
+            ).hexdigest()[:12]
+            _prev_hash = getattr(_guard_ctx, '_last_shared_prefix_hash', None)
+            _prev_key = getattr(_guard_ctx, '_last_shared_prefix_key', None)
+            if _prev_hash is not None and _prev_key == agent_key and _prev_hash != _prefix_hash:
+                print(f"  [KV Cache] \u26a0 Shared prefix drift for '{agent_key}' "
+                      f"(prev={_prev_hash} now={_prefix_hash}) \u2014 cache reuse reduced.")
+            _guard_ctx._last_shared_prefix_hash = _prefix_hash
+            _guard_ctx._last_shared_prefix_key = agent_key
+            _will_truncate = len(user_message) > _TOTAL_MSG_CHAR_LIMIT
+            print(f"  [KV Cache] shared prefix \u2248 {len(_shared_prefix_text)} chars; "
+                  f"tail \u2248 {len(user_message) - len(_shared_prefix_text) - 2} chars; "
+                  f"{'WILL truncate (breaks prefix)' if _will_truncate else 'no truncation'}")
+    except Exception:
+        pass
 
     # -- Fix D: Model-Aware Total user_message char ceiling ----------
     # _MODEL_CTX and _TOTAL_MSG_CHAR_LIMIT are already resolved above.
