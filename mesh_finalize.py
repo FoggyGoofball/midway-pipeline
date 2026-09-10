@@ -179,6 +179,27 @@ def run_code_merge(ctx: PipelineContext) -> PipelineContext:
 
     ctx = _run_review_fix_loop(ctx)
 
+    # -- Completeness kick-back -------------------------------------------
+    # The review-fix loop may exit while planned tasks/features are still
+    # missing (a thin stub passes the lenient deterministic gates).  If
+    # coverage gaps remain, re-run the fix loop with those gaps injected
+    # instead of proceeding to final approval with an incomplete file.
+    _kickback_rounds = 0
+    _MAX_KICKBACK_ROUNDS = 2
+    while _kickback_rounds < _MAX_KICKBACK_ROUNDS:
+        if getattr(ctx, 'user_declined_review', False):
+            print("  [Completeness] ⏭ User declined further review rounds — skipping auto kick-back.")
+            break
+        _gaps = getattr(ctx, 'coverage_gaps', None) or []
+        if not _gaps:
+            break
+        print(
+            f"  [Completeness] ⚠ {len(_gaps)} unfinished task(s)/feature(s) remain — "
+            f"kicking back to review-fix loop (round {_kickback_rounds + 1}/{_MAX_KICKBACK_ROUNDS})."
+        )
+        ctx = _run_review_fix_loop(ctx)
+        _kickback_rounds += 1
+
     # -- Phase B: Deterministic Post-Processor -----------------------------
     # Runs after the review-fix loop but before consensus/observability.
     # Sanitizes structural issues that the LLM fix cycle introduced.
@@ -435,6 +456,26 @@ def _handle_approved(ctx: PipelineContext) -> None:
     )
     ctx.output_parts.append(ctx.final_output + "\n")
 
+    # -- Final Approval is a REAL gate ------------------------------------
+    # The approval model's verdict was previously printed but ignored, so a
+    # run "passed" even when the Director demanded REVISION REQUIRED.  Honor
+    # it: block integration, preserve staged files for inspection, and mark
+    # the run FAILED.
+    _approval_text = (ctx.final_output or "").strip()
+    if "REVISION REQUIRED" in _approval_text[:300].upper():
+        print("  [Final Approval] ⛔ Director returned REVISION REQUIRED — blocking integration.")
+        ctx.all_checks_pass = False
+        ctx.review_verdict = "FAIL"
+        ctx.output_parts.append(
+            "\n## ⛔ Final Approval: REVISION REQUIRED\n"
+            "The approval director rejected the output. Staged files are preserved "
+            "in `.staging_workspace/` for inspection and were NOT integrated.\n"
+        )
+        if is_staging_active():
+            print("  [Staging FS] ⏹ Staging preserved at .staging_workspace/ for inspection.")
+            disable_staging()
+        return
+
     ctx.output_parts.append("\n---\n## ✅ Pipeline Complete\n")
     ctx.output_parts.append(
         f"**Tasks executed:** {len(ctx.processed_ids)}\n"
@@ -468,6 +509,13 @@ def _handle_approved(ctx: PipelineContext) -> None:
                     _bp_done.append(_m_done.group(1).strip())
                 elif _m_todo:
                     _bp_pending.append(_m_todo.group(1).strip())
+            # Monolithic mode: one generation call satisfies ALL blueprint
+            # tasks, but the blueprint checkboxes are never re-marked.  Treat
+            # every still-pending checkbox as done so the coverage report
+            # reflects reality instead of the stale per-task checkbox state.
+            if getattr(ctx, '_monolithic_lua_target', None) and _bp_pending:
+                _bp_done.extend(_bp_pending)
+                _bp_pending = []
         except Exception:
             pass
 

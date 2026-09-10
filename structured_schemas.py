@@ -65,12 +65,15 @@ class Intent(str, Enum):
 
 class HandleSpec(BaseModel):
     """A physics/object handle the LLM declares for an attraction."""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     name: str = Field(..., min_length=1, description="e.g. 'hBall'")
-    lua_type: LuaType = LuaType.USERDATA
+    # lua_type / lifecycle are plain strings, NOT enums: small reasoning models
+    # emit freeform labels ("DynamicCapsule", "handle", "runtime") that enum
+    # validation rejects.  The downstream HandleDeclaration is string-based too.
+    lua_type: str = "userdata"
     owner_hint: str = Field("", description="short domain label e.g. 'physics' | 'economy'")
-    lifecycle: Lifecycle = Lifecycle.ON_LOAD
+    lifecycle: str = "OnLoad"
     description: str = ""
 
 
@@ -92,8 +95,11 @@ class TaskAnchorSpec(BaseModel):
 
 
 class AttractionDesignOutput(BaseModel):
-    """Strict schema for the Architect pass (replaces _extract_json / _repair_json)."""
-    model_config = ConfigDict(extra="forbid")
+    """Schema for the Architect pass (replaces _extract_json / _repair_json)."""
+    # extra="ignore": the reasoning model sometimes adds stray top-level keys
+    # (name/category/configuration/...).  Tolerate them — the caller guards
+    # that the required fields were actually populated.
+    model_config = ConfigDict(extra="ignore")
 
     title: str = ""
     summary: str = ""
@@ -121,9 +127,9 @@ class AttractionDesignOutput(BaseModel):
             handles=[
                 HandleDeclaration(
                     name=h.name,
-                    lua_type=h.lua_type.value,
+                    lua_type=h.lua_type,
                     owner_task=h.owner_hint,
-                    lifecycle=h.lifecycle.value,
+                    lifecycle=h.lifecycle,
                     description=h.description,
                 )
                 for h in self.handles

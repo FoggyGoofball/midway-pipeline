@@ -396,8 +396,10 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
     SEARCH sections (new file insertions).
     """
     blocks: list[dict[str, str]] = []
-    # Pattern: optional whitespace, <<<<<<< SEARCH, content, =======, content, >>>>>>> REPLACE
-    pattern = r'<<<<<<<\s*SEARCH\s*\n(.*?)\n\s*=======\s*\n(.*?)\n\s*>>>>>>>\s*REPLACE'
+    # Pattern: optional whitespace, <<<<<<< SEARCH, content, =======, content, >>>>>>> REPLACE.
+    # Delimiters are lenient ({5,7}) because small coder models often emit
+    # 5-char "<<<<<" markers instead of the canonical 7-char conflict markers.
+    pattern = r'<{5,7}\s*SEARCH\s*\n(.*?)\n\s*={5,7}\s*\n(.*?)\n\s*>{5,7}\s*REPLACE'
     for match in re.finditer(pattern, output, re.DOTALL):
         blocks.append({
             "search": match.group(1),

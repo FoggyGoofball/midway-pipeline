@@ -141,6 +141,65 @@ def _rebuild_task_from_tasks_list(ctx: PipelineContext, tid: str):
     return None
 
 
+def _coverage_gaps(ctx: PipelineContext) -> list[str]:
+    """Deterministically compute which planned tasks/features are NOT yet
+    evidenced in the generated code.
+
+    Two signals:
+      1. Blueprint task API coverage — each task title names concrete APIs
+         (SpawnStaticBox, IsActionDown, MoveKinematic, ...).  If a task names
+         APIs and NONE of them appear in the output, that task is unfinished.
+      2. Design checklist coverage — keyword overlap, as a secondary signal.
+
+    Structural tasks that name no APIs are assumed satisfied by the skeleton.
+    Results are cached on ctx.coverage_gaps so the fix loop, kick-back loop,
+    and final gate share one view.
+    """
+    _API_TOKEN_RE = re.compile(
+        r'\b(?:MidwayPhysics|Engine|MidwayInput)\.[A-Za-z_]\w*'
+        r'|\b(?:SpawnStatic|SpawnDynamic|SpawnKinematic|SpawnSensor)\w*'
+        r'|\b(?:CreatePool|PoolAcquire|PoolReturn|PoolFree|IsSensorTriggered|IsActive|'
+        r'MoveKinematic|ApplyImpulse|ApplyAngularImpulse|SetLinearVelocity|AddLinearVelocity|'
+        r'SetFriction|SetRestitution|SetGravityFactor|SetMass|GetPosition|GetVelocity|'
+        r'GetStreak|AwardTickets|AwardTokens|IsActionDown)\b',
+        re.IGNORECASE,
+    )
+
+    _all_output = "\n".join(str(v) for v in (ctx.all_results_dict or {}).values())
+    _out_lower = _all_output.lower()
+    _out_tokens = {m.group(0).lower() for m in _API_TOKEN_RE.finditer(_all_output)}
+
+    gaps: list[str] = []
+
+    # 1. Task-level API coverage.
+    for _t in (getattr(ctx, 'tasks_list', None) or []):
+        if not isinstance(_t, dict):
+            continue
+        _title = _t.get('title', '') or ''
+        _task_tokens = {m.group(0).lower() for m in _API_TOKEN_RE.finditer(_title)}
+        if not _task_tokens:
+            continue  # structural task — skeleton satisfies it
+        if not (_task_tokens & _out_tokens):
+            gaps.append(f"Task {_t.get('id')} — {_title[:90]}")
+
+    # 2. Design checklist coverage (secondary).
+    _design = getattr(ctx, 'attraction_design', None)
+    _checklist = getattr(_design, 'feature_checklist', None) if _design else None
+    if _checklist:
+        _stop = {
+            'must', 'should', 'that', 'with', 'this', 'from', 'have', 'when',
+            'been', 'into', 'each', 'every', 'never', 'called', 'events',
+            'attraction', 'win', 'score',
+        }
+        for _feature in _checklist:
+            _kws = [w for w in re.findall(r'\b\w{4,}\b', _feature.lower()) if w not in _stop]
+            if _kws and not any(kw in _out_lower for kw in _kws[:4]):
+                gaps.append(f"[checklist] {_feature}")
+
+    ctx.coverage_gaps = gaps
+    return gaps
+
+
 def _deterministic_verdict(ctx: PipelineContext) -> tuple[str, str]:
     """Compute the review verdict from deterministic signals only.
 
@@ -197,6 +256,23 @@ def _deterministic_verdict(ctx: PipelineContext) -> tuple[str, str]:
                 "Missing Engine.AwardTickets/AwardTokens — the attraction "
                 "MUST award tickets/tokens using Engine.GetStreak() as a multiplier."
             )
+
+    # 5. Task/feature completeness — the run is not done until every planned
+    #    task has evidence in the output.  This prevents a thin stub from
+    #    passing the lenient syntax/API gates while half the blueprint is
+    #    unimplemented.
+    try:
+        _gaps = _coverage_gaps(ctx)
+    except Exception:
+        _gaps = []
+    if _gaps:
+        verdict = "FAIL"
+        issues.append(
+            "## 🧩 Unfinished Tasks / Missing Features\n"
+            "The following planned tasks/features are NOT yet implemented in the output. "
+            "Implement EACH one before this run can pass:\n"
+            + "\n".join(f"  - {g}" for g in _gaps)
+        )
 
     issues_text = "\n\n".join(issues).strip()
     return verdict, issues_text
@@ -350,6 +426,31 @@ def _structured_review(review_input: str) -> tuple[str, str]:
 # ----------------------------------------------------------------------
 #  Phase 6: Integration Review & Fix Loop
 # ----------------------------------------------------------------------
+
+def _ask_more_review_cycles(ctx: PipelineContext) -> bool:
+    """Offer the user another full review/fix round before giving up.
+
+    Only prompts in interactive mode (TTY present, not forced-deterministic).
+    Returns False in unattended/server mode so the pipeline never blocks.
+    """
+    _forced = bool(os.environ.get("MIDWAY_FORCED_DETERMINISTIC", ""))
+    _has_tty = hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
+    if _forced or not _has_tty:
+        return False
+    _ext_rounds = int(getattr(ctx, 'review_extension_rounds', 0) or 0)
+    if _ext_rounds >= 5:
+        print("  [Review-Fix] ⚠ Review extension cap (5 rounds) reached — no further extensions.")
+        return False
+    trigger_chime()
+    try:
+        _ans = input(
+            f"\n  [Review-Fix] Out of review cycles ({ctx.review_cycle}) without a PASS.\n"
+            f"  The run may still be converging. Run another review/fix round? [y/N]: "
+        ).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return _ans in ("y", "yes")
+
 
 def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
     """Phase 6: Integration review, domain-aware fix cycle, insanity
@@ -1172,24 +1273,39 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                           f"but NONE matched the current file — keeping existing content "
                           f"(refusing full-file rewrite).")
                 else:
-                    print("  [Monolithic Fix] Surgical: no patches emitted — falling back to full-file output.")
-                    # Strip fences if the model produced a full file anyway.
-                    # Use re.DOTALL + ^/$ anchors (NOT re.MULTILINE which matches
-                    # ^/$ after every newline and can corrupt the file body).
-                    _mono_fixed = re.sub(r"^```lua\s*\n?", "", _mono_fixed, flags=re.DOTALL)
-                    _mono_fixed = re.sub(r"\n?```\s*$", "", _mono_fixed, flags=re.DOTALL)
-                    _mono_fixed = _mono_fixed.strip()
+                    # No SEARCH/REPLACE blocks could be extracted (malformed
+                    # markers, prose, etc.).  The coder was instructed to emit
+                    # ONLY patches, so treating its output as a full file would
+                    # write raw conflict markers into the target.  Keep current
+                    # content; the next cycle re-prompts with fresh errors and
+                    # the insanity detector bounds the loop.
+                    _mono_fixed = _mono_snippet
+                    print("  [Monolithic Fix] ⚠ Surgical: no valid SEARCH/REPLACE blocks "
+                          "extracted — keeping current content (refusing full-file rewrite).")
 
                 # Write fixed content to disk
                 _mono_abs = ctx.project_root / _mono_target
                 atomic_write_text(_mono_abs, _mono_fixed)
                 print(f"  [Monolithic Fix] Wrote {len(_mono_fixed)} chars to {_mono_target}")
 
+                # atomic_write_text redirects to .staging_workspace when staging
+                # is active, but Path.read_text() / post_process_lua_file() do
+                # NOT.  Read back from the SAME staged location the write went
+                # to; the previous real-path read silently discarded every fix.
+                try:
+                    from _helpers_io import get_staging_path, is_staging_active
+                    _mono_read_path = (
+                        get_staging_path(_mono_abs, project_root=ctx.project_root)
+                        if is_staging_active() else _mono_abs
+                    )
+                except Exception:
+                    _mono_read_path = _mono_abs
+
                 # ---- Bug D fix: run post_process_lua on the fixed file ----
                 try:
                     from _post_process_lua import post_process_lua_file
-                    post_process_lua_file(_mono_abs)
-                    _post_fixed = _mono_abs.read_text(encoding="utf-8")
+                    post_process_lua_file(_mono_read_path)
+                    _post_fixed = _mono_read_path.read_text(encoding="utf-8")
                     print(f"  [Monolithic Fix] Post-process applied ({len(_mono_fixed)} -> {len(_post_fixed)} chars)")
                     _mono_fixed = _post_fixed
                 except Exception as _ppe:
@@ -1211,7 +1327,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # Re-run luac
                 import subprocess as _mono_sp
                 _mono_luac = _mono_sp.run(
-                    ["luac", "-p", str(_mono_abs)],
+                    ["luac", "-p", str(_mono_read_path)],
                     capture_output=True, text=True, timeout=15,
                 )
                 if _mono_luac.returncode == 0:
@@ -1591,6 +1707,22 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         print(f"  🔍 RECONCILIATION GATE  Active Rule Auditor")
         print(f"{'='*50}")
         print(f"  Tribunal struggled to reach consensus after {ctx.review_cycle} cycles.")
+
+        # -- User-requested extension --------------------------------------
+        # Before escalating to the tribunal / failing, offer the user another
+        # full review/fix round — the run may be converging and a second full
+        # pipeline run would be wasteful.  Bounded by review_extension_rounds.
+        if _ask_more_review_cycles(ctx):
+            _ext_rounds = int(getattr(ctx, 'review_extension_rounds', 0) or 0)
+            ctx.review_extension_rounds = _ext_rounds + 1
+            print(f"  [Review-Fix] ↻ User requested another review/fix round "
+                  f"(extension {_ext_rounds + 1}/5). Resetting cycle counter.")
+            return _run_review_fix_loop(ctx)
+        # If the user actively declined on a TTY, record it so the unattended
+        # kick-back loop in run_code_merge does not override their choice.
+        if (hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
+                and not bool(os.environ.get("MIDWAY_FORCED_DETERMINISTIC", ""))):
+            ctx.user_declined_review = True
 
         # Escalate to the appellate court (TRIBUNAL) for a binding verdict.
         # Fall back to the legacy auto-approve / interactive logic below only

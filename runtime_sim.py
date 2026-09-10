@@ -183,6 +183,11 @@ def _analyse_lua_text(task_id: str, lua_text: str) -> List[str]:
     """
     errors: List[str] = []
 
+    # Strip Lua comments before scanning so documentation lines never produce
+    # false-positive phantom-API hits (e.g. "-- no Engine.GetInputState()").
+    lua_text = re.sub(r'--\[\[.*?\]\]', '', lua_text, flags=re.DOTALL)
+    lua_text = re.sub(r'--[^\n]*', '', lua_text)
+
     # 1. Build handle declaration sets from OnLoad/OnLoadStatic bodies.
     handles_created_in_load: set = set()
     for m in _ONLOAD_RE.finditer(lua_text):
@@ -727,6 +732,11 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
                 lua_code = _extract_lua(output)
                 if not lua_code:
                     continue
+
+                # Strip Lua comments so documentation lines never produce
+                # false-positive phantom-API hits (e.g. "-- no Engine.GetInputState()").
+                lua_code = re.sub(r'--\[\[.*?\]\]', '', lua_code, flags=re.DOTALL)
+                lua_code = re.sub(r'--[^\n]*', '', lua_code)
 
                 # -- 1. MidwayPhysics.* whitelist check -------------------------
                 for pm in _PHYSICS_CALL_RE_FINAL.finditer(lua_code):

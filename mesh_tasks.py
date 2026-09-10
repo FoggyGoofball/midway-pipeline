@@ -1175,6 +1175,12 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
     try:
         from _post_process_lua import post_process_lua_file
         post_process_lua_file(_target_abs)
+        # Re-read the POST-PROCESSED file so all_results_dict / the review loop
+        # see the same content that is actually on disk.  Storing the raw
+        # generation made runtime_sim + the fix loop fight over phantom APIs
+        # that post_process had already removed.
+        _generated_code = _target_abs.read_text(encoding="utf-8")
+        print(f"  [Monolithic] Post-processed content loaded ({len(_generated_code)} chars).")
     except Exception as e:
         print(f"  [Monolithic] Post-process error: {e}")
 

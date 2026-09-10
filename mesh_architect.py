@@ -131,7 +131,17 @@ ARCHITECT_STRUCTURED_SYSTEM = (
     "- Economy: Engine.AwardTickets(n, label) / Engine.AwardTokens(n, label), with "
     "Engine.GetStreak() as the multiplier.\n"
     "Handles are Lua-local userdata values returned by Spawn*/CreatePool calls.\n"
-    "Produce the attraction design as a single JSON object matching the provided schema. "
+    "Produce the attraction design as a single JSON object with EXACTLY these top-level keys:\n"
+    '  "title"             : string  (short name for the attraction)\n'
+    '  "summary"           : string  (one paragraph)\n'
+    '  "handles"           : array of {name, lua_type, owner_hint, lifecycle, description}\n'
+    '  "lifecycle_order"   : array of strings (ordered registration sequence in OnLoad)\n'
+    '  "event_flow"        : array of {trigger, action}\n'
+    '  "pool_requirements" : object mapping pool name -> integer min count\n'
+    '  "economy_hooks"     : array of strings (economy API names needed)\n'
+    '  "feature_checklist" : array of strings\n'
+    '  "task_anchors"      : array of {task_id, hook, location}\n'
+    "Do NOT add any other top-level keys (no name, category, configuration, logic_flow, constraints, etc.).\n"
     "Be CONCISE: keep the summary, every description, and every title to ONE short line. "
     "Do NOT pad, repeat, or invent extra placeholder entries. "
     "Return ONLY the JSON object — no prose, no markdown fences."
@@ -300,6 +310,13 @@ def _try_structured_architect(prompt: str) -> Optional[AttractionDesign]:
         if _start == -1 or _end <= _start:
             raise ValueError("no JSON object in architect response")
         design = AttractionDesignOutput.model_validate_json(out[_start:_end + 1])
+
+        # Guard: with extra="ignore", a schema-mismatched response (e.g. only
+        # name/category/configuration/...) parses to an all-defaults design.
+        # Treat that as a failure so the legacy parser (which carries an
+        # explicit key list) produces the real design.
+        if not design.title and not design.summary and not design.handles and not design.event_flow:
+            raise ValueError("structured JSON parsed but contained no design fields")
 
         print(f"  [Architect] ✅ Structured design extracted: '{design.title}' "
               f"({len(design.handles)} handles, {len(design.event_flow)} event edges, "
