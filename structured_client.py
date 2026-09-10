@@ -161,6 +161,22 @@ class StructuredClient:
         # Error feedback accumulated across tenacity retries of a single logical call.
         self._pending_feedback: Optional[str] = None
 
+    def _extra_options(self) -> dict:
+        """Ollama-specific request options, nested to mirror the native client.
+
+        ``kv_cache_type="q8_0"`` halves KV-cache memory vs the f16 default —
+        without it, the 9B model at 64K context OOMs the 12 GB Steam Deck and
+        the runner dies with 'model runner has unexpectedly stopped' /
+        'unexpected EOF'.  Ollama's OpenAI-compatible endpoint only honours
+        Ollama options through the nested ``options`` object, with
+        ``keep_alive`` as a top-level sibling — exactly like the native
+        /api/chat payload built by ``call_ollama_streamed``.
+        """
+        options: dict = {"kv_cache_type": "q8_0"}
+        if self._num_ctx:
+            options["num_ctx"] = self._num_ctx
+        return {"keep_alive": "30m", "options": options}
+
     # -- Raw completion (used for turn 1 of the two-turn protocol) -----------
 
     def raw_chat(
@@ -186,7 +202,7 @@ class StructuredClient:
             temperature=self.temperature if temperature is None else temperature,
             max_tokens=max_tokens,
             stream=stream_to_console,
-            extra_body={"num_ctx": self._num_ctx} if self._num_ctx else None,
+            extra_body=self._extra_options(),
         )
         if not stream_to_console:
             return (resp.choices[0].message.content or "").strip()
@@ -222,7 +238,7 @@ class StructuredClient:
                 max_retries=0,
                 max_tokens=max_tokens,
                 temperature=self.temperature,
-                extra_body={"num_ctx": self._num_ctx} if self._num_ctx else None,
+                extra_body=self._extra_options(),
             )
         except Exception as exc:  # instructor raises InstructorRetryException on validation failure
             validation_error = _recover_validation_error(exc, schema)

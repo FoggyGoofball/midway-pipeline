@@ -394,12 +394,14 @@ class PagingController:
         payload = {
             "model": "",  # caller must set this
             "stream": True,
+            "think": False,   # qwen3.5 is a thinking model — force direct content on resume
             "keep_alive": "30m",  # warm keep-alive — avoid offload churn (see ollama_config.KEEP_ALIVE)
             "options": {
                 "num_ctx": _resume_ctx,
                 # Throttle output buffer pre-allocation during active context resumption loops
                 "num_predict": 4096,
                 "use_mmap": True,
+                "kv_cache_type": "q8_0",   # Halves KV memory vs f16 default — avoid OOM on resume
             },
             "messages": messages,
         }

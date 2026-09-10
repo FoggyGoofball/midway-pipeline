@@ -16,18 +16,18 @@ All functions, classes, and constants extracted from `pipeline.py` into individu
 ### Phases 5-7 Hardening ✅ (Completed 2026-05-12)
 
 **Phase 1 — Virtual Memory & Payload Streaming Scaling (ollama_client.py)**
-- Context constants: OLLAMA_NUM_CTX=8192 (baseline), 32768 (large for 9B), 65536 (massive for Phi-3.5)
+- Context constants: OLLAMA_NUM_CTX=32768 (7B/8B/9B/phi3.5), 4096 (14B runner cap), 131072 (1B intent)
 - Model parsing generalized to substring tags (phi3.5/9b/14b detection)
 - Dynamic option maps with temperature: 0.2 (deterministic synthesis) / 0.5 (multi-draft evaluation)
 
 **Phase 2 — Schema Hardening & Global Ledger Alignment (models.py)**
 - Deprecated `all_approvals: Dict[str, bool] = {}` purged
 - SignalType extended: FETCH, READ_OFFLOADED, EXTRACT_SKELETON, FLUSH, REQUEST_API
-- OrchestrationConfig defaults: coder=qwen3.5:9b, reviewer=phi3.5:latest, analyst=phi3.5:latest
+- OrchestrationConfig defaults: coder=qwen2.5-coder:7b, reviewer=qwen3.5:9b, analyst=qwen3.5:9b
 - MeshSignal constructor bindings strengthened for positional + keyword validation
 
 **Phase 3 — Runtime Topology & Interoperability (pipeline.py, domain_registry.py)**
-- CODER_MODEL=qwen3.5:9b, REVIEWER_MODEL=phi3.5:latest, ANALYST_MODEL=REVIEWER_MODEL
+- CODER_MODEL=qwen2.5-coder:7b, REVIEWER_MODEL=qwen3.5:9b, ANALYST_MODEL=REVIEWER_MODEL
 - ALL_DOMAINS evaluates target models via runtime lookups / lambda closures
 
 **Phase 4 — Subtask Prompt Cordoning (mesh_loops.py)**

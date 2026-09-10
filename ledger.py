@@ -455,6 +455,111 @@ def reset_internal_api_ledger() -> None:
         print(f"  [APILedger] ⚠ Could not reset ledger: {exc}")
 
 
+# -- Run Decision Log: shared reasoning / attempt history --------------------
+# A per-run, indexed, pageable log of what was proposed, tried, and rejected.
+# Kept bounded and newest-first so agents can PAGE_IN the exact entry they need
+# without the whole log ever being inlined into the context window (which is
+# what the pre-summarizer + paging protocol are for).
+
+DECISION_LOG_FILENAME = "run_decision_log.md"
+DECISION_LOG_MAX_CHARS = 180_000
+
+
+def decision_log_path(project_root=None) -> Path:
+    """Absolute path to the run decision log under the project's memory dir."""
+    pr = Path(project_root) if project_root else PROJECT_ROOT
+    return pr / "docs" / "memory" / DECISION_LOG_FILENAME
+
+
+def _decision_log_write_atomic(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent), prefix=".decision_log_tmp_", suffix=".md",
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        os.replace(tmp_path, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def reset_decision_log(project_root=None, run_id: str = "") -> None:
+    """Truncate + write the run header at the start of a run."""
+    path = decision_log_path(project_root)
+    header = (
+        "# Run Decision Log\n\n"
+        f"**Run ID:** {run_id}\n"
+        f"**Started:** {datetime.now().isoformat()}\n\n"
+    )
+    try:
+        _decision_log_write_atomic(path, header)
+        print(f"  [DecisionLog] ✓ Reset for new run ({run_id}).")
+    except OSError as exc:
+        print(f"  [DecisionLog] ⚠ Could not reset decision log: {exc}")
+
+
+def append_decision_entry(project_root=None, title: str = "", body: str = "") -> None:
+    """Append an indexed entry; drop the oldest entries beyond the size cap."""
+    if not title:
+        return
+    path = decision_log_path(project_root)
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    entry = f"\n## [{ts}] {title}\n{body.strip()}\n"
+
+    existing = ""
+    if path.is_file():
+        try:
+            existing = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            existing = ""
+    combined = existing + entry
+
+    if len(combined) > DECISION_LOG_MAX_CHARS:
+        # Keep the header + the NEWEST entries; drop oldest until under the cap.
+        parts = combined.split("\n## [", 1)
+        header = parts[0]
+        entries = parts[1].split("\n## [") if len(parts) > 1 else []
+        while entries and len(header + ("\n## [" + "\n## [".join(entries) if entries else "")) > DECISION_LOG_MAX_CHARS:
+            entries.pop(0)
+        combined = header + ("\n## [" + "\n## [".join(entries) if entries else "")
+
+    try:
+        _decision_log_write_atomic(path, combined)
+    except OSError as exc:
+        print(f"  [DecisionLog] ⚠ Could not append entry: {exc}")
+
+
+def decision_log_toc(project_root=None, max_chars: int = 1600) -> str:
+    """Return a bounded, newest-first TOC of the decision log with PAGE_IN
+    instructions, so an agent can retrieve the exact entry it needs."""
+    path = decision_log_path(project_root)
+    if not path.is_file():
+        return ""
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    titles = re.findall(r'## \[(.*?)\] (.*)', content)
+    newest_first = list(reversed(titles))
+    toc = "\n".join(f"- {ts} :: {title}" for ts, title in newest_first)
+    if len(toc) > max_chars:
+        toc = toc[:max_chars] + "\n- [... older entries omitted — PAGE_IN ...]"
+    if not toc:
+        return ""
+    return (
+        "## Run Decision Log (what has been proposed / tried / rejected)\n"
+        f"{toc}\n\n"
+        "Load any entry via: <invoke_kernel><action>PAGE_IN</action>"
+        "<target>docs/memory/run_decision_log.md</target>"
+        "<search>ENTRY_TITLE</search></invoke_kernel>\n"
+    )
+
+
 def extract_api_signatures(output: str, agent_key: str) -> list[str]:
     """Scrape function/method/binding signatures from agent output.
 

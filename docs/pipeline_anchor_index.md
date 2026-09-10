@@ -267,8 +267,8 @@
 | Line | Constant | Value |
 |------|----------|-------|
 | L136 | `OLLAMA_HOST` | `http://192.168.0.16:11434` |
-| L138 | `CODER_MODEL` | `qwen3.5:9b` |
-| L139 | `REVIEWER_MODEL` | `phi3.5:latest` |
+| L138 | `CODER_MODEL` | `qwen2.5-coder:7b` |
+| L139 | `REVIEWER_MODEL` | `qwen3.5:9b` |
 | L140 | `ANALYST_MODEL` | `REVIEWER_MODEL` |
 | L141 | `FALLBACK_REVIEWER_MODEL` | `llama3.1:8b-instruct-q4_K_M` |
 | L142 | `LIBRARIAN_MODEL` | `llama3.1:8b-instruct-q4_K_M` |

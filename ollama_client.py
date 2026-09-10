@@ -15,6 +15,7 @@ it left off.
 
 from __future__ import annotations
 import json
+import socket
 import sys
 import time
 import urllib.request
@@ -23,6 +24,36 @@ from typing import Generator, Optional
 from pathlib import Path
 
 _active_model = None
+
+
+# Frozen-stream detection: a healthy stream emits data continuously.  The
+# FIRST read may block for a full cold load (up to OLLAMA_TIMEOUT), but once
+# the first byte arrives, every subsequent read should return within this
+# window.  If it does not, the runner has died (e.g. OOM at load/prefill)
+# while the socket stayed open — previously this blocked silently for
+# OLLAMA_TIMEOUT (20 min) and looked like an unresponsive hang.
+_STALL_READ_TIMEOUT: float = 120.0
+
+
+def _tighten_read_timeout(resp, seconds: float) -> bool:
+    """Reduce the per-read socket timeout on an open HTTPResponse.
+
+    Uses CPython's (private but stable) socket handle and no-ops safely on
+    any version where the internals differ.  Returns True on success.
+    """
+    try:
+        _fp = getattr(resp, 'fp', None)
+        if _fp is None:
+            return False
+        _sock = getattr(getattr(_fp, 'raw', None), '_sock', None)
+        if _sock is None:
+            _sock = getattr(_fp, '_sock', None)
+        if _sock is not None:
+            _sock.settimeout(seconds)
+            return True
+    except Exception:
+        pass
+    return False
 
 
 # ===========================================================================
@@ -165,6 +196,7 @@ def _stream_messages_payload(
     payload = {
         "model": model,
         "stream": True,
+        "think": False,   # qwen3.5 is a thinking model — force direct content, not reasoning (empty-content bug)
         "keep_alive": KEEP_ALIVE,
         "options": {
             "num_ctx": ctx_size,
@@ -417,6 +449,7 @@ def call_ollama_streamed(
     payload = {
         "model": use_model,
         "stream": True,
+        "think": False,   # qwen3.5 is a thinking model — force direct content, not reasoning (empty-content bug)
         "keep_alive": KEEP_ALIVE,
         "options": {
             "num_ctx": ctx_size,
@@ -438,6 +471,11 @@ def call_ollama_streamed(
         _ka = params.pop("keep_alive", None)
         if _ka is not None:
             payload["keep_alive"] = str(_ka)
+        # Hoist `format` (e.g. "json") to the top-level payload — Ollama
+        # ignores it inside options{} too.
+        _fmt = params.pop("format", None)
+        if _fmt is not None:
+            payload["format"] = str(_fmt)
         # Strip num_ctx from callers' params — adaptive ctx at line 386 already
         # sizes the KV cache to actual input + output budget.  Allowing callers
         # (especially call_ollama_with_messages) to override num_ctx here negates
@@ -476,6 +514,7 @@ def call_ollama_streamed(
         try:
             with urllib.request.urlopen(cycle_req, timeout=OLLAMA_TIMEOUT) as cycle_resp:
                 cycle_buffer = b""
+                _got_first_data = False
                 while True:
                     try:
                         chunk = cycle_resp.read(4096)
@@ -499,8 +538,31 @@ def call_ollama_streamed(
                         )
 
                         return
+                    except (TimeoutError, socket.timeout) as stall_err:
+                        print(
+                            f"\n  [Stream] ⛔ Runner stalled — no data for "
+                            f"{int(_STALL_READ_TIMEOUT)}s after first token "
+                            f"(runner likely died / OOM while the socket stayed open). "
+                            f"Triggering retry...",
+                            file=sys.stderr,
+                        )
+                        sys.stderr.flush()
+                        yield from _cooldown_and_retry(
+                            exception=stall_err,
+                            system=system,
+                            user=user,
+                            label=cycle_label,
+                            model=use_model,
+                            params=params,
+                            messages=paging.active_messages.to_payload() if paging.active_messages else None,
+                            paging=paging,
+                        )
+                        return
                     if not chunk:
                         break
+                    if not _got_first_data:
+                        _got_first_data = True
+                        _tighten_read_timeout(cycle_resp, _STALL_READ_TIMEOUT)
                     cycle_buffer += chunk
                     while b"\n" in cycle_buffer:
                         line, cycle_buffer = cycle_buffer.split(b"\n", 1)

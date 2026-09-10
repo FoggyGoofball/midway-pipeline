@@ -106,7 +106,12 @@ def run_check(args) -> int:
         return 1
 
     if args.once:
-        snap = snapshot(args.host)
+        try:
+            snap = snapshot(args.host)
+        except Exception as e:
+            print(f"ERROR: Ollama /api/ps probe timed out: {e}")
+            print("VERDICT: ERROR — probe timed out (Ollama busy mid-generation).")
+            return 4
         if not snap:
             print("VERDICT: IDLE — no models loaded (between phases or not started).")
             return 3
@@ -118,10 +123,20 @@ def run_check(args) -> int:
 
     # 3. Two samples, compare expiry drift.
     t0 = datetime.now(timezone.utc)
-    s0 = snapshot(args.host)
+    try:
+        s0 = snapshot(args.host)
+    except Exception as e:
+        print(f"ERROR: Ollama /api/ps probe timed out: {e}")
+        print("VERDICT: ERROR — probe timed out (Ollama busy mid-generation).")
+        return 4
     time.sleep(args.interval)
     t1 = datetime.now(timezone.utc)
-    s1 = snapshot(args.host)
+    try:
+        s1 = snapshot(args.host)
+    except Exception as e:
+        print(f"ERROR: Ollama /api/ps probe timed out: {e}")
+        print("VERDICT: ERROR — probe timed out (Ollama busy mid-generation).")
+        return 4
 
     wall_delta = (t1 - t0).total_seconds()
     print(f"\n[Sample] {args.interval:.0f}s apart; wall-clock delta = {wall_delta:.1f}s")
@@ -181,10 +196,20 @@ def _watch_status(args) -> tuple[str, list[str]]:
         return "OFFLINE", lines
 
     t0 = datetime.now(timezone.utc)
-    s0 = snapshot(args.host)
+    try:
+        s0 = snapshot(args.host)
+    except Exception as e:
+        lines.append(f"⚠ Ollama /api/ps probe timed out: {e}")
+        lines.append("  (host busy mid-generation — retrying next interval)")
+        return "BUSY", lines
     time.sleep(args.interval)
     t1 = datetime.now(timezone.utc)
-    s1 = snapshot(args.host)
+    try:
+        s1 = snapshot(args.host)
+    except Exception as e:
+        lines.append(f"⚠ Ollama /api/ps probe timed out: {e}")
+        lines.append("  (host busy mid-generation — retrying next interval)")
+        return "BUSY", lines
     wall_delta = (t1 - t0).total_seconds()
 
     if not s1:

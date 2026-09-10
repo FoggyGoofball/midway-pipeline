@@ -635,6 +635,25 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
                 if inputs and outputs and hooks and target_file is not None:
                     break
 
+            # -- Canonical target_file backfill (monolithic collapse enabler) --
+            # The enricher model frequently emits "Outputs: strongman.lua" instead
+            # of a "File: attractions/<name>/<name>.lua" field.  A missing/empty
+            # target_file defeats _detect_monolithic_lua_candidate() in mesh_tasks,
+            # which then runs N same-file tasks as N full-file generations that
+            # clobber each other and get flagged as N separate static-guard
+            # artifacts.  Backfill a canonical path so every task declares the
+            # same .lua target.
+            if not target_file:
+                if _enrich_canonical_file:
+                    target_file = _enrich_canonical_file
+                else:
+                    _lua_candidates = [
+                        o.strip() for o in (outputs + inputs)
+                        if o.strip().lower().endswith(".lua")
+                    ]
+                    if _lua_candidates:
+                        target_file = _lua_candidates[0]
+
             # -- Fix D: Anchor marker propagation (SEMANTIC matching) ───────────
             # Previous approach used numeric ID matching (task "3" → anchor "3"),
             # but the Blueprint Generator's task ordering rarely matches the

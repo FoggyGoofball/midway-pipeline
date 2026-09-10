@@ -75,25 +75,25 @@ User sees results in VS Code
 
 | Role | Model | Size | When |
 |------|-------|------|------|
-| **Coder** | `qwen3.5:9b` | 9B | Core code generation (C++/Lua) — AST synthesis |
-| **Director** | `llama3.1:8b-instruct-q4_K_M` | 8B | Task decomposition, routing, review |
-| **Reviewer** | `phi3.5:latest` | ~3.8B | Macro-review/Oracle — massive context (65536) for document evaluation |
-| **Analyst** | `phi3.5:latest` | ~3.8B | Project analysis, GDD synthesis |
-| **Conflict Resolution** | `phi3.5:latest` | ~3.8B | VETO/OBJECT negotiation |
-| **Diagnostic Oracle** | `phi3.5:latest` | ~3.8B | Multi-turn diagnostic sessions |
+| **Coder** | `qwen2.5-coder:7b` | 7B | Core code generation (C++/Lua) — AST synthesis |
+| **Director** | `llama3.1:8b-instruct-q4_K_M` | 8B | Task decomposition, routing, final approval |
+| **Reviewer** | `qwen3.5:9b` | 9B | Integration review — 32768 context for document evaluation |
+| **Analyst** | `qwen3.5:9b` | 9B | Project analysis, GDD synthesis |
+| **Conflict Resolution** | `qwen3.5:9b` | 9B | VETO/OBJECT negotiation |
+| **Diagnostic Oracle** | `qwen3.5:9b` | 9B | Multi-turn diagnostic sessions |
 | **Librarian** | `llama3.1:8b-instruct-q4_K_M` | 8B | Read-only research, memory TOC navigation |
 | **Syntax Gate (micro)** | `qwen2.5-coder:1.5b` | 1.5B | Fast pre-flight syntax checks on generated code |
 | **Intent Classifier (micro)** | `llama3.2:1b` | 1B | Zero-shot MODIFICATION vs QUERY gate |
 
-**Compute topology:** Qwen 3.5 9B for AST synthesis (32768 context), Phi-3.5-mini as macro-reviewer/oracle (65536 context for document evaluation), Llama 3.1 8B as librarian fallback. Micro-models (1-1.5B) reserved for intent classification and pre-flight syntax.
+**Compute topology:** Qwen 2.5 Coder 7B for AST synthesis (32768 context), Qwen 3.5 9B as reviewer/reasoning (32768 context), Llama 3.1 8B as director/librarian (32768 context), Phi-3.5-mini as pre-summarizer (32768 context). Micro-models (1-1.5B) reserved for intent classification and pre-flight syntax.
 
 ### Model Registry Constants
 
 **File:** `pipeline.py` lines 145-156, `domain_registry.py` lines 22-26, `models.py` lines 37-55 (`OrchestrationConfig`)
 
 ```python
-CODER_MODEL = "qwen3.5:9b"
-REVIEWER_MODEL = "phi3.5:latest"
+CODER_MODEL = "qwen2.5-coder:7b"
+REVIEWER_MODEL = "qwen3.5:9b"
 ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
 LIBRARIAN_MODEL = "llama3.1:8b-instruct-q4_K_M"
@@ -498,9 +498,9 @@ All located in **`pipeline.py`** lines 136-161:
 | Constant | Current Value | Notes |
 |----------|---------------|-------|
 | `OLLAMA_HOST` | `http://192.168.0.16:11434` | Steam Deck address |
-| `CODER_MODEL` | `qwen3.5:9b` | 9B — AST synthesis |
-| `REVIEWER_MODEL` | `phi3.5:latest` | ~3.8B — macro-review, massive context (65536) |
-| `ANALYST_MODEL` | `phi3.5:latest` | Same as REVIEWER_MODEL |
+| `CODER_MODEL` | `qwen2.5-coder:7b` | 7B — AST synthesis |
+| `REVIEWER_MODEL` | `qwen3.5:9b` | 9B — integration review, 32768 context |
+| `ANALYST_MODEL` | `qwen3.5:9b` | Same as REVIEWER_MODEL |
 | `FALLBACK_REVIEWER_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B fallback |
 | `LIBRARIAN_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B research |
 | `DIRECTOR_MODEL` | `llama3.1:8b-instruct-q4_K_M` | 8B task decomposition |
@@ -512,8 +512,8 @@ All located in **`pipeline.py`** lines 136-161:
 | `REVIEW_MAX_ITERATIONS` | `3` | Review→fix→re-review cycles |
 | `SCOPE_FILE_LIMIT` | `5` | Files before TOO_BROAD |
 | `SCOPE_LINE_LIMIT` | `400` | Lines before TOO_BROAD |
-| `OLLAMA_TIMEOUT` | `600` | Seconds (10 min — elevated for massive pre-fill) |
-| `OLLAMA_NUM_CTX` | `32768` | Baseline context (8192 aux, 32768 primary, 65536 oracle) |
+| `OLLAMA_TIMEOUT` | `1200` | Seconds (20 min — elevated for 9B cold loads) |
+| `OLLAMA_NUM_CTX` | `32768` | Baseline context (32768 core, 4096 14B, 131072 1B) |
 | `MAX_TOKENS` | `12000` | Output token ceiling |
 
 ---
@@ -525,10 +525,10 @@ All located in **`pipeline.py`** lines 136-161:
 | 1 | **No async/await** anywhere | Entire codebase | No `import asyncio`, no `async def`, no `await` |
 | 2 | **No threading** | Entire codebase | No `import threading`, no `import concurrent` |
 | 3 | **No multiprocessing** | Entire codebase | No `import multiprocessing` |
-| 4 | `keep_alive: "0"` in EVERY Ollama request | `ollama_client.py` | Model unloads instantly after each call to free VRAM |
-| 5 | **7-14B models for review/reasoning, 7B for coding** | `pipeline.py` L138-148 | phi-3:14b for Reviewer/Director; micro-models only for syntax/routing |
-| 6 | Context window: **32K input, 12K max tokens** | `pipeline.py` L158-159 | `OLLAMA_NUM_CTX=32768`, `MAX_TOKENS=12000` |
-| 7 | KV Cache: q8_0 quantization (implicit via Ollama) | `ollama_client.py` (comment) | Halves context memory, enables 32K in 12GB |
+| 4 | `keep_alive: "30m"` on every request; evict on model switch | `ollama_client.py` | One resident model; `_evict_previous_model()` flushes before a different model loads |
+| 5 | **9B for review/reasoning, 7B for coding, 8B for director** | `pipeline.py` L147-159 | qwen3.5:9b Reviewer/Reasoning; qwen2.5-coder:7b Coder; llama3.1:8b Director; micro-models only for syntax/routing |
+| 6 | Context windows: **32K core, 4K 14B, 128K 1B** | `ollama_config.py` L39-44 | 32768 (7/8/9B, phi3.5), 4096 (14B), 131072 (1B) |
+| 7 | KV Cache: q8_0 quantization (explicit `kv_cache_type`) | `ollama_client.py`, `structured_client.py`, `paging_controller.py` | Halves context memory, enables 32K in 12GB |
 | 8 | LRU doc cache: **max 8 entries, 5 min TTL** | `_pipeline_helpers.py` L54-56 | Never grows unbounded in RAM |
 | 9 | Session timeline: **always reverse chronological** | `ledger.py` (`log_to_session_timeline()`) | Newest entry at line 1 of file |
 | 10 | Librarian: **NEVER modifies code** | `_prompts.py` L105-110 (system prompt) | Strictly read-only |

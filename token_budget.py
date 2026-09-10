@@ -24,20 +24,24 @@ VRAM_CRITICAL_RATIO: float = 0.80
 # Threshold = 80% of context window (VRAM_CRITICAL_RATIO = 0.80), giving
 # headroom for output tokens and KV cache overhead.
 # 
-# Model VRAM budgets at these ctx sizes (q4_K_M + q8_0 KV cache):
-#   7B at 32768: ~8-9GB (unlocked from 8192)
-#   8B at 32768: ~8-9GB (unlocked from 8192)
-#   14B at 16384: ~10-11GB (was 9-10GB at 8192)
-#   phi3.5 at 16384: ~11-12GB (tight  was exceeding at 32768)
+# Model VRAM budgets at these ctx sizes (q4_K_M weights + q8_0 KV cache,
+# per vram_budget._MODEL_COST_TABLE; all under the 12 GB budget):
+#   7B    @ 32768:  ~6.6 GB
+#   8B    @ 32768:  ~7.0 GB
+#   9B    @ 32768:  ~7.9 GB
+#   14B   @ 4096:   ~8.2-8.5 GB (runner caps at 4K)
+#   phi3.5 @ 32768: ~8.5 GB
+#   1.5B  @ 32768:  ~1.9 GB
+#   1B    @ 131072: ~4.2 GB
 MODEL_TOKEN_LIMITS: dict = {
     # Threshold = 80% of context window; hard = context window (working ceilings)
-    "qwen3.5:9b":          (52428, 65536),    # 64K (native 256K, VRAM-capped)
+    "qwen3.5:9b":          (26214, 32768),    # 32K (native 256K, VRAM-capped)
     "qwen2.5-coder:7b":    (26214, 32768),    # 32K native max
     "qwen2.5-coder:1.5b":  (26214, 32768),    # 32K native max
     "phi3.5":              (26214, 32768),    # 32K (128K needs 43.7 GB = OOM)
     "phi-3.5":             (26214, 32768),    # format alias
     "phi3:14b":            (3276, 4096),      # 4K (llama runner crashes >4K)
-    "llama3.1:8b":         (52428, 65536),    # 64K (native 128K, VRAM-capped)
+    "llama3.1:8b":         (26214, 32768),    # 32K (native 128K, VRAM-capped)
     "llama3.2:1b":         (104857, 131072),  # 128K native max
     "qwen3.5:14b":         (3276, 4096),      # 4K (same 14B runner limit)
 }

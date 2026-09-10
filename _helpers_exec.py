@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -46,23 +47,45 @@ from _prompts import INTENT_CLASSIFIER_SYSTEM as _INTENT_CLASSIFIER_SYSTEM_BASE
 # Use the canonical definition from _prompts; keep the local name for callers.
 INTENT_CLASSIFIER_SYSTEM = _INTENT_CLASSIFIER_SYSTEM_BASE
 
+# Deterministic intent classification regexes (LLM classifier removed for
+# latency).  Order matters: modification verbs take priority.
+_MODIFICATION_PATTERNS = [
+    r"\b(add|create|implement|fix|repair|modify|change|build|generate|write|remove|delete|update|refactor|extend|integrate|wire|hook|expose|register|port|migrate|convert|rename|optimize|upgrade|patch)\w*\b",
+]
+_QUERY_PATTERNS = [
+    r"\b(where is|where are|which file|what file|find|locate|search|grep|look up|look for)\b",
+]
+_INFORMATIONAL_PATTERNS = [
+    r"\b(explain|describe|summarize|overview|walk me through|tell me about|how does|how do|what is|what are|how is|how are|document|understand)\b",
+]
 
-def classify_intent(user_prompt: str, call_ollama_func, director_model: str) -> str:
-    """Zero-shot intent classification using the Director model."""
-    intent = call_ollama_func(
-        INTENT_CLASSIFIER_SYSTEM,
-        f"User prompt: '{user_prompt}'\n\n"
-        f"Classify as MODIFICATION, INFORMATIONAL, QUERY, or CHAT.",
-        "Intent Classifier",
-        director_model,
-    )
-    intent_clean = intent.strip().upper()
-    if "CHAT" in intent_clean:
+
+def classify_intent(user_prompt: str, call_ollama_func=None, director_model: str = "") -> str:
+    """Deterministic intent classification (no LLM call).
+
+    ``call_ollama_func`` and ``director_model`` are retained for backward
+    compatibility with existing call sites but are no longer consulted.
+    """
+    prompt = user_prompt.lower().strip()
+
+    # Chat fast-path.  Lazy import avoids a module-load cycle with
+    # _helpers_text (which imports _helpers_exec at load time).
+    from _helpers_text import is_likely_chat
+    if is_likely_chat(prompt):
         return "CHAT"
-    if "INFORMATIONAL" in intent_clean:
-        return "INFORMATIONAL"
-    if "QUERY" in intent_clean:
-        return "QUERY"
+
+    # Modification verbs take priority so a build request is never
+    # under-routed into a read-only path.  Unmatched prompts fall back to
+    # MODIFICATION (the previous LLM classifier's default).
+    for _pat in _MODIFICATION_PATTERNS:
+        if re.search(_pat, prompt):
+            return "MODIFICATION"
+    for _pat in _QUERY_PATTERNS:
+        if re.search(_pat, prompt):
+            return "QUERY"
+    for _pat in _INFORMATIONAL_PATTERNS:
+        if re.search(_pat, prompt):
+            return "INFORMATIONAL"
     return "MODIFICATION"
 
 
@@ -162,6 +185,11 @@ def get_unavailable_domains_text(all_domains: dict = None) -> str:
 _GDD_DISTILL_THRESHOLD: int = 4000   # chars — below this, no model call needed
 _GDD_DISTILL_TARGET: int = 3000      # desired output size in chars
 
+# Cache distilled GDD slices so repeated fix cycles / retries for the same
+# task don't re-invoke the phi3.5 pre-summarizer with identical input.
+_GDD_DISTILL_CACHE: Dict[tuple, str] = {}
+_GDD_DISTILL_CACHE_MAX: int = 32
+
 
 def _distill_gdd_for_task(task_spec: str, gdd_text: str,
                           attraction_name: str = "") -> str:
@@ -183,6 +211,11 @@ def _distill_gdd_for_task(task_spec: str, gdd_text: str,
         Compressed GDD text, or the original text if compression fails or
         the model is unavailable.
     """
+    _cache_key = (attraction_name, task_spec, gdd_text)
+    _cached = _GDD_DISTILL_CACHE.get(_cache_key)
+    if _cached is not None:
+        return _cached
+
     try:
         from ollama_client import call_ollama as _call_ollama
         from ollama_client import PRE_SUMMARIZER_MODEL as _SUMM_MODEL
@@ -218,8 +251,14 @@ def _distill_gdd_for_task(task_spec: str, gdd_text: str,
         _label = attraction_name or task_spec[:40]
         print(f"  [GDD Distiller] Compressed {len(gdd_text)} -> {len(result)} chars "
               f"for '{_label}'")
-        return result.strip()
-    return gdd_text
+        _final = result.strip()
+    else:
+        _final = gdd_text
+
+    _GDD_DISTILL_CACHE[_cache_key] = _final
+    if len(_GDD_DISTILL_CACHE) > _GDD_DISTILL_CACHE_MAX:
+        _GDD_DISTILL_CACHE.pop(next(iter(_GDD_DISTILL_CACHE)))
+    return _final
 
 
 # -- SEARCH/REPLACE Block Extractor (Step 4: Merge Abolition) ----------------

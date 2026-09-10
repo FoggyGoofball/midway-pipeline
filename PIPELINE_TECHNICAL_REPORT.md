@@ -429,7 +429,7 @@ If final approval fails, `generate_failure_report()` is called, which produces a
 
 **File:** `mesh_finalize.py` (`_run_observability_pass()`)
 
-After conflict resolution and before the final review, a dedicated Observability pass runs. The `OBSERVABILITY` domain agent (`phi3:14b`) is called with the merged output and instructed to:
+After conflict resolution and before the final review, a dedicated Observability pass runs. The `OBSERVABILITY` domain agent (`qwen2.5-coder:7b`) is called with the merged output and instructed to:
 - Inject instrumentation (metrics, log statements, diagnostics) into the code where appropriate.
 - Output the **entire modified file** as a plain code block (not as SEARCH/REPLACE diff markers, which would cause the sanitizer to self-reject the output).
 - Follow the project's observability mandate from `midway_data.py`.
@@ -533,11 +533,14 @@ Each model has a configured `(threshold, context_window)` pair where the thresho
 
 | Model | Threshold | Context Window |
 |---|---|---|
-| `qwen2.5-coder:7b` | 6,553 tokens | 8,192 |
-| `phi3:14b` | 6,553 tokens | 8,192 |
-| `phi3.5:latest` | 13,107 tokens | 16,384 |
-| `llama3.1:8b` | 6,553 tokens | 8,192 |
-| `llama3.2:1b` | 6,553 tokens | 8,192 |
+| `qwen2.5-coder:7b` | 26,214 tokens | 32,768 |
+| `qwen3.5:9b` | 26,214 tokens | 32,768 |
+| `qwen2.5-coder:1.5b` | 26,214 tokens | 32,768 |
+| `llama3.1:8b` | 26,214 tokens | 32,768 |
+| `phi3.5:latest` | 26,214 tokens | 32,768 |
+| `phi3:14b` | 3,276 tokens | 4,096 |
+| `qwen3.5:14b` | 3,276 tokens | 4,096 |
+| `llama3.2:1b` | 104,857 tokens | 131,072 |
 
 ### `TokenBudget.estimate_tokens(text)`
 
@@ -938,7 +941,7 @@ When an agent issues an `[APPEAL: reason]` signal, the conflict is escalated to 
 
 ### Tribunal Agent
 
-The `TRIBUNAL` domain uses the `REASONING_MODEL` (phi3:14b) and is specialised for impartial cross-domain conflict adjudication. It reviews both the original output and the appealing agent's objection, then issues a binding verdict. A `SUSTAINED` verdict can force an agent to revise its output; an `OVERRULED` verdict accepts the original.
+The `TRIBUNAL` domain uses the `REASONING_MODEL` (qwen3.5:9b) and is specialised for impartial cross-domain conflict adjudication. It reviews both the original output and the appealing agent's objection, then issues a binding verdict. A `SUSTAINED` verdict can force an agent to revise its output; an `OVERRULED` verdict accepts the original.
 
 ---
 
@@ -951,7 +954,7 @@ For tasks whose domain is listed in `REASONING_GATE_DOMAINS` (defined by the car
 
 ### Purpose
 
-The reasoning gate substitutes a more capable reasoning model (`REASONING_MODEL`, currently phi3:14b) for tasks that require deep logical analysis — physics calculations, complex state machine design, or mathematical verification.
+The reasoning gate substitutes a more capable reasoning model (`REASONING_MODEL`, currently qwen3.5:9b) for tasks that require deep logical analysis — physics calculations, complex state machine design, or mathematical verification.
 
 ### Activation
 
@@ -1061,11 +1064,11 @@ The single authoritative state bag. Notable fields beyond what is listed above:
 |---|---|---|
 | `EXECUTION_MODEL` | `qwen2.5-coder:7b` | Primary code generation model for all domain agents |
 | `CODER_MODEL` | `qwen2.5-coder:7b` | Alias for EXECUTION_MODEL |
-| `REVIEWER_MODEL` | `phi3:14b` | Code review, conflict resolution, consensus |
+| `REVIEWER_MODEL` | `qwen3.5:9b` | Code review, conflict resolution, consensus |
 | `DIRECTOR_MODEL` | `llama3.1:8b-instruct-q4_K_M` | Task decomposition and intent classification |
-| `REASONING_MODEL` | `phi3:14b` | Pro-mode reasoning gate |
+| `REASONING_MODEL` | `qwen3.5:9b` | Architect, reasoning gate, oracle, tribunal |
 | `LIBRARIAN_MODEL` | `llama3.1:8b-instruct-q4_K_M` | GDD and document retrieval |
-| `PRE_SUMMARIZER_MODEL` | `phi3.5:latest` | Large-context compression before phi3:14b review |
+| `PRE_SUMMARIZER_MODEL` | `phi3.5:latest` | Large-context compression before slow-prefill models |
 | `SYNTAX_GATE_MODEL` | `qwen2.5-coder:1.5b` | Lightweight syntax validation |
 | `INTENT_CLASSIFIER_MODEL` | `llama3.2:1b` | Lightweight prompt routing classification |
 | `CHAT_MODEL` | `qwen2.5-coder:7b` | Direct conversational responses |

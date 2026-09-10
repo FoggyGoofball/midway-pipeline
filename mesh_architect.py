@@ -132,6 +132,8 @@ ARCHITECT_STRUCTURED_SYSTEM = (
     "Engine.GetStreak() as the multiplier.\n"
     "Handles are Lua-local userdata values returned by Spawn*/CreatePool calls.\n"
     "Produce the attraction design as a single JSON object matching the provided schema. "
+    "Be CONCISE: keep the summary, every description, and every title to ONE short line. "
+    "Do NOT pad, repeat, or invent extra placeholder entries. "
     "Return ONLY the JSON object — no prose, no markdown fences."
 )
 
@@ -258,35 +260,51 @@ def _seed_integration_schema(design: AttractionDesign) -> IntegrationSchema:
 
 
 def _try_structured_architect(prompt: str) -> Optional[AttractionDesign]:
-    """Standard #1/#2: extract the design via instructor + tenacity (two-turn).
+    """Extract the design via native Ollama JSON mode.
 
     Returns None if the structured path is unavailable or fails, so the caller
     falls back to the legacy regex parser without disturbing the pipeline.
+
+    NOTE: this deliberately avoids the openai/instructor client — the OpenAI-
+    compatible /v1/chat/completions endpoint was crashing the 9B runner with
+    'model runner has unexpectedly stopped' (500), and instructor's tenacity
+    retry schedule could silently re-run a full slow generation (10+ min each)
+    on a validation failure.  The native /api/chat path with ``format:"json"``
+    and a ``num_predict`` cap is both crash-free and bounded.
     """
     try:
-        from structured_client import StructuredClient
         from structured_schemas import AttractionDesignOutput
     except Exception as e:
         print(f"  [Architect] ℹ Structured extraction unavailable ({e}); using legacy parser.")
         return None
 
     try:
-        from pipeline import REASONING_MODEL
-        from ollama_config import OLLAMA_HOST
+        from pipeline import REASONING_MODEL, call_ollama
+        from ollama_client import is_fatal_ollama_error
 
-        client = StructuredClient(model=REASONING_MODEL, base_url=OLLAMA_HOST, temperature=0.0)
-        output = client.extract(
-            schema=AttractionDesignOutput,
-            system=ARCHITECT_STRUCTURED_SYSTEM,
-            user=prompt,
-            # The design schema carries task_anchors (up to 11+ entries), handles,
-            # event flow and a checklist, so a full JSON can exceed 2048 tokens
-            # and trigger an "incomplete" truncation.  6144 is generous enough
-            # for a verbose design while still bounding generation well under
-            # the 60-minute socket timeout.
-            max_tokens=6144,
+        print("  [Architect] Extracting structured design (single-turn, native JSON)...")
+        out = call_ollama(
+            ARCHITECT_STRUCTURED_SYSTEM,
+            prompt,
+            "Architect Design Pass (structured JSON)",
+            REASONING_MODEL,
+            params={"format": "json", "num_predict": 2048},
+            skip_pre_summarizer=True,
         )
-        return output.to_attraction_design()
+        if is_fatal_ollama_error(out):
+            raise RuntimeError(f"Ollama error during architect extraction: {out[:200]}")
+
+        # Tolerate stray prose / fences around the JSON object.
+        _start = out.find("{")
+        _end = out.rfind("}")
+        if _start == -1 or _end <= _start:
+            raise ValueError("no JSON object in architect response")
+        design = AttractionDesignOutput.model_validate_json(out[_start:_end + 1])
+
+        print(f"  [Architect] ✅ Structured design extracted: '{design.title}' "
+              f"({len(design.handles)} handles, {len(design.event_flow)} event edges, "
+              f"{len(design.feature_checklist)} checklist items).")
+        return design.to_attraction_design()
     except Exception as e:
         print(f"  [Architect] ⚠ Structured extraction failed ({e}); falling back to legacy parser.")
         return None
@@ -321,10 +339,22 @@ def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
     print("  [Architect] 🏗 Running pre-decomposition design pass...")
     print("=" * 60)
 
+    # Give the architect the scoped GDD context and target attraction so it has
+    # the actual design spec to work from — previously it received only the raw
+    # one-line request and produced empty output.
+    _gdd = (getattr(ctx, 'gdd_context', '') or '').strip()
+    _target = (getattr(ctx, '_scope_target', '') or '').strip()
+    architect_prompt = (
+        f"## Feature Request\n{prompt}\n\n"
+        + (f"## Target Attraction\n{_target}\n\n" if _target else "")
+        + (f"## Relevant GDD Context\n{_gdd[:4000]}\n\n" if _gdd else "")
+        + "Produce the JSON design document now."
+    )
+
     try:
         # -- Standard #1/#2: instructor + tenacity two-turn extraction first. --
         # Falls back to the legacy regex JSON parser if unavailable or failed.
-        _structured_design = _try_structured_architect(prompt)
+        _structured_design = _try_structured_architect(architect_prompt)
         if _structured_design is not None:
             ctx.attraction_design = _structured_design
             ctx.integration_schema = _seed_integration_schema(_structured_design)
@@ -340,16 +370,14 @@ def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
         from pipeline import call_ollama, REASONING_MODEL
         from ollama_client import is_fatal_ollama_error
 
-        architect_input = (
-            f"## Feature Request\n{prompt}\n\n"
-            "Produce the JSON design document now."
-        )
+        architect_input = architect_prompt
 
         raw = call_ollama(
             ARCHITECT_SYSTEM,
             architect_input,
             "Architect Design Pass",
             REASONING_MODEL,
+            params={"num_predict": 2048},
             skip_pre_summarizer=True,
         )
 

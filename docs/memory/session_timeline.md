@@ -1,3 +1,410 @@
+## Session Event  2026-09-09T23:16:20.793761
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protocal)  i just want to test your capabilities since i've upgraded.  refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define the complete structural scaffold for attractions/strongman/strongman.lua including all four lifecycle entry points (OnLoadStatic, OnLoad, OnStep, OnUnload) with TODO placeholders for booth geometry, object pools, sensor setup, and economy hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman Attraction Development
+### Task 1: [Lua] - Define Lifecycle Entry Points (DependsOn: None)
+Inputs: strongman.lua
+Outputs: attractions/strongman/strongman.lua
+Hooks: OnLoadStatic, OnLoad, OnStep, OnUnload
+File: attractions/strongman/strongman.lua
+
+### Task 2: [Lua] - Spawn Permanent Strongman Booth Geometry (DependsOn: Task 1)
+Inputs: strongman.lua, AttractionConstants.modifiers
+Outputs: permanent booth geometry handles
+Hooks: OnLoadStatic
+File: attractions/strongman/strongman.lua
+
+### Task 3: [Lua] - Create Vertical Rusty Rails Track and Sensor Setup (DependsOn: Task 2)
+Inputs: strongman.lua, AttractionConstants.modifiers
+Outputs: kinematic cylinder and sensor box handles
+Hooks: OnLoadStatic
+File: attractions/strongman/strongman.lua
+
+### Task 4: [Lua] - Implement Echo Mallet Object Pool and Spawning Logic (DependsOn: Task 3)
+Inputs: strongman.lua, AttractionConstants.modifiers
+Outputs: dynamic capsule handles
+Hooks: OnLoad
+File: attractions/strongman/strongman.lua
+
+### Task 5: [Lua] - Implement Echo Puck Object Pool and Spawning Logic (DependsOn: Task 4)
+Inputs: strongman.lua, AttractionConstants.modifiers
+Outputs: dynamic sphere handles
+Hooks: OnLoad
+File: attractions/strongman/strongman.lua
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: StrongmanHighStriker
+A rogue-lite carnival strength game where the player swings a heavy mallet to launch a puck up a vertical tower toward a bell. The game features randomized environmental modifiers including 'Rusty Rails' (variable friction), 'Counter-Weight Springs' (inconsistent rebound), 'The Bell's Curse' (shifting targets), and 'Cracked Base' (aim offset). Success clears the level, while failure in a streak sequence permanently forfeits wagered currency. The system tracks soul tokens (health/wager) and tickets (acquisition currency) without implementing the full Streak Protocol engine requirements yet.
+
+### Declared Handles
+  player_base (box)  The dynamic box representing the player character standing on the platform. [owner: physics, lifecycle: OnLoad]
+  mallet_head (sphere)  The heavy sphere representing the mallet head used for striking. [owner: physics, lifecycle: OnLoad]
+  mallet_handle (capsule)  The kinematic capsule representing the mallet handle connecting to the pivot. [owner: physics, lifecycle: OnLoad]
+  lever_base (cylinder)  The static cylinder acting as the anchor for the lever mechanism. [owner: physics, lifecycle: OnLoad]
+  puck (sp
+[... output truncated ...]
+---
+## Session Event  2026-09-09T21:25:30.157285
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protocal)  i just want to test your capabilities since i've upgraded.  refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Create complete attraction lifecycle scaffold defining OnLoadStatic for booth geometry, OnLoad for object pools and physics callbacks, OnStep for per-frame updates, and OnUnload for diagnostics cleanup - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman Attraction Lifecycle Scaffold
+### Task 1: [Lua] - Define OnLoadStatic lifecycle hook (DependsOn: None)
+Inputs: 
+Outputs: 
+Hooks: OnLoadStatic, OnUnload
+File: attractions/strongman/strongman.lua
+
+### Task 2: [Lua] - Implement OnLoad lifecycle hook for object pools and physics callbacks (DependsOn: Task 1)
+Inputs: AttractionConstants.modifiers
+Outputs: object pool handles
+Hooks: OnLoad
+File: attractions/strongman/strongman.lua
+
+### Task 3: [Lua] - Create OnStep per-frame updates lifecycle hook (DependsOn: Task 2)
+Inputs: AttractionConstants.modifiers
+Outputs: 
+Hooks: OnStep
+File: attractions/strongman/strongman.lua
+
+### Task 4: [Lua] - Implement OnUnload diagnostics cleanup lifecycle hook (DependsOn: Task 3)
+Inputs: 
+Outputs: 
+Hooks: OnUnload
+File: attractions/strongman/strongman.lua
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+### Issues
+## ⚡ Runtime Simulation Errors
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 6 arg(s) (expected 34).
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 7 arg(s) (expected 34).
+  [task_monolithic] Live harness:  in OnLoadStatic: .../Temp/midway_sim_mdn2d1_e/task_monolithic_attraction.lua:52: attempt to call a nil value (global 'SpawnStaticBox')
+
+## ⛔ Open Pre-Flight Violations
+## ⚡ Runtime Simulation Errors
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 6 arg(s) (expected 34).
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 7 arg(s) (expected 34).
+  [task_monolithic] Live harness:  in OnLoadStatic: .../Temp/midway_sim_tffja6te/task_monolithic_attraction.lua:52: attempt to call a nil value (global 'SpawnStaticBox')
+
+### Verdict
+[VERDICT: FAIL]  (deterministic gate)
+
+### Domain Agent Fix Cycle 1
+
+### Review Cycle 2
+### Issues
+## ⚡ Runtime Simulation Errors
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 6 arg(s) (expected 34).
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 7 arg(s) (expected 34).
+
+### Verdict
+[VERDICT: FAIL]  (deterministic gate)
+
+### Domain Agent Fix Cycle 2
+
+### Review Cycle 3
+### Issues
+## ⚡ Runtime Simulation Errors
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 6 arg(s) (expected 34).
+  [task_monolithic] `MidwayPhysics.CreatePool` called with 7 arg(s) (expected 34).
+
+### Verdict
+[VERDICT: FAIL]  (deterministic gate)
+[... output truncated ...]
+---
+## Session Event  2026-09-09T20:33:46.801466
+**Agent Assigned:** 
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protocal)  i just want to test your capabilities since i've upgraded.  refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Create the complete structural scaffold defining all four lifecycle entry points (OnLoadStatic, OnLoad, OnStep, OnUnload) with TODO placeholders for permanent geometry spawning, object pools for mallet/puck/bell, modifier tracking, input handling, and scoring hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman Striker
+### Task 1: [Lua] - Define OnLoadStatic() with TODO placeholders for permanent geometry spawning (DependsOn: None)
+Inputs: None
+Outputs: strongman_handle, puck_handle, mallet_handle, bell_handle
+Hooks: OnLoadStatic
+File: attractions/strongman/strongman.lua
+
+### Task 2: [Lua] - Spawn permanent tower geometry using SpawnStaticBox and SpawnStaticMesh in OnLoadStatic() with TODO for booth spawning and base wobble (DependsOn: Task 1)
+Inputs: None
+Outputs: strongman_handle, puck_handle, mallet_handle, bell_handle
+Hooks: OnLoadStatic
+File: attractions/strongman/strongman.lua
+
+### Task 3: [Lua] - Create object pools for puck, mallet, and lever components using MidwayPhysics.CreatePool in OnLoad() with TODO for pool configuration and culling (DependsOn: Task 2)
+Inputs: None
+Outputs: puck_pool_handle, mallet_pool_handle, bell_pool_handle
+Hooks: OnLoad
+File: attractions/strongman/strongall.lua
+
+### Task 4: [Lua] - Register MidwayPhysics.OnStep callback and implement modifier read from AttractionConstants.modifiers each frame (never cached) with TODO for variable friction and spring tension (DependsOn: Task 3)
+Inputs: None
+Outputs: strongman_handle, puck_handle, mallet_handle, bell_handle
+Hooks: OnStep
+File: attractions/strongman/strongall.lua
+
+### Task 5: [Lua] - Implement lever physics system using SpawnKinematicBox with counter-weight spring mechanics and TODO for random spring tension randomization and rusty rails friction (DependsOn: Task 4)
+Inputs: None
+Outputs: strongman_handle, puck_handle, mallet_handle, bell_handle
+Hooks: OnStep
+File: attractions/strongman/strongall.lua
+
+### Task 6: [Lua] - Spawn puck using SpawnDynamicSphere with TODO for variable mass modification, track friction modification, and ascent mechanics via AddLinearVelocity/ApplyImpulse (DependsOn: Task 5)
+Inputs: None
+Outputs: puck_handle
+Hooks: OnStep
+File: attractions/strongman/strongall.lua
+
+### Task 7: [Lua] - Implement mallet system using SpawnDynamicBox or SpawnDynamicCapsule with TODO for swing animation velocity impulses and rebound physics from lever interaction (DependsOn: Task 6)
+Inputs: None
+Outputs: mallet_handle, bell_handle
+Hooks: OnStep
+File: attractions/strongman/strongall.lua
+
+### Task 8: [Lua] - Spawn bell and tower structure using SpawnStaticBox/SpawnStaticMesh with TODO for position sensors and The Bell's Curse teleport mechanic (DependsOn: Task 7)
+Inputs: None
+Outputs: bell_handle, strongman_handle
+Hooks: OnStep
+Fi
+[... output truncated ...]
+---
 ## Session Event  2026-09-09T03:17:21.533114
 **Agent Assigned:** Lua, Lua, Lua, Lua, Lua
 **User Input:** <execution_environment>

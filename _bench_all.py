@@ -17,10 +17,10 @@ HOST = "http://192.168.0.16:11434"
 MODELS = [
     ("qwen2.5-coder:7b", 32768),
     ("qwen2.5-coder:1.5b", 32768),
-    ("phi3:14b", 32768),
-    ("qwen3.5:9b", 65536),
-    ("llama3.1:8b-instruct-q4_K_M", 65536),
-    ("phi3.5:latest", 131072),
+    ("phi3:14b", 4096),
+    ("qwen3.5:9b", 32768),
+    ("llama3.1:8b-instruct-q4_K_M", 32768),
+    ("phi3.5:latest", 32768),
     ("llama3.2:1b", 131072),
 ]
 

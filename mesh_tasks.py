@@ -922,14 +922,17 @@ def _detect_monolithic_lua_candidate(tasks_list: list) -> str | None:
     """Return target_file if ALL tasks write to the same .lua file."""
     target_files = set()
     for t in tasks_list:
-        tf = t.get("target_file")
-        if tf is None:
+        tf = (t.get("target_file") or "").replace("\\", "/").lower().strip()
+        if not tf:
+            # Task didn't declare a file.  Skip rather than abort: an empty
+            # field must never defeat monolithic collapse (it previously caused
+            # N same-file tasks to regenerate the file N times, clobbering).
+            continue
+        if not tf.endswith(".lua"):
             return None
-        target_files.add(tf.replace("\\", "/").lower())
+        target_files.add(tf)
     if len(target_files) == 1:
-        sole = next(iter(target_files))
-        if sole.endswith(".lua"):
-            return sole
+        return next(iter(target_files))
     return None
 
 
@@ -956,8 +959,25 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
     inject_skeleton(_target_abs, _target_abs.stem)
     print(f"  [Monolithic] Skeleton written: {_target_abs}")
 
-    # -- Read current skeleton content --
-    _live_content = _target_abs.read_text(encoding="utf-8") if _target_abs.is_file() else ""
+    # -- Read current skeleton content (hardened) --
+    # inject_skeleton() always writes above, so the file must exist.  Guard the
+    # read anyway and never feed the model an empty/truncated skeleton: fall back
+    # to the canonical template so generation always starts from valid structure.
+    _live_content = ""
+    try:
+        if _target_abs.is_file():
+            _live_content = _target_abs.read_text(encoding="utf-8")
+    except Exception as _e:
+        print(f"  [Monolithic] ⚠ Failed to read skeleton {_target_abs}: {_e}")
+        _live_content = ""
+    if not _live_content.strip():
+        try:
+            from _build_skeleton import SKELETON_TEMPLATE
+            _live_content = SKELETON_TEMPLATE
+        except Exception:
+            pass
+        print(f"  [Monolithic] ⚠ Skeleton read was empty — using canonical template "
+              f"({len(_live_content)} chars).")
 
     # -- Build consolidated task spec --
     _task_lines = []
@@ -1047,26 +1067,24 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
         "4. The Lua rules and bridge contract\n\n"
         "CRITICAL DO-NOT-USE LIST:\n"
         "You MUST NOT use any of the following APIs, function names, or patterns:\n"
-        "- MidwayPhysics.PoolAcquire\n"
-        "- MidwayPhysics.PoolReturn\n"
-        "- MidwayPhysics.IsSensorTriggered  (use a sensor callback instead)\n"
         "- SkeeballGame (no global game object)\n"
         "- OnPlayerAim, OnPlayerPowerUp, OnThrow, OnCollisionWithTarget\n"
         "- Any function named On* that is NOT OnLoadStatic, OnLoad, or OnUnload\n"
         "- Engine.GetInputState, Engine.GetAimDirection, Engine.GetPowerLevel, Engine.GetNumBalls\n"
-        "- Any Engine.* call EXCEPT the four approved economy functions:\n"
+        "- Any Engine.* call EXCEPT the approved economy functions:\n"
         "  Engine.AwardTickets(n, label), Engine.AwardTokens(n, label),\n"
         "  Engine.GetTickets(), Engine.GetTokens(), Engine.GetStreak()\n"
         "  The Engine.* namespace is ONLY for economy -- there is NO engine input API.\n\n"
 
         "APPROVED PHYSICS APIS (use ONLY these):\n"
         f"{_approved_physics_apis or 'See the bridge contract in the prompt below'}\n\n"
-        "BALL PHYSICS MODEL:\n"
-        "- Balls move via physics simulation (gravity, friction, restitution).\n"
-        "- The engine handles physics; Lua just sets initial impulses via ApplyImpulse().\n"
-        "- Do NOT implement manual velocity arithmetic in Lua.\n"
-        "- Do NOT call SetLinearVelocity, SetGravityFactor, or ApplyForce on balls.\n"
-        "- Do NOT tick ball positions manually in OnStep; let the physics sim move them.\n\n"
+        "PHYSICS MODEL:\n"
+        "- Objects move via physics simulation (gravity, friction, restitution).\n"
+        "- The engine handles physics; Lua sets impulses via ApplyImpulse() and\n"
+        "  can read/write state via the approved MidwayPhysics.* APIs above\n"
+        "  (including IsSensorTriggered, PoolAcquire/PoolReturn, SetLinearVelocity).\n"
+        "- Do NOT implement manual velocity/position arithmetic in Lua.\n"
+        "- Do NOT tick object positions manually in OnStep; let the physics sim move them.\n\n"
         "SYNTAX & OUTPUT REQUIREMENTS:\n"
         "- The generated file MUST pass `luac -p` syntax check on first try.\n"
         "- Wrap the Lua code inside a single ```lua ... ``` code block.\n"
@@ -1087,9 +1105,8 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
         "- Do NOT use undefined globals. Every non-builtin must be declared with 'local'.\n"
         "- Global variable SLOT_ID = BOOTH_SLOT_ID or -1 MUST be present at module level.\n"
         "- local CONST = {} MUST be present at module level (constants table placeholder).\n"
-        "- Module-level state variables (balls table, remainingBalls, currentScore, "
-        "aimAngle, powerLevel) MUST be declared at module scope, not in functions.\n"
-        "- 6 balls (remainingBalls = 6), decremented per throw, round ends when count = 0.\n"
+        "- Module-level state variables (object handles, score/round counters, "
+        "modifier state) MUST be declared at module scope, not inside functions.\n"
     )
 
     _monolithic_prompt = (

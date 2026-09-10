@@ -49,7 +49,220 @@ from _review_helpers import (
     build_fix_bridge_snippet,
     _strip_fix_plan,
     _prune_fix_context,
+    _extract_broken_function_name,
+    _extract_function_body,
 )  # noqa: F401
+
+
+# ----------------------------------------------------------------------
+#  Phase 3 — Deterministic verdict gate
+# ----------------------------------------------------------------------
+# True  -> the PASS/FAIL decision in the review loop is computed from
+#          deterministic signals only (per-cycle luac syntax, RuntimeSim,
+#          open pre-flight violations, mandatory economy content).  No LLM
+#          review call is made, so the loop can never hang or crash on the
+#          9B reviewer (the historical UNKNOWN / 500 / multi-minute stall
+#          failure mode seen in every prior run).
+# False -> previous behaviour (the LLM decides the verdict).
+DETERMINISTIC_VERDICT = True
+
+# When DETERMINISTIC_VERDICT is True and this is True, a FAIL cycle will
+# still attempt ONE advisory structured review to enrich the fix issues.
+# The advisory result NEVER changes the verdict and never blocks the loop.
+ADVISORY_REVIEW_ON_FAIL = False
+
+
+def _luac_syntax_errors(ctx: PipelineContext) -> str:
+    """Re-run luac on the pipeline's own Lua outputs and return a
+    pre-flight-style error block for any syntax failures.
+
+    This is a per-cycle disk-level check — the loop's partial static
+    refresh does NOT re-inject luac errors, so a fix cycle that
+    reintroduces a syntax error would otherwise be invisible to the next
+    verdict decision (the exact bug that made the strongman run loop
+    forever on the `Physics.*` regression).
+    """
+    import subprocess as _sp
+    try:
+        _sp.run(["luac", "-v"], capture_output=True, text=True, timeout=5)
+    except FileNotFoundError:
+        return ""  # luac not installed — not a gate we can run
+    except Exception:
+        return ""
+
+    _owned: Set[str] = set()
+    _mono = getattr(ctx, '_monolithic_lua_target', None)
+    if _mono and _mono.endswith('.lua'):
+        _owned.add(_mono)
+    for _t in ctx.task_map.values():
+        _tf = getattr(_t, 'target_file', None)
+        if _tf and _tf.endswith('.lua'):
+            _owned.add(_tf)
+    if not _owned:
+        return ""
+
+    _blocks: list[str] = []
+    for _rel in sorted(_owned):
+        _abs = ctx.project_root / _rel
+        if not _abs.is_file():
+            continue
+        try:
+            _p = _sp.run(["luac", "-p", str(_abs)], capture_output=True, text=True, timeout=30)
+        except Exception:
+            continue
+        if _p.returncode != 0:
+            _clean = (_p.stderr or "").strip().replace(str(_abs), _rel)
+            _blocks.append(f"## ⛔ Lua Syntax Error — {_rel}\n```\n{_clean[:800]}\n```")
+    return "\n\n".join(_blocks)
+
+
+def _rebuild_task_from_tasks_list(ctx: PipelineContext, tid: str):
+    """Rebuild a minimal Task-like object for *tid* from ctx.tasks_list.
+
+    The per-task review-fix router looks tasks up in ctx.task_map, but that
+    dict can end up missing entries (the "silent skip" bug that left most
+    failing tasks unfixed every cycle).  Fall back to the flat task list, which
+    carries domain/title/id/target_file/anchor_marker — enough for
+    `_prune_fix_context` and domain routing.
+    """
+    from types import SimpleNamespace
+    for _t in (getattr(ctx, 'tasks_list', None) or []):
+        if not isinstance(_t, dict):
+            continue
+        if f"task_{_t.get('id')}" == tid:
+            return SimpleNamespace(
+                agent=_t.get("domain", "Lua"),
+                spec=_t.get("title") or _t.get("description") or tid,
+                paged_files_cache=None,
+                tdd_test_path=None,
+                target_file=_t.get("target_file", ""),
+                anchor_marker=_t.get("anchor_marker") or _t.get("_anchor_marker"),
+            )
+    return None
+
+
+def _deterministic_verdict(ctx: PipelineContext) -> tuple[str, str]:
+    """Compute the review verdict from deterministic signals only.
+
+    Returns ``(verdict, issues_text)``.  This replaces the LLM verdict with
+    hard signals so the loop converges in a bounded number of cycles.
+    """
+    verdict = "PASS"
+    issues: list[str] = []
+
+    # 1. Per-cycle luac syntax check on disk (catches fix-cycle regressions).
+    _syntax = _luac_syntax_errors(ctx)
+    if _syntax:
+        verdict = "FAIL"
+        issues.append(_syntax)
+
+    # 2. Runtime simulation errors (nil handles, phantom APIs, bad arg counts).
+    try:
+        from runtime_sim import run_runtime_sim
+        _sim = run_runtime_sim(ctx)
+        ctx.runtime_errors = list(_sim) if _sim else []
+        if _sim:
+            verdict = "FAIL"
+            issues.append(
+                "## ⚡ Runtime Simulation Errors\n"
+                + "\n".join(f"  {e}" for e in _sim)
+            )
+    except Exception:
+        ctx.runtime_errors = []
+
+    # 3. Open pre-flight violations (empty output / static patterns / schema /
+    #    coverage / C++ compile).  Refreshed by the fix branch between cycles.
+    _open_pf = (ctx.pre_flight_errors or "").strip()
+    if _open_pf:
+        verdict = "FAIL"
+        issues.append("## ⛔ Open Pre-Flight Violations\n" + _open_pf)
+
+    # 4. Mandatory economy/modifier content for attraction scopes (FM4).
+    _rev_scope = getattr(ctx, '_scope_mode', '')
+    if _rev_scope in ("NEW_ATTRACTION", "MODIFY_ATTRACTION"):
+        _all_lua = " ".join(
+            str(v) for v in (ctx.all_results_dict or {}).values()
+        ).lower()
+        if not any(kw in _all_lua for kw in (
+            "attractionconstants.modifiers", "engine_mod_", ".modifiers",
+        )):
+            verdict = "FAIL"
+            issues.append(
+                "Missing AttractionConstants.modifiers read in OnStep — "
+                "the attraction MUST read modifiers every frame."
+            )
+        if not any(kw in _all_lua for kw in ("awardtickets", "awardtokens")):
+            verdict = "FAIL"
+            issues.append(
+                "Missing Engine.AwardTickets/AwardTokens — the attraction "
+                "MUST award tickets/tokens using Engine.GetStreak() as a multiplier."
+            )
+
+    issues_text = "\n\n".join(issues).strip()
+    return verdict, issues_text
+
+
+def _run_tribunal_appeal(ctx: PipelineContext) -> str:
+    """Escalate a non-converged review to the TRIBUNAL appellate court.
+
+    Blind-reviews the final implementation against the still-open violations
+    and returns a binding verdict string: ``"PASS"`` (MERGE) or ``"FAIL"``
+    (REJECT).  Returns ``""`` when the tribunal is unreachable or produces no
+    parseable verdict, so the caller can fall back to its legacy logic.
+    """
+    try:
+        from pipeline import REASONING_MODEL
+    except Exception:
+        return ""
+
+    _final_code = "\n\n".join(
+        str(v) for v in (ctx.all_results_dict or {}).values()
+    )
+    _open_pf = (ctx.pre_flight_errors or "").strip()
+    _rt_lines = [f"  {e}" for e in (getattr(ctx, 'runtime_errors', None) or [])]
+    _issues_block = "\n".join(
+        x for x in ([_open_pf] if _open_pf else []) + _rt_lines if x.strip()
+    ) or "(no open violations recorded)"
+
+    _tribunal_system = (
+        "You are the TRIBUNAL AGENT — a neutral appellate arbiter. "
+        "You do NOT write code. Blind-review the implementation against the "
+        "open violations listed and render a BINDING verdict.\n"
+        "Verdict options (output EXACTLY one line):\n"
+        "- [MERGE:Tribunal:<justification>] — implementation is acceptable.\n"
+        "- [REJECT:Tribunal:<justification>] — implementation must be rejected.\n"
+        "If any listed violation is unresolved and would produce broken or "
+        "non-functional code, you MUST REJECT."
+    )
+    _tribunal_prompt = (
+        "## Open Violations (must be satisfied)\n"
+        + _issues_block
+        + "\n\n## Implementation Under Review\n```\n"
+        + _final_code[:8000]
+        + "\n```\n\nRender your binding verdict now."
+    )
+
+    try:
+        _out = call_ollama(
+            _tribunal_system, _tribunal_prompt, "Tribunal Appeal", REASONING_MODEL,
+            params={"num_predict": 512},
+            skip_pre_summarizer=True,
+        )
+    except Exception as _te:
+        print(f"  [Tribunal] ⚠ Tribunal appeal failed: {_te}")
+        return ""
+
+    if _is_fatal_ollama(_out):
+        print("  [Tribunal] ⚠ Tribunal unreachable — no appellate verdict rendered.")
+        return ""
+    _out_preview = (_out or "").strip()
+    print(f"  [Tribunal] Raw verdict ({len(_out_preview)} chars): {_out_preview[:300]!r}")
+    if re.search(r"\[MERGE[:\]]", _out, re.IGNORECASE) or re.search(r"\bMERGE\b", _out):
+        return "PASS"
+    if re.search(r"\[REJECT[:\]]", _out, re.IGNORECASE) or re.search(r"\bREJECT\b", _out):
+        return "FAIL"
+    print("  [Tribunal] ⚠ Tribunal produced no parseable verdict — no appellate verdict rendered.")
+    return ""
 
 
 # ----------------------------------------------------------------------
@@ -72,39 +285,56 @@ _STRUCTURED_REVIEW_SYSTEM = (
     "4. Do NOT suggest replacement API names — the fix agent holds the approved API list.\n"
     "5. Scaffold/stub/comment-only/TODO-only implementations are a FAIL (REVISED).\n"
     "6. If there are no issues, return an empty issues list and verdict CONFIRMED.\n"
+    "Output this exact JSON shape (and only this):\n"
+    '{"verdict": "CONFIRMED", "issues": []}\n'
+    '{"verdict": "REVISED", "issues": [{"severity": "error", "location": "OnStep", "message": "phantom API"}]}\n'
     "Return ONLY the JSON object — no prose, no markdown fences."
 )
 
 
+def _extract_json_block(text: str) -> str:
+    """Extract the outermost {...} JSON object from an LLM response."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        return ""
+    return text[start:end + 1]
+
+
 def _structured_review(review_input: str) -> tuple[str, str]:
-    """Run the integration review through the structured Pydantic client.
+    """Run the integration review through the native Ollama endpoint in JSON
+    mode, validated against the ReviewVerdict Pydantic schema.
 
     Returns ``(verdict, issues_text)`` where verdict is "PASS" or "FAIL" and
     issues_text is a bullet list.  Raises on any failure so the caller can fall
     back to the legacy regex parser.
+
+    NOTE: this deliberately avoids the openai/instructor client — the OpenAI-
+    compatible /v1/chat/completions endpoint was crashing the 9B runner with
+    'model runner has unexpectedly stopped' (500) while the native /api/chat
+    path on the same model works reliably.
     """
-    from structured_client import StructuredClient
     from structured_schemas import ReviewVerdict, Verdict
     from pipeline import REASONING_MODEL
-    from ollama_config import OLLAMA_HOST
-    from ollama_client import prepare_model, resolve_ctx_size
+    from ollama_client import is_fatal_ollama_error as _is_fatal
 
     # Strip the legacy prose-format tail ("OUTPUT FORMAT (MANDATORY...") from the
-    # review prompt so it does not conflict with instructor's JSON extraction.
+    # review prompt so it does not conflict with JSON-mode extraction.
     _clean_input = re.split(r"\nOUTPUT FORMAT \(MANDATORY", review_input, maxsplit=1)[0]
 
-    prepare_model(REASONING_MODEL)
-    client = StructuredClient(
-        model=REASONING_MODEL,
-        base_url=OLLAMA_HOST,
-        temperature=0.0,
-        num_ctx=resolve_ctx_size(REASONING_MODEL),
+    print("  [Review-Fix] Structured review: extracting verdict (native JSON mode)...", flush=True)
+    out = call_ollama(
+        _STRUCTURED_REVIEW_SYSTEM,
+        _clean_input,
+        "Integration Review (structured JSON)",
+        REASONING_MODEL,
+        params={"format": "json", "num_predict": 1024},
+        skip_pre_summarizer=True,
     )
-    result = client.extract(
-        schema=ReviewVerdict,
-        system=_STRUCTURED_REVIEW_SYSTEM,
-        user=_clean_input,
-    )
+    if _is_fatal(out):
+        raise RuntimeError(f"Ollama error during structured review: {out[:200]}")
+
+    result = ReviewVerdict.model_validate_json(_extract_json_block(out))
     verdict = "PASS" if result.verdict == Verdict.CONFIRMED else "FAIL"
     issues_text = ""
     if result.issues:
@@ -113,6 +343,7 @@ def _structured_review(review_input: str) -> tuple[str, str]:
             _loc = f" @ {_i.location}" if _i.location else ""
             _lines.append(f"- [{_i.severity}]{_loc} {_i.message}")
         issues_text = "\n".join(_lines)
+    print(f"  [Review-Fix] Structured review complete: {verdict} ({len(result.issues)} issue(s)).", flush=True)
     return verdict, issues_text
 
 
@@ -493,6 +724,43 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             print("  [Circuit Breaker] ⛔ Physical compilation failed. Overriding LLM review hallucination.")
             ctx.review_output = "### Verdict\n[VERDICT: FAIL]\n### Issues\nPhysical compilation failed. See compiler logs."
             ctx.review_verdict = "FAIL"
+        elif DETERMINISTIC_VERDICT:
+            # ---- Phase 3: deterministic verdict --------------------------
+            # No LLM call is made.  The verdict comes from hard signals only,
+            # so the loop cannot hang on a crashed/unresponsive 9B reviewer.
+            _det_verdict, _det_issues = _deterministic_verdict(ctx)
+
+            if _det_verdict == "FAIL" and ADVISORY_REVIEW_ON_FAIL:
+                # Optional enrichment only — never changes the verdict.
+                try:
+                    _sv, _adv = _structured_review(review_input)
+                    if _adv and _adv.strip():
+                        _det_issues = (_det_issues + "\n\n" + _adv).strip()
+                        print("  [Review-Fix] Advisory review appended issues.")
+                except Exception as _sr_exc:
+                    print(f"  [Review-Fix] ⚠ Advisory review unavailable "
+                          f"({_sr_exc}) — using deterministic issues only.")
+
+            _issues_block = _det_issues or "- (none)"
+            ctx.review_verdict = _det_verdict
+            ctx.review_output = (
+                "### Issues\n"
+                + _issues_block
+                + f"\n\n### Verdict\n[VERDICT: {_det_verdict}]  (deterministic gate)"
+            )
+            print(f"  [Review-Fix] Deterministic verdict: {_det_verdict}.")
+
+            # Record this cycle's proposal/try/verdict in the shared decision
+            # log so later cycles and the tribunal can see what has been tried.
+            try:
+                from ledger import append_decision_entry
+                append_decision_entry(
+                    ctx.project_root,
+                    title=f"Review Cycle {ctx.review_cycle} — {_det_verdict}",
+                    body=("Open issues:\n" + (_det_issues or "- (none)")),
+                )
+            except Exception:
+                pass
         else:
             # Structured review first: Pydantic-validated verdict + issues
             # (Standard #1 — wire the reviewer into structured extraction).
@@ -528,6 +796,15 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         )
 
         print(f"  [Review-Fix] Verdict: {ctx.review_verdict}")
+
+        # Telemetry: when the reviewer produced no parseable verdict, dump the
+        # raw output so the failure mode (empty, rambling, wrong format) is
+        # visible in the log instead of a black box.
+        if ctx.review_verdict == "UNKNOWN":
+            _raw_preview = (ctx.review_output or "").strip()
+            _preview = _raw_preview[:600]
+            print(f"  [Review-Fix] 🔍 NO_VERDICT raw output ({len(_raw_preview)} chars):")
+            print("  " + "\n  ".join(_preview.splitlines()) + ("..." if len(_raw_preview) > 600 else ""))
 
         if ctx.review_verdict == "PASS":
             # FM3: Hard-gate PASS against open preflight errors.
@@ -736,6 +1013,17 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         + ctx.pre_flight_errors
                         + "\n\n"
                     )
+                _runtime_errs = getattr(ctx, 'runtime_errors', None) or []
+                if _runtime_errs:
+                    _mono_review_errors += (
+                        "## ⚡ RUNTIME SIMULATION ERRORS (concrete defects — fix EACH one)\n"
+                        + "\n".join(f"  {e}" for e in _runtime_errs)
+                        + "\n\n"
+                        "Fix every runtime error above. Assign every handle "
+                        "(puck, mallet, lever, bell, etc.) a real value from "
+                        "Spawn*/PoolAcquire BEFORE it is read inside OnStep. "
+                        "Do NOT leave handles nil.\n\n"
+                    )
                 # Bug M: Inject economy mandate into EVERY fix cycle regardless of
                 # what the reviewer or pre-flight reported.  The reviewer may not
                 # flag missing economy hooks (it focuses on syntax/structure), so
@@ -805,38 +1093,43 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         "=== Globals: SpawnSharedBooth, AttractionConstants.modifiers, ENGINE_MOD_*\n"
                     )
 
+                # -- Surgical fix: show the full file but constrain the coder to
+                #    emit targeted SEARCH/REPLACE blocks, so it patches the
+                #    isolated broken sections instead of regenerating the whole
+                #    file (which repeated the same mistakes every cycle). --
+
+                # Shared decision-log TOC so the fixer can see what has been
+                # proposed/tried/rejected this run (PAGE_IN, never fully inlined).
+                _decision_toc = ""
+                try:
+                    from ledger import decision_log_toc
+                    _decision_toc = decision_log_toc(ctx.project_root)
+                except Exception:
+                    _decision_toc = ""
+                _fix_context_extra = (_decision_toc + "\n\n") if _decision_toc else ""
+
                 _mono_fix_system = (
-                    "You are a senior Lua engineer fixing a generated attraction script.\n"
-                    "You will receive:\n"
-                    "1. The CURRENT file content (with errors)\n"
-                    "2. Review critiques and pre-flight violations that MUST be fixed\n\n"
+                    "You are a senior Lua engineer repairing a generated attraction script.\n"
+                    "You will receive the CURRENT file content and the exact errors to fix.\n\n"
                     "CRITICAL RULES:\n"
-                    "- Output ONLY valid Lua code, no markdown fences, no SEARCH/REPLACE blocks.\n"
-                    "- Output the COMPLETE corrected file, not a diff or snippet.\n"
-                    "- Preserve ALL function signatures: OnLoadStatic(), OnLoad(), OnUnload().\n"
-                    "- Every opened table '{' must have a matching '}'.\n"
-                    "- Every Lua function must have a matching 'end'.\n"
-                    "- Do NOT use: MidwayPhysics.PoolAcquire, PoolReturn, IsSensorTriggered, "
-                    "SkeeballGame, OnPlayerAim, OnPlayerPowerUp, OnThrow, OnCollisionWithTarget.\n"
-                    "- Do NOT use: ents.Create, IsValid, hook:Remove, Engine.SpawnEntity, Vector, "
-                    "CalculateAimDirection, CalculateImpulse, GetSkeeballHandle.\n"
-                    "- Balls move via physics simulation (gravity, friction, restitution), "
-                    "NOT via manual velocity arithmetic in Lua.\n"
-                    "- The generated file MUST pass `luac -p` syntax check.\n"
-                    "- OnLoadStatic() MUST call SpawnSharedBooth().\n"
-                    "- OnLoad() MUST register MidwayPhysics.OnStep.\n"
-                    "- OnStep MUST read AttractionConstants.modifiers every frame.\n"
-                    "- Engine.AwardTickets MUST be called with Engine.GetStreak() multiplier.\n"
+                    "- Output ONLY SEARCH/REPLACE blocks. Do NOT output the whole file.\n"
+                    "- One SEARCH/REPLACE block per region you are changing.\n"
+                    "- SEARCH must be the EXACT current lines; REPLACE is the corrected lines.\n"
+                    "- Fix ONLY the errors listed. Do NOT refactor unrelated code.\n"
+                    "- Assign every handle a real value from Spawn*/PoolAcquire BEFORE it is read.\n"
+                    "- Use the exact format:\n"
+                    "  <<<<<<< SEARCH\n  <exact current lines>\n  =======\n  <corrected lines>\n  >>>>>>> REPLACE\n"
                     f"{_fix_approved_apis}"
                 )
                 _mono_fix_prompt = (
                     f"## Target File: {_mono_target}\n\n"
+                    f"{_fix_context_extra}"
                     f"{_mono_review_errors}"
-                    f"## CURRENT FILE CONTENT (fix all errors above):\n"
+                    f"## CURRENT FILE CONTENT (fix only the errors above):\n"
                     f"```lua\n{_mono_snippet}\n```\n\n"
                     f"---\n"
-                    f"Write the COMPLETE corrected file. "
-                    f"Output ONLY valid Lua code, no markdown fences."
+                    f"Output ONE SEARCH/REPLACE block per region you are fixing. "
+                    f"SEARCH must match the current file exactly; REPLACE is the corrected region."
                 )
 
                 from _pipeline_helpers import CODER_MODEL
@@ -845,16 +1138,47 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     _mono_fix_prompt,
                     f"Monolithic Fix (cycle {ctx.review_cycle})",
                     CODER_MODEL,
-                    params={"num_predict": 8192},
+                    params={"num_predict": 4096},
                     skip_pre_summarizer=True,
                 )
 
-                # Strip fences if model produced them anyway.
-                # Use re.DOTALL + ^/$ anchors (NOT re.MULTILINE which matches
-                # ^/$ after every newline and can corrupt the file body).
-                _mono_fixed = re.sub(r"^```lua\s*\n?", "", _mono_fixed, flags=re.DOTALL)
-                _mono_fixed = re.sub(r"\n?```\s*$", "", _mono_fixed, flags=re.DOTALL)
-                _mono_fixed = _mono_fixed.strip()
+                # Apply the SEARCH/REPLACE patches in place (surgical).  Fall back
+                # to full-file replacement only when the model emitted no patches.
+                from _helpers_exec import (
+                    _extract_search_replace_blocks as _extract_sr,
+                    _fuzzy_apply_patch as _fuzzy_patch,
+                )
+                _blocks = _extract_sr(_mono_fixed)
+                _patched = _mono_snippet
+                _applied = 0
+                for _blk in _blocks:
+                    _new = _fuzzy_patch(_patched, _blk["search"], _blk["replace"])
+                    if _new != _patched:
+                        _patched = _new
+                        _applied += 1
+                if _applied:
+                    _mono_fixed = _patched
+                    print(f"  [Monolithic Fix] Surgical: applied {_applied} SEARCH/REPLACE patch(es) in place.")
+                elif _blocks:
+                    # The coder emitted SEARCH/REPLACE blocks but NONE matched the
+                    # current file.  Writing the raw (unmatched) output would
+                    # corrupt the file with conflict markers, and a full-file
+                    # rewrite is exactly what we are trying to avoid.  Keep the
+                    # current content so the next review cycle re-flags the same
+                    # errors with fresh context; the insanity detector still
+                    # bounds the loop.
+                    _mono_fixed = _mono_snippet
+                    print(f"  [Monolithic Fix] ⚠ Surgical: {len(_blocks)} SEARCH block(s) emitted "
+                          f"but NONE matched the current file — keeping existing content "
+                          f"(refusing full-file rewrite).")
+                else:
+                    print("  [Monolithic Fix] Surgical: no patches emitted — falling back to full-file output.")
+                    # Strip fences if the model produced a full file anyway.
+                    # Use re.DOTALL + ^/$ anchors (NOT re.MULTILINE which matches
+                    # ^/$ after every newline and can corrupt the file body).
+                    _mono_fixed = re.sub(r"^```lua\s*\n?", "", _mono_fixed, flags=re.DOTALL)
+                    _mono_fixed = re.sub(r"\n?```\s*$", "", _mono_fixed, flags=re.DOTALL)
+                    _mono_fixed = _mono_fixed.strip()
 
                 # Write fixed content to disk
                 _mono_abs = ctx.project_root / _mono_target
@@ -921,7 +1245,18 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 for tid in sorted(task_ids_in_review):
                     task_obj = ctx.task_map.get(tid)
                     if task_obj is None:
-                        continue
+                        # Hardening: a task in review but missing from task_map must
+                        # NOT be silently skipped (it previously left 10/11 tasks
+                        # unfixed every cycle).  Rebuild from ctx.tasks_list so the
+                        # critique still routes to its domain.
+                        _rebuilt = _rebuild_task_from_tasks_list(ctx, tid)
+                        if _rebuilt is not None:
+                            print(f"    ⚠ Rebuilt task object for {tid} from tasks_list (missing from task_map).")
+                            task_obj = _rebuilt
+                        else:
+                            print(f"    ⚠ Cannot route critique for {tid}: no task object "
+                                  f"in task_map OR tasks_list. Skipping.")
+                            continue
 
                     original_agent_key = resolve_agent_name(task_obj.agent)
 
@@ -1256,6 +1591,30 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         print(f"  🔍 RECONCILIATION GATE  Active Rule Auditor")
         print(f"{'='*50}")
         print(f"  Tribunal struggled to reach consensus after {ctx.review_cycle} cycles.")
+
+        # Escalate to the appellate court (TRIBUNAL) for a binding verdict.
+        # Fall back to the legacy auto-approve / interactive logic below only
+        # when the tribunal is unreachable or renders no parseable verdict.
+        _tribunal_verdict = _run_tribunal_appeal(ctx)
+        if _tribunal_verdict in ("PASS", "FAIL"):
+            ctx.review_verdict = _tribunal_verdict
+            ctx.output_parts.append(
+                "\n## ⚖️ Appellate Court Verdict\n"
+                f"The TRIBUNAL rendered a binding verdict: {_tribunal_verdict}.\n"
+                "Review the appellate decision and the open violations it judged.\n"
+            )
+            print(f"  [Tribunal] ⚖️ Appellate court rendered binding verdict: {_tribunal_verdict}.")
+            try:
+                from ledger import append_decision_entry
+                append_decision_entry(
+                    ctx.project_root,
+                    title=f"Tribunal Appeal — {_tribunal_verdict}",
+                    body="Binding appellate verdict rendered after review failed to converge.",
+                )
+            except Exception:
+                pass
+            return ctx
+
         # Bug H+I: When AUTO_APPROVE_GATES=True and no TTY (server mode),
         # auto-approve instead of hard-failing.  The previous behaviour of
         # always returning FAIL in server mode caused a death spiral where

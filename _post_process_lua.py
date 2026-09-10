@@ -397,6 +397,16 @@ def _add_midwayphysics_prefix(content: str) -> str:
     original = content
     modifications = 0
 
+    # The coder model occasionally hallucinates the shorter namespace
+    # `Physics.*` instead of `MidwayPhysics.*` (e.g. Physics.SpawnStaticBox).
+    # Rewrite deterministically — `Physics` is not a real namespace in this
+    # engine, so every `Physics.` occurrence means `MidwayPhysics.`.
+    _alias_pat = re.compile(r'\bPhysics\.')
+    _rewritten, _alias_count = _alias_pat.subn('MidwayPhysics.', content)
+    if _alias_count > 0:
+        content = _rewritten
+        print(f"  [Post-Process Fix #6] Rewrote {_alias_count} hallucinated 'Physics.' namespace(s) → 'MidwayPhysics.'")
+
     # Match WORD( patterns where WORD is not already prefixed
     # Negative lookbehind: not preceded by MidwayPhysics. or .
     # Negative lookahead: not a Lua keyword or local function def

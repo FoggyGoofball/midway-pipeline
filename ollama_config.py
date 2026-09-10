@@ -38,10 +38,10 @@ DIRECTOR_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 OLLAMA_TIMEOUT: int = 1200
 OLLAMA_NUM_CTX: int = 32768          # 7B coder -- native max 32K (~6.6 GB)
 OLLAMA_NUM_CTX_LARGE: int = 4096     # 14B models -- llama runner crashes >4K (native rope 4K)
-OLLAMA_NUM_CTX_UPPER_MID: int = 65536   # 9B models -- 64K (native 256K, ~10.3 GB)
+OLLAMA_NUM_CTX_UPPER_MID: int = 32768   # 9B models -- 32K. 64K KV (~2.7GB) + 10.3GB weights exceeds 12GB → intermittent "model runner has unexpectedly stopped" / frozen streams. 32K halves KV and still fits the ~10K-token review input.
 OLLAMA_NUM_CTX_MASSIVE: int = 32768    # phi3.5 pre-summarizer -- 32K (128K needs 43.7 GB = OOM)
 OLLAMA_NUM_CTX_SMALL: int = 32768    # 1.5B micro -- native max 32K (~1.9 GB)
-OLLAMA_NUM_CTX_8B: int = 65536       # 8B librarian/director -- 64K (native 128K, ~9.0 GB)
+OLLAMA_NUM_CTX_8B: int = 32768       # 8B librarian/director -- 32K. Same 64K KV OOM risk as the 9B (llama3.1 8B KV at 64K ≈ 4.3GB).
 OLLAMA_NUM_CTX_1B: int = 131072      # 1B intent -- native 128K (~6.8 GB)
 
 # -- Centralized Model-to-Context Resolution
