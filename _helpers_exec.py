@@ -488,6 +488,30 @@ def _anchor_splice_fallback(
 
 # -- Task Execution ----------------------------------------------------------
 
+def _slice_director_for_task(director_output: str, task_id: str) -> str:
+    """Return only the Director breakdown entry for *task_id*.
+
+    The full N-task Director breakdown is byte-identical for every task, so it
+    lives in the shared KV-cache prefix; slimming it to this task's own entry
+    still shaves VRAM pressure.  Falls back to the full breakdown when the
+    entry cannot be located (e.g. Director-Guard-injected tasks 14/15 that are
+    absent from the original Director output).
+    """
+    if not director_output:
+        return ""
+    _num = "".join(ch for ch in (task_id or "") if ch.isdigit())
+    if not _num:
+        return director_output
+    _pat = re.compile(
+        rf"###\s+Task\s+{_num}\b.*?(?=###\s+Task\s+\d+\b|\Z)",
+        re.DOTALL | re.IGNORECASE,
+    )
+    _m = _pat.search(director_output)
+    if _m and len(_m.group(0).strip()) > 40:
+        return _m.group(0).strip()
+    return director_output
+
+
 def execute_task(task, user_prompt: str, director_output: str,
 
                  all_results: dict, file_context: str, gdd_context: str,
@@ -526,16 +550,28 @@ def execute_task(task, user_prompt: str, director_output: str,
     preferred_model = domain.get("model", "qwen2.5-coder:7b")
     system = get_agent_system(agent_key)
 
-    # Build context
-    context_parts = [
+    # Build context.  Ordering matters for performance: the SHARED blocks
+    # (feature request, director slice, bridge cheatsheet, referenced files)
+    # form a byte-identical prefix across every task of the same domain so
+    # Ollama's resident KV cache is reused instead of re-prefilling ~26k
+    # tokens per task.  The TASK-SPECIFIC blocks go LAST in _task_parts.
+    _shared_parts = [
         f"## Original Feature Request\n{user_prompt}",
     ]
 
-    if director_output:
-        context_parts.append(f"## Director's Task Breakdown\n{director_output}")
+    # Slim the full N-task Director breakdown to this task's own entry.
+    # (Falls back to the full breakdown when the entry cannot be located.)
+    _director_block = (
+        _slice_director_for_task(director_output, getattr(task, "task_id", ""))
+        if director_output else ""
+    )
+    if _director_block:
+        _shared_parts.append(f"## Director's Task Breakdown\n{_director_block}")
+
+    _task_parts: list = []
 
     if file_context:
-        context_parts.append(file_context)
+        _task_parts.append(file_context)
 
     if gdd_context:
         # -- Task-specific GDD re-extraction --------------------------------
@@ -590,7 +626,7 @@ def execute_task(task, user_prompt: str, director_output: str,
         if len(gdd_context) > _GDD_CAP:
             from token_budget import TokenBudget as _TB
             gdd_context = _TB._block_aware_collapse(gdd_context, _GDD_CAP)
-        context_parts.append(gdd_context)
+        _task_parts.append(gdd_context)
 
     # -- Internal API Ledger: inject live confirmed symbol list -------------
     # Prevents downstream agents from hallucinating function names that were
@@ -599,7 +635,7 @@ def execute_task(task, user_prompt: str, director_output: str,
         from ledger import read_internal_api_ledger
         _live_api = read_internal_api_ledger(max_chars=3000)
         if _live_api:
-            context_parts.append(_live_api)
+            _task_parts.append(_live_api)
     except Exception:
         pass
 
@@ -637,14 +673,14 @@ def execute_task(task, user_prompt: str, director_output: str,
                     + _base
                     + _subst_guide
                 )
-                context_parts.append(_cheatsheet)
+                _shared_parts.append(_cheatsheet)
     except Exception:
         pass
 
     # Auto-Inject Referenced Files
     refs_block = get_referenced_files_cache()
     if refs_block:
-        context_parts.append(refs_block)
+        _shared_parts.append(refs_block)
 
     # -- Directive A: Stateless Parent Context ------------------------------
     # Parent context is stripped to code artifacts only to prevent linear
@@ -653,13 +689,13 @@ def execute_task(task, user_prompt: str, director_output: str,
         from _helpers_text import strip_to_code_artifacts
         parent_output = all_results[task.parent]
         parent_clean = strip_to_code_artifacts(parent_output, fallback_truncation=800)
-        context_parts.append(f"## Parent Task Context (code artifacts only)\n{parent_clean}")
+        _task_parts.append(f"## Parent Task Context (code artifacts only)\n{parent_clean}")
 
     # -- Directive A: Stateless Sibling Context -----------------------------
     # Already stripped by run_tasks() before being passed as sibling_context.
     # Accept as-is - it has already been code-artifact-sanitized upstream.
     if sibling_context:
-        context_parts.append(sibling_context)
+        _task_parts.append(sibling_context)
 
     # -- Step 3: Stateful Patch Execution (Staging File Baseline) -----------
     # Inject the current on-disk state of the task's target_file so that
@@ -817,7 +853,7 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"hook definition (from `function` to `end`) and REPLACE it with "
                             f"the expanded version containing your additions."
                         )
-                    context_parts.append(_stage_block)
+                    _task_parts.append(_stage_block)
                     print(f"  [Staging File] Injected live state of {task.target_file} "
                           f"({len(_live_content)} chars) into '{task.agent}' prompt")
             except Exception as e:
@@ -830,7 +866,7 @@ def execute_task(task, user_prompt: str, director_output: str,
     if task.iteration > 0 and task.output:
         from _helpers_text import strip_to_code_artifacts
         iter_clean = strip_to_code_artifacts(task.output, fallback_truncation=600)
-        context_parts.append(f"## Your Previous Output (iteration {task.iteration})\n{iter_clean}")
+        _task_parts.append(f"## Your Previous Output (iteration {task.iteration})\n{iter_clean}")
         if task.iteration >= MAX_ITERATIONS - 1:
             from _prompts import SELF_CORRECT_SYSTEM
             system = SELF_CORRECT_SYSTEM
@@ -860,11 +896,12 @@ def execute_task(task, user_prompt: str, director_output: str,
             task.context = TokenBudget._block_aware_collapse(
                 task.context, _CONTEXT_CHAR_LIMIT
             )
-        context_parts.append(task.context)
+        _task_parts.append(task.context)
 
     # The task spec
-    context_parts.append(f"## Task Specification\n{task.spec}")
+    _task_parts.append(f"## Task Specification\n{task.spec}")
 
+    context_parts = _shared_parts + _task_parts
     user_message = "\n\n".join(context_parts)
 
     # -- Fix D: Model-Aware Total user_message char ceiling ----------
@@ -944,8 +981,8 @@ def execute_task(task, user_prompt: str, director_output: str,
     # (TokenBudget is imported at module level — no need to re-import here)
     vram_warning = TokenBudget.check_vram_critical(system, user_message, preferred_model)
     if vram_warning:
-        print(f"  [Kernel Interrupt] ⚠ Prepending VRAM critical warning to '{label}'")
-        user_message = vram_warning + "\n\n" + user_message
+        print(f"  [Kernel Interrupt] ⚠ Appending VRAM critical warning to '{label}'")
+        user_message = user_message + "\n\n" + vram_warning
 
     # -- Directive A: Hard Context Firewall (Absolute Statelessness) ---------
     # NO history survives between tasks. A brand new messages array is built
