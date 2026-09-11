@@ -1605,6 +1605,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # spurious FAIL that is structurally identical to the previous cycle,
                 # tripping the insanity detector or burning the last review iteration.
                 import re as _re_postfix
+                from _helpers_exec import _extract_search_replace_blocks as _extract_sr_pf
                 _code_fence_re = _re_postfix.compile(r"```", _re_postfix.MULTILINE)
                 _delegate_only_re = _re_postfix.compile(
                     r"^\s*(\[DELEGATE[:\]].{0,120}|\[QUERY:DOC.{0,120}|\[REVISE.{0,80})\s*$",
@@ -1613,8 +1614,14 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 for _ftid, _fout in list(domain_fix_outputs.items()):
                     _has_code = bool(_code_fence_re.search(_fout))
                     _is_delegate = bool(_delegate_only_re.search(_fout)) and not _has_code
-                    if _is_delegate or (not _has_code and len(_fout.strip()) < 120):
-                        print(f"  [Post-Fix] ⚠ {_ftid} fix output is delegation/empty  retaining previous result.")
+                    # Full-file dump guard: ARCHITECT_FIX_SYSTEM mandates SEARCH/REPLACE.
+                    # A fix output with no extractable SEARCH/REPLACE block is a full-file
+                    # rewrite (prose + fences + ### Fix-Plan headers) that clobbers the
+                    # accumulated file and re-trips the PhantomAPI gate on the next cycle.
+                    _sr_pf_blocks = _extract_sr_pf(_fout)
+                    _is_full_dump = (not _sr_pf_blocks) and (_has_code or len(_fout.strip()) >= 120)
+                    if _is_delegate or _is_full_dump or (not _has_code and len(_fout.strip()) < 120):
+                        print(f"  [Post-Fix] ⚠ {_ftid} fix output is delegation/empty/full-dump  retaining previous result.")
                         # Revert to the pre-fix snapshot so the reviewer sees the last real code
                         # rather than prose-only output that guarantees another FAIL.
                         # NOTE: _pre_fix_snapshot was captured before the domain fix loop above.
