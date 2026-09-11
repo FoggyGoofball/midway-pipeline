@@ -1,3 +1,142 @@
+## Session Event  2026-09-10T19:05:15.942443
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protocal)  i just want to test your capabilities since i've upgraded.  refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define the complete structural scaffold for attractions/strongman/strongman.lua including OnLoadStatic, OnLoad, OnStep, OnUnload entry points and all 11 TODO placeholders for geometry, pools, physics, and scoring logic - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A carnival strength game where the player swings a mallet to launch a puck toward a moving bell, featuring randomized physics modifiers like rusty rails and wobbling bases.
+
+### Declared Handles
+  mallet (DynamicBox)  The heavy mallet head and handle used for impact. [owner: Player-controlled swing hammer, lifecycle: Spawn in OnLoad, Re-acquire on miss/fail]
+  puck (DynamicSphere)  The weight launched up the tower. [owner: Projectile entity, lifecycle: Spawn from pool on success, destroy on hit/miss]
+  bell (KinematicSphere)  The moving target at the top of the track. [owner: Target sensor/object, lifecycle: Spawn once, Teleport position via MoveKinematic]
+  rail_segment (StaticCylinder)  Represents 'Rusty Rails' adding friction. [owner: Track geometry, lifecycle: Spawn as walls or floor modifiers]
+  counterweight (DynamicBox)  Affects mallet rebound via physics interaction. [owner: Platform weight, lifecycle: Spawn with randomized tension physics]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox (Tower Base)
+  2. SpawnStaticCylinder (Track Walls)
+  3. SpawnStaticSphere (Bell)
+  4. SpawnDynamicBox (Mallet)
+  5. CreatePool (Puck)
+  6. SpawnDynamicCapsule (Counter-Weight)
+
+### Event Flow
+  MidwayInput.IsActionDown('fire') → ApplyImpulse to mallet to swing it down
+  Collision between mallet and puck → Launch puck upward; Check if puck hits bell
+  IsSensorTriggered(bell) while puck active → Award Tickets, Award Tokens (Health), Reset puck to pool
+  Puck hits ground/bottom of tower → Destroy puck body if no score, Re-acquire mallet
+  OnStep loop → MoveKinematic bell to new height (Curse), Apply friction to puck if on Rusty Rails
+
+### Pool Requirements
+  puck: 1
+  rail_segment: 10
+  counterweight: 1
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Mallet swing physics with impulse
+  - Variable puck launch height based on swing speed
+  - Rusty Rails friction modifier
+  - Counter-Weight tension variation
+  - Bell position shift (Teleport)
+  - Platform wobble logic
+  - Health/Ticket loss on failure
+  - Reward on successful strike
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+### Issues
+## ⚡ Runtime Simulation Errors
+  [task_1] `MidwayPhysics.PoolTota
+[... output truncated ...]
+---
 ## Session Event  2026-09-10T16:02:35.539312
 **Agent Assigned:** Lua, Lua, Lua, Lua, Lua
 **User Input:** <execution_environment>
