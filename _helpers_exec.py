@@ -1327,13 +1327,44 @@ def execute_task(task, user_prompt: str, director_output: str,
                     )
                     try:
                         from ollama_client import resolve_ctx_size as _splice_ctx
+                        # Inject the approved engine API list + lifecycle rules into the
+                        # splice retry.  The bare retry prompt has zero domain context,
+                        # so the 7B coder falls back to Garry's Mod / Roblox patterns
+                        # (Vector(), GetPhysicsObject(), IsValid(), RegisterCallback(),
+                        # DestroyDynamicBody(), getStats()) which the PhantomAPI gate then
+                        # rejects.  Reuse the memoized bridge snippet for the agent.
+                        _splice_api = ""
+                        try:
+                            from pipeline import _CTX as _splice_ctx_obj
+                            if _splice_ctx_obj is not None:
+                                _splice_cache = getattr(_splice_ctx_obj, '_shared_block_cache', None) or {}
+                                _splice_api = _splice_cache.get(f"bridge_snippet:{agent_key}", "") or ""
+                        except Exception:
+                            _splice_api = ""
+                        if not _splice_api:
+                            try:
+                                from _finalize_review import build_fix_bridge_snippet as _bfbs_splice
+                                from pipeline import _CTX as _splice_ctx_obj2
+                                if _splice_ctx_obj2 is not None:
+                                    _splice_api = _bfbs_splice(_splice_ctx_obj2) or ""
+                            except Exception:
+                                _splice_api = ""
+                        _splice_system = (
+                            "You are a precise SEARCH/REPLACE block generator for a custom "
+                            "Lua game engine. Given a task and an exact anchor marker, output "
+                            "ONLY a valid SEARCH/REPLACE block targeting that anchor. Never "
+                            "output full file content.\n"
+                            "STRICT API RULES:\n"
+                            "- Use ONLY the engine APIs listed below. Do NOT invent Garry's Mod "
+                            "or Roblox APIs (no Vector(), Angle(), GetPhysicsObject(), IsValid(), "
+                            "RegisterCallback(), ents, hook, SetPos, getStats()).\n"
+                            "- Lifecycle hooks are bare globals OnLoadStatic()/OnLoad()/OnUnload(); "
+                            "register the step callback via MidwayPhysics.OnStep(function(dt)...end).\n"
+                            "- Do NOT redefine lifecycle functions inside your REPLACE block.\n\n"
+                            + (_splice_api if _splice_api else "")
+                        )
                         _splice_msgs = [
-                            {"role": "system", "content": (
-                                "You are a precise SEARCH/REPLACE block generator. "
-                                "Given a task and an exact anchor marker, output ONLY "
-                                "a valid SEARCH/REPLACE block targeting that anchor. "
-                                "Never output full file content."
-                            )},
+                            {"role": "system", "content": _splice_system},
                             {"role": "user", "content": _splice_retry_prompt},
                         ]
                         _splice_model = getattr(task, 'agent_model', preferred_model)
