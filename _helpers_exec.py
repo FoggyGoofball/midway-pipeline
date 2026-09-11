@@ -552,7 +552,13 @@ def execute_task(task, user_prompt: str, director_output: str,
         return f"[ERROR] Unknown agent: {task.agent}"
 
     preferred_model = domain.get("model", "qwen2.5-coder:7b")
-    system = get_agent_system(agent_key)
+    # Anchor-patch tasks get a lean system prompt (domain rules + sandbox
+    # only): the mesh/ledger/virtual-memory protocols are LoRA-dependent and
+    # unused by untrained models, and the staging block carries the
+    # SEARCH/REPLACE format instructions instead.  Lean is constant per domain,
+    # so the KV-cache prefix stays byte-identical across that domain's tasks.
+    _anchor_mode = bool(getattr(task, 'anchor_marker', None))
+    system = get_agent_system(agent_key, lean=_anchor_mode)
 
     # Build context.  Ordering matters for performance: the SHARED blocks
     # (feature request, director breakdown, bridge cheatsheet, referenced files)
@@ -808,40 +814,23 @@ def execute_task(task, user_prompt: str, director_output: str,
                             )
                         _stage_block = (
                             f"\n\n## ⚡ CURRENT ON-DISK STATE: {task.target_file}\n"
-                            f"This is the file as it exists right now. "
-                            f"Your anchor marker context:\n"
+                            f"Relevant region around your anchor marker:\n"
                             f"```\n{_anchor_context}\n```{_context_note}"
-                            f"## ANCHOR-BASED PATCH MODE (MANDATORY)\n"
-                            f"You are in DETERMINISTIC ANCHOR MODE. "
-                            f"Your unique marker line in the scaffold is:\n"
-                            f"\n  `{_anchor_marker}`\n\n"
-                            f"### SCOPE LIMITATION (CRITICAL — VIOLATION CAUSES LUA PARSE ERRORS)\n"
-                            f"Your replacement MUST contain ONLY the code that directly implements "
-                            f"this specific task. Do NOT include any of the following:\n"
-                            f"- Do NOT reproduce the `function OnLoadStatic()`, `function OnLoad()`, "
-                            f"`function OnStep()`, or `function OnUnload()` definitions.\n"
-                            f"- Do NOT reproduce code or lifecycle hooks that belong to other tasks "
-                            f"(e.g. don't write SpawnSharedBooth unless this task explicitly requires it).\n"
-                            f"- Do NOT copy-paste the surrounding file content or any other anchor markers.\n"
-                            f"- The orchestrator already wraps your code inside the correct lifecycle function.\n"
-                            f"The entire SEARCH block is a single anchor line. "
-                            f"The entire REPLACE block should be: your implementation code (a few lines) "
-                            f"followed by the anchor re-inserted.\n\n"
-                            f"Your ONLY job is:\n"
-                            f"1. SEARCH for this EXACT line in the file above.\n"
-                            f"2. REPLACE that line with your implementation code.\n"
-                            f"3. RE-INSERT the same anchor line at the END of your "
-                            f"replacement so the next task can find its anchor.\n\n"
-                            f"OUTPUT FORMAT:\n"
+                            f"## ANCHOR PATCH MODE (MANDATORY)\n"
+                            f"Your marker line: `{_anchor_marker}`\n"
+                            f"The orchestrator wraps your code in the correct lifecycle function; "
+                            f"you only fill this anchor.\n"
+                            f"- Do NOT redefine `function OnLoadStatic/OnLoad/OnStep/OnUnload`.\n"
+                            f"- Do NOT copy other tasks' code, other anchors, or surrounding file content.\n"
+                            f"- SEARCH is exactly the one anchor line; REPLACE is your "
+                            f"implementation (a few lines) + the anchor re-inserted at the end.\n"
+                            f"Output EXACTLY ONE block:\n"
                             f"<<<<<<< SEARCH\n"
                             f"    {_anchor_marker}\n"
                             f"=======\n"
-                            f"    <your REAL implementation code for this task>\n"
+                            f"    <your implementation for this task>\n"
                             f"    {_anchor_marker}\n"
-                            f">>>>>>> REPLACE\n\n"
-                            f"Do NOT output the entire file. "
-                            f"Output ONLY ONE SEARCH/REPLACE block targeting your "
-                            f"anchor marker line."
+                            f">>>>>>> REPLACE\n"
                         )
 
                     else:
@@ -870,8 +859,8 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"the expanded version containing your additions."
                         )
                     _task_parts.append(_stage_block)
-                    print(f"  [Staging File] Injected live state of {task.target_file} "
-                          f"({len(_live_content)} chars) into '{task.agent}' prompt")
+                    print(f"  [Staging File] Injected {len(_stage_block)}-char staging block for "
+                          f"{task.target_file} (full file {len(_live_content)} chars) into '{task.agent}' prompt")
             except Exception as e:
                 print(f"  [Staging File] Error reading {task.target_file}: {e}")
 

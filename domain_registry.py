@@ -398,7 +398,7 @@ def resolve_agent_name(name: str) -> str:
     return name
 
 
-def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
+def get_agent_system(agent_key: str, pro_mode: bool = False, lean: bool = False) -> str:
     """Get the system prompt for an agent dynamically via cartridge proxy.
 
     Pulls foundational directives, sandboxing sets, and persistent ledgers natively
@@ -451,6 +451,13 @@ def get_agent_system(agent_key: str, pro_mode: bool = False) -> str:
     mesh_ext = "\n\n" + MESH_AGENT_SYSTEM_EXTENSION if agent_key not in ("DOC", "CONF") else ""
 
     sandbox_constraint = build_sandbox_constraint(allowed_exts)
+
+    if lean:
+        # Lean prompt for anchor-patch tasks: domain rules + sandbox only.
+        # The mesh/ledger/virtual-memory protocols are LoRA-dependent and
+        # unused by untrained models; the staging block carries the
+        # SEARCH/REPLACE format instructions instead.
+        return base_prompt + sandbox_constraint
 
     return base_prompt + ledger_note + mesh_ext + sandbox_constraint + LEDGER_MEMORY_RULE + _CODING_MANDATES + VIRTUAL_MEMORY_PROTOCOL
 
