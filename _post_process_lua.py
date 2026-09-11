@@ -716,6 +716,65 @@ def _sanitize_modifier_keys(content: str) -> str:
     return content
 
 
+def _auto_declare_handles(content: str) -> str:
+    """Inject `local <name> = nil` for physics handles used but never declared.
+
+    Each attraction task invents its own handle names (bell_sensor, puck_dynamic,
+    malletHandles, ...) and references them from OnStep/OnUnload without ever
+    declaring them at module scope, producing nil-index runtime errors.  This
+    pass collects every identifier used as the first argument to a physics call
+    and, when it is never declared with `local`, declares it at module scope so
+    all lifecycle closures share one upvalue.
+    """
+    _NOT_HANDLES = {
+        "function", "end", "then", "if", "else", "elseif", "for", "while", "do",
+        "repeat", "until", "local", "return", "and", "or", "not", "nil", "true",
+        "false", "in", "break", "goto",
+        "math", "table", "string", "os", "tick", "print", "pairs", "ipairs",
+        "type", "tostring", "tonumber", "setmetatable", "getmetatable", "select",
+        "unpack", "require", "error", "assert", "pcall", "xpcall",
+    }
+
+    _declared = set(re.findall(r'^\s*local\s+([a-zA-Z_]\w*)', content, re.MULTILINE))
+    _declared.update({"MOD", "dt", "self", "lx", "ly", "lz"})
+
+    _handle_pat = re.compile(
+        r'(?:MidwayPhysics\.\w+|IsSensorTriggered|DestroyBody|PoolReturn|PoolAcquire|'
+        r'PoolFree|PoolTotal|PoolCullBelow|IsActive|GetPosition|GetVelocity|GetMass|'
+        r'SetMass|SetFriction|SetRestitution|SetLinearDamping|SetAngularDamping|'
+        r'SetLinearVelocity|SetAngularVelocity|ApplyImpulse|ApplyAngularImpulse|'
+        r'MoveKinematic)\s*\(\s*([a-zA-Z_]\w*)'
+    )
+    _handle_ids: list[str] = []
+    for _m in _handle_pat.finditer(content):
+        _hid = _m.group(1)
+        if (
+            _hid
+            and _hid not in _declared
+            and _hid not in _NOT_HANDLES
+            and _hid not in _handle_ids
+        ):
+            _handle_ids.append(_hid)
+
+    if not _handle_ids:
+        return content
+
+    _decl_lines = "\n".join(
+        f"local {_h} = nil  -- auto-declared physics handle" for _h in _handle_ids
+    )
+
+    _slot_m = re.search(r'^local\s+SLOT_ID\s*=.*$', content, re.MULTILINE)
+    if _slot_m:
+        _insert_at = _slot_m.end()
+        content = content[:_insert_at] + "\n" + _decl_lines + "\n" + content[_insert_at:]
+    else:
+        content = _decl_lines + "\n\n" + content
+
+    print(f"  [Post-Process Fix #10] Auto-declared {len(_handle_ids)} physics handle(s): "
+          f"{', '.join(_handle_ids)}")
+    return content
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -745,6 +804,7 @@ def post_process_lua(content: str) -> str:
     if not _is_patch_fragment:
         content = _inject_onload_static(content)           # Fix #4
         content = _inject_slot_id(content)                 # Fix #5
+        content = _auto_declare_handles(content)           # Fix #10
     # Fix #7 is a gate, not a transform — used by callers
 
     # Restore trailing newline

@@ -880,6 +880,25 @@ def execute_task(task, user_prompt: str, director_output: str,
                                 f"The orchestrator will re-inject it before patch application. "
                                 f"Full file is {len(_live_content)} chars / {len(_file_lines)} lines.\n"
                             )
+                        # -- Shared handle contract: pin the exact handle names from
+                        # the Architect design so tasks don't each invent their own
+                        # (malletHandles vs mallet_kinematic vs bellHandle).
+                        _design_handle_contract = ""
+                        try:
+                            _design_obj = getattr(_stage_ctx, 'attraction_design', None)
+                            _design_handles = getattr(_design_obj, 'handles', None) if _design_obj else None
+                            _handle_names = [getattr(_h, 'name', '') for _h in (_design_handles or [])]
+                            _handle_names = [n.strip() for n in _handle_names if n and n.strip()]
+                        except Exception:
+                            _handle_names = []
+                        if _handle_names:
+                            _design_handle_contract = (
+                                "\n## SHARED HANDLE CONTRACT (MANDATORY)\n"
+                                "These are the ONLY handle variable names for this attraction.\n"
+                                "They are declared at module scope by Task 1; reference these exact\n"
+                                "names. Do NOT invent new handle names (no malletHandles, bellHandle, etc.).\n"
+                                + "".join(f"- `{n}`\n" for n in _handle_names)
+                            )
                         _stage_block = (
                             f"\n\n## ⚡ CURRENT ON-DISK STATE: {task.target_file}\n"
                             f"Relevant region around your anchor marker:\n"
@@ -893,6 +912,7 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"- Do NOT copy other tasks' code, other anchors, or surrounding file content.\n"
                             f"- SEARCH is exactly the one anchor line; REPLACE is your "
                             f"implementation (a few lines) + the anchor re-inserted at the end.\n"
+                            f"{_design_handle_contract}"
                             f"Output EXACTLY ONE block:\n"
                             f"<<<<<<< SEARCH\n"
                             f"    {_anchor_marker}\n"

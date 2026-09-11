@@ -205,6 +205,29 @@ def run_code_merge(ctx: PipelineContext) -> PipelineContext:
     # Sanitizes structural issues that the LLM fix cycle introduced.
     ctx = post_process_ctx(ctx)
 
+    # -- Final-file post-process: re-run deterministic fixes on the assembled
+    # on-disk files (not the per-task fragments) so bare calls, duplicate
+    # functions, and undeclared handles introduced during the fix cycles are
+    # cleaned before observability and the phantom-API gate read them.
+    try:
+        from _post_process_lua import post_process_lua_file
+        from _helpers_io import get_staging_path
+        _seen_fp = set()
+        for _tid_fp, _tobj_fp in (getattr(ctx, 'task_map', {}) or {}).items():
+            _tf_fp = getattr(_tobj_fp, 'target_file', '') or ''
+            if not _tf_fp.endswith('.lua') or _tf_fp in _seen_fp:
+                continue
+            _seen_fp.add(_tf_fp)
+            _abs_fp = ctx.project_root / _tf_fp
+            _read_fp = (
+                get_staging_path(_abs_fp, project_root=ctx.project_root)
+                if is_staging_active() else _abs_fp
+            )
+            if _read_fp.is_file():
+                post_process_lua_file(_read_fp)
+    except Exception as _fp_e:
+        print(f"  [Final Post-Process] Error: {_fp_e}")
+
     ctx = _run_observability_pass(ctx)
 
     ctx = _run_phantom_api_gate(ctx)
