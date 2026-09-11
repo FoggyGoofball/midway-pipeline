@@ -463,6 +463,21 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                 _args_str = _balanced_spawn_args(content, _spawn_m.start() + len(_spawn_m.group(0)) - 1)
                 _expected = _SPAWN_SIGS.get(_fn_name)
                 if _expected is None:
+                    if _fn_name == "SpawnSharedBooth":
+                        # SpawnSharedBooth() is a BARE global helper from
+                        # attractions/booth_shared.lua - it is NOT a MidwayPhysics.*
+                        # API.  The correct fix is to drop the prefix, not to
+                        # substitute a different spawn primitive (that substitution
+                        # is what drove the reviewer death-spiral).
+                        ctx.pre_flight_errors += (
+                            f"\n## Static Pattern Violation - Task {tid} [Lua]\n"
+                            f"**Rule:** SpawnSharedBooth() must be called BARE (no MidwayPhysics. prefix).\n"
+                            f"**Fix:** write `SpawnSharedBooth()`, not `MidwayPhysics.SpawnSharedBooth()`. "
+                            f"It is a shared helper from attractions/booth_shared.lua.\n"
+                        )
+                        print(f"  [Static Guard] Task {tid} [Lua]: SpawnSharedBooth must be bare "
+                              f"(drop MidwayPhysics. prefix)")
+                        continue
                     # Unknown spawn call  flag as phantom API (C9 overlap)
                     ctx.pre_flight_errors += (
                         f"\n## Static Pattern Violation  Task {tid} [Lua]\n"

@@ -751,6 +751,9 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     _review_bridge_snippet = (
                         "## Active Bridge Contract  APPROVED APIs (exhaustive list)\n"
                         "Any Lua call that is NOT on this list is a phantom API and MUST be flagged as a FAIL.\n"
+                        "EXCEPTION: SpawnSharedBooth() is a BARE global helper (attractions/booth_shared.lua), "
+                        "NOT a MidwayPhysics.* API. It is legal ONLY as a bare call `SpawnSharedBooth()` inside "
+                        "OnLoadStatic. Do NOT flag it, and do NOT tell the agent to replace it with SpawnStatic*.\n"
                         f"{_bc_str}\n\n"
                     )
                     print(f"  [Bridge Contract] ✅ Injected {len(_bc_str)} chars of approved API list into reviewer context.")

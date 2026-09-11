@@ -295,10 +295,9 @@ def _inject_onload_static(content: str) -> str:
 
 def _inject_slot_id(content: str) -> str:
     """Inject ``local SLOT_ID = BOOTH_SLOT_ID or -1`` if missing."""
-    first_lines = content.splitlines()[:10]
-    has_slot_id = any('SLOT_ID' in line for line in first_lines)
-
-    if has_slot_id:
+    # Idempotent: skip if SLOT_ID appears ANYWHERE (a previous cycle may have
+    # already injected it, or it may be defined below the first 10 lines).
+    if 'SLOT_ID' in content:
         return content
 
     # Find a good insertion point: after a header comment or at the very top
@@ -486,6 +485,17 @@ def _strip_phantom_api_calls(content: str) -> str:
         "ResetScore", "GetTokens", "DeductTokens", "AwardTokens",
         "GRAVITY", "PHYSICS_SCALE",
     })
+
+    # SpawnSharedBooth is a BARE global helper (attractions/booth_shared.lua),
+    # NOT a MidwayPhysics.* API.  Coders frequently hallucinate the prefix;
+    # rewrite it so the static guard / reviewer death-spiral cannot fire.
+    _content_no_sb, _sb_count = re.subn(
+        r'MidwayPhysics\.SpawnSharedBooth\s*\(', 'SpawnSharedBooth(', content
+    )
+    if _sb_count:
+        content = _content_no_sb
+        print(f"  [Post-Process Fix #8] Rewrote {_sb_count} 'MidwayPhysics.SpawnSharedBooth' "
+              f"-> bare 'SpawnSharedBooth'")
 
     # Phase 2: collect all phantom function names found in the content.
     modifications = 0
@@ -727,8 +737,14 @@ def post_process_lua(content: str) -> str:
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
-    content = _inject_onload_static(content)           # Fix #4
-    content = _inject_slot_id(content)                 # Fix #5
+    # Full-file invariants (#4 OnLoadStatic, #5 SLOT_ID) only apply to a whole
+    # Lua module, not to a SEARCH/REPLACE patch fragment.  Applying them to
+    # fragments injected duplicate `local SLOT_ID` lines and spurious
+    # OnLoadStatic stubs into every task's patch block.
+    _is_patch_fragment = ('<<<<<<< SEARCH' in content or '>>>>>>> REPLACE' in content)
+    if not _is_patch_fragment:
+        content = _inject_onload_static(content)           # Fix #4
+        content = _inject_slot_id(content)                 # Fix #5
     # Fix #7 is a gate, not a transform — used by callers
 
     # Restore trailing newline

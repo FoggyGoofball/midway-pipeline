@@ -272,10 +272,14 @@ def _normalize_for_fuzzy_match(text: str) -> str:
     missing/extra blank lines compared to the target file.
     """
     lines = text.splitlines()
-    # Strip leading/trailing whitespace from each line
+    # Strip leading/trailing whitespace from each line, and drop any copied
+    # line-number prefix ("77 |", "80 >", "12|") that small coders paste from
+    # the staging block.  These prefixes never exist on disk and are the #1
+    # cause of "SEARCH block not found" on otherwise-correct edits.
+    _line_no_prefix_re = re.compile(r'^\s*\d+\s*[|>]\s?')
     stripped = []
     for line in lines:
-        s = line.strip()
+        s = _line_no_prefix_re.sub('', line).strip()
         if s:
             stripped.append(s)
     return "\n".join(stripped)
@@ -1564,9 +1568,11 @@ def execute_task(task, user_prompt: str, director_output: str,
     task.double_check = extract_double_check(output)
     task.completed = True
 
-    # Thermal Pacing: Allow Steam Deck APU to dissipate heat
-    print(f"  [Thermal Pacing] Cooling down for 2.0s...")
-    time.sleep(2.0)
+    # Thermal Pacing: Allow Steam Deck APU to dissipate heat between tasks.
+    # 5s is the empirically-safe floor on the Deck; tune via MIDWAY_THERMAL_COOLDOWN.
+    _thermal_cooldown = float(os.getenv("MIDWAY_THERMAL_COOLDOWN", "5.0") or "5.0")
+    print(f"  [Thermal Pacing] Cooling down for {_thermal_cooldown:.1f}s...")
+    time.sleep(_thermal_cooldown)
 
     return output
 

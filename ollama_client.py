@@ -63,6 +63,7 @@ def _tighten_read_timeout(resp, seconds: float) -> bool:
 _retry_counter: dict = {"attempt": 0, "temperature": 0.5}
 _stream_crashed: bool = False  # Directive D: flag set to True when socket drops
                                 # Mesh/Reviewer should check this and discard output
+_last_model_call_ts: float = 0.0  # wall-clock of the last streamed call (cooldown pacing)
 
 
 def _cooldown_and_retry(
@@ -407,6 +408,18 @@ def call_ollama_streamed(
     """
     # Reset VRAM overrun abort flag for this fresh LLM call
     reset_vram_overrun_abort()
+
+    # -- Model-call cooldown: enforce a minimum gap between Ollama requests
+    # so the Steam Deck APU can shed heat between generations.  Sustained
+    # back-to-back streaming caused runner stalls (120s no-data) and socket
+    # drops (WinError 10060) on long runs.
+    global _last_model_call_ts
+    import os as _os_cd
+    _cooldown_s = float(_os_cd.environ.get("MIDWAY_MODEL_CALL_COOLDOWN", "5.0") or "5.0")
+    _gap_s = _cooldown_s - (time.time() - _last_model_call_ts)
+    if _gap_s > 0:
+        time.sleep(_gap_s)
+    _last_model_call_ts = time.time()
 
     use_model = model or MODEL
     _evict_previous_model(use_model)
