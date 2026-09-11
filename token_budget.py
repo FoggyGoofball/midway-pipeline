@@ -44,7 +44,7 @@ MODEL_TOKEN_LIMITS: dict = {
     "llama3.1:8b":         (26214, 32768),    # 32K (native 128K, VRAM-capped)
     "llama3.2:1b":         (104857, 131072),  # 128K native max
     "qwen3.5:14b":         (3276, 4096),      # 4K (same 14B runner limit)
-    "deepseek-coder-v2":   (13107, 16384),    # 80% of 16K
+    "deepseek-coder-v2":   (19660, 24576),    # 80% of 24K
 }
 
 

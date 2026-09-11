@@ -51,9 +51,9 @@ _MODEL_CTX_PRECEDENCE: list[tuple[str, int]] = [
     ("phi-mini",   OLLAMA_NUM_CTX_MASSIVE),
     ("phi3:14b",   OLLAMA_NUM_CTX_LARGE),
     ("qwen3.5:14b", OLLAMA_NUM_CTX_LARGE),
-    ("deepseek-coder-v2", 16384),  # 16B MoE (8.9GB weights) - 16K fits 12GB
-    ("deepseek-v2",       16384),
-    ("deepseek-r1",       16384),
+    ("deepseek-coder-v2", 24576),  # 16B MoE (8.9GB weights); prompt ~18.3K tok needs >20K
+    ("deepseek-v2",       24576),
+    ("deepseek-r1",       24576),
     ("14b",        OLLAMA_NUM_CTX_LARGE),
     ("9b",         OLLAMA_NUM_CTX_UPPER_MID),
     ("8b",         OLLAMA_NUM_CTX_8B),
