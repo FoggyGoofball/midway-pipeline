@@ -1355,6 +1355,30 @@ def execute_task(task, user_prompt: str, director_output: str,
                                         _apply_target.write_text(_file_content, encoding="utf-8")
                             except Exception as _post_e:
                                 print(f"  [Anchor Verifier] ⚠ Post-patch check error: {_post_e}")
+                        # -- Incremental luac-clean snapshot: update the revert baseline
+                        # after every successful patch so revert-on-regression restores
+                        # the last-good ACCUMULATED file, not the empty skeleton.
+                        try:
+                            import subprocess as _sp_luac_snap
+                            import tempfile as _tf_luac_snap
+                            import os as _os_luac_snap
+                            _tmp_luac = _tf_luac_snap.NamedTemporaryFile(
+                                suffix='.lua', mode='w', encoding='utf-8', delete=False
+                            )
+                            _tmp_luac.write(_file_content)
+                            _tmp_luac.close()
+                            _luac_snap_proc = _sp_luac_snap.run(
+                                ["luac", "-p", _tmp_luac.name], capture_output=True, text=True, timeout=20
+                            )
+                            _os_luac_snap.unlink(_tmp_luac.name)
+                            if _luac_snap_proc.returncode == 0:
+                                from pipeline import _CTX as _snap_ctx
+                                if _snap_ctx is not None:
+                                    _snap_map = getattr(_snap_ctx, '_last_luac_clean_anchor', None)
+                                    if _snap_map is not None:
+                                        _snap_map[task.target_file] = _file_content
+                        except Exception as _snap_e:
+                            pass
                     elif not _apply_target.is_file() and len(_blocks) == 0:
                         # No blocks at all and file doesn't exist - write full output
                         _apply_target.parent.mkdir(parents=True, exist_ok=True)

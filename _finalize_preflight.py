@@ -935,6 +935,19 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                               f"({len(_af_lines)} lines vs {len(_existing_lines)} existing, "
                               f"{_shrink_ratio:.0%} smaller).")
                         continue
+                    # Guard: refuse full-file lifecycle rewrites (the boilerplate
+                    # signature).  Anchor tasks fill ONE -- [TASK_N_INSERT_HOOK]
+                    # region; a fix that redefines the core lifecycle hooks is the
+                    # model rewriting the whole file as a scaffold, which replaces
+                    # real code with stubs and then triggers revert-to-skeleton.
+                    _lifecycle_redefs = set(re.findall(
+                        r'^function\s+(OnLoadStatic|OnLoad|OnUnload)\s*\(', _af_code, re.MULTILINE
+                    ))
+                    if _lifecycle_redefs:
+                        print(f"  [Arch Fix] Refusing full-file lifecycle rewrite for {tid} "
+                              f"({domain}) - redefines {sorted(_lifecycle_redefs)} "
+                              f"(anchor tasks must patch their hook, not rebuild the file).")
+                        continue
                     ctx.all_results_dict[tid] = _af_code
                     # Keep all_results list in sync.
                     _af_found = False
