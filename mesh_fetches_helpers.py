@@ -560,6 +560,7 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
 
     # ── 3-Attempt Retry Loop with Count Validation ───────────────────────
     enriched = []
+    _best_partial = []  # preserved across attempts for graceful fallback
     _expected_count = len(flat_tasks)
     for _attempt in range(1, 4):
         enrich_prompt = (
@@ -830,6 +831,8 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
 
         # ── Count Validation ────────────────────────────────────────────────
         _actual_count = len(enriched)
+        if _actual_count > len(_best_partial):
+            _best_partial = list(enriched)
         if _actual_count == _expected_count:
             print(f"  [Blueprint Enricher] ✓ Attempt {_attempt}: parsed {_actual_count} tasks (matches expected {_expected_count}).")
             break
@@ -846,9 +849,13 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
                 )
             enriched = []  # reset for retry
 
-    # If all 3 attempts failed, log warning and use whatever we got from the last attempt
-    if not enriched:
-        print(f"  [Blueprint Enricher] ⚠ All 3 attempts failed to match expected count. Using last attempt's output ({len(enriched)} tasks).")
+    # If all 3 attempts failed, fall back to the best partial parse instead of
+    # discarding it — a 10/11 partial is far more useful than 0 tasks, and the
+    # wave sorter can still process a partial DAG.
+    if not enriched and _best_partial:
+        print(f"  [Blueprint Enricher] ⚠ All 3 attempts failed to match expected count. "
+              f"Falling back to best partial parse ({len(_best_partial)} of {_expected_count} tasks).")
+        enriched = _best_partial
 
     print(f"  [Blueprint Enricher] Parsed {len(enriched)} enriched task(s) with dependency metadata.")
     return enriched

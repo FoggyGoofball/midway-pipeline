@@ -751,7 +751,20 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
                     # Do NOT set _blueprint_continue  the full DAG is processed
                     # in one pass by run_tasks, then the loop exits naturally.
             except Exception as _ee:
-                print(f"  [Blueprint Enricher] ⚠ Enrichment failed (falling back to per-iteration Director): {_ee}")
+                print(f"  [Blueprint Enricher] ⚠ Enrichment raised an exception (no tasks produced): {_ee}")
+
+            # -- Abort guard: the Phase 3 Director is now skipped for
+            # NEW_ATTRACTION, so an empty ctx.tasks_list here would silently
+            # no-op the entire run. Abort with a clear message instead of
+            # letting run_tasks process zero tasks.
+            if not getattr(ctx, 'tasks_list', None):
+                print(f"\n  [Blueprint Enricher] ⛔ No tasks could be produced from the blueprint. "
+                      f"Aborting — retry, or set MIDWAY_KEEP_DIRECTOR=1 to re-enable the Director fallback.")
+                ctx.final_output = (
+                    "Pipeline aborted: blueprint enrichment produced zero tasks. "
+                    "Retry, or set MIDWAY_KEEP_DIRECTOR=1 to fall back to the Director."
+                )
+                return ctx.final_output
 
         # -- Phase 0.9: Pre-Decomposition Architect Pass -----------------------
         # Runs AFTER run_fetches so scope/GDD context is available, but BEFORE
