@@ -24,9 +24,10 @@ except ImportError:
 
 # -- Constants (shared from pipeline.py top section) -------------------------
 # These constants are referenced by domain configurations below.
-# Qwen Coder 2.5 (7B) — temporary revert for speed test.
-EXECUTION_MODEL = "qwen2.5-coder:7b"
-CODER_MODEL = "qwen2.5-coder:7b"
+# Execution coder. qwen3.5:9b (7.9 GB) is the most capable Deck model and doubles
+# as the reviewer. Override at runtime via MIDWAY_CODER_MODEL (see pipeline.py).
+EXECUTION_MODEL = "qwen3.5:9b"
+CODER_MODEL = "qwen3.5:9b"
 REVIEWER_MODEL = "qwen3.5:9b"
 REASONING_MODEL = REVIEWER_MODEL
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review

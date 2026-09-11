@@ -143,8 +143,10 @@ _CTX = PipelineContext(
 # -- Configuration ----------------------------------------------------------
 OLLAMA_HOST = "http://192.168.0.16:11434"
 
-# Qwen Coder 2.5 (7B) — temporary revert for speed test.
-CODER_MODEL = "qwen2.5-coder:7b"
+# Execution coder. qwen3.5:9b (7.9 GB) is the most capable Deck model and doubles
+# as the reviewer, so execution->review transitions skip model eviction.
+# Revert with MIDWAY_CODER_MODEL=qwen2.5-coder:7b (code-specialized 7B).
+CODER_MODEL = os.getenv("MIDWAY_CODER_MODEL", "qwen3.5:9b")
 REVIEWER_MODEL = "qwen3.5:9b"
 ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"

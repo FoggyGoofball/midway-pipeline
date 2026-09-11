@@ -26,7 +26,8 @@ def test_constants_exist():
     """Verify key configuration constants are present."""
     import pipeline
     assert pipeline.OLLAMA_HOST == "http://192.168.0.16:11434"
-    assert pipeline.CODER_MODEL == "qwen2.5-coder:7b"
+    import os
+    assert pipeline.CODER_MODEL == os.getenv("MIDWAY_CODER_MODEL", "qwen3.5:9b")
     # PROJECT_ROOT is set at import time from where pipeline.py lives
     assert isinstance(pipeline.PROJECT_ROOT, Path)
     assert pipeline.MAX_ITERATIONS == 3

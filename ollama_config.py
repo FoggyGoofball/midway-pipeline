@@ -13,7 +13,7 @@ import time
 OLLAMA_HOST: str = "http://192.168.0.16:11434"
 
 # -- Model Names
-CODER_MODEL: str = "qwen2.5-coder:7b"
+CODER_MODEL: str = "qwen3.5:9b"  # most capable Deck model; doubles as REVIEWER (no coder<->reviewer eviction)
 REVIEWER_MODEL: str = "qwen3.5:9b"
 FALLBACK_REVIEWER_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL: str = "phi3.5:latest"
