@@ -24,11 +24,11 @@ except ImportError:
 
 # -- Constants (shared from pipeline.py top section) -------------------------
 # These constants are referenced by domain configurations below.
-# Execution coder. qwen3.5:9b (7.9 GB) is the most capable Deck model and doubles
-# as the reviewer. Override at runtime via MIDWAY_CODER_MODEL (see pipeline.py).
-EXECUTION_MODEL = "qwen3.5:9b"
-CODER_MODEL = "qwen3.5:9b"
-REVIEWER_MODEL = "qwen3.5:9b"
+# Execution coder. deepseek-coder-v2:16b is a code-specialized MoE (2.4B active).
+# Override at runtime via MIDWAY_CODER_MODEL / MIDWAY_REVIEWER_MODEL (pipeline.py).
+EXECUTION_MODEL = "deepseek-coder-v2:16b"
+CODER_MODEL = "deepseek-coder-v2:16b"
+REVIEWER_MODEL = "deepseek-coder-v2:16b"
 REASONING_MODEL = REVIEWER_MODEL
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
 LIBRARIAN_MODEL = EXECUTION_MODEL

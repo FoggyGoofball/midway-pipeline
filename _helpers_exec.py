@@ -818,6 +818,7 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"```\n{_anchor_context}\n```{_context_note}"
                             f"## ANCHOR PATCH MODE (MANDATORY)\n"
                             f"Your marker line: `{_anchor_marker}`\n"
+                            f"(The `NN |` / `NN >` prefixes above are line-number hints ONLY - never copy them into your SEARCH block.)\n"
                             f"The orchestrator wraps your code in the correct lifecycle function; "
                             f"you only fill this anchor.\n"
                             f"- Do NOT redefine `function OnLoadStatic/OnLoad/OnStep/OnUnload`.\n"

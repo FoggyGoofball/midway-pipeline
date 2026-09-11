@@ -165,10 +165,10 @@ class SignalType(str, Enum):
 class OrchestrationConfig(BaseModel):
     """Decoupled boundary parameters dynamically injected via Cartridge layer."""
     ollama_host: str = "http://192.168.0.16:11434"
-    # Qwen Coder 2.5 (7B) — temporary revert for speed test.
-    coder_model: str = "qwen2.5-coder:7b"
-    reviewer_model: str = "qwen3.5:9b"
-    analyst_model: str = "qwen3.5:9b"
+    # Code-specialized MoE (2.4B active); fast and fits 12 GB.
+    coder_model: str = "deepseek-coder-v2:16b"
+    reviewer_model: str = "deepseek-coder-v2:16b"
+    analyst_model: str = "deepseek-coder-v2:16b"
     fallback_reviewer_model: str = "llama3.1:8b-instruct-q4_K_M"
     pre_summarizer_model: str = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
     librarian_model: str = "llama3.1:8b-instruct-q4_K_M"

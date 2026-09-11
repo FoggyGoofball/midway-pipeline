@@ -67,6 +67,7 @@ _MODEL_COST_TABLE: Dict[str, tuple] = {
     "llama3.1:8b":        (5.50, 0.063),  # q8_0: 5.50 GB@8K → 7.50 GB@32K
     "llama3.2:1b":        (1.2,  0.025),
     "qwen3.5:14b":        (8.5,  0.075),
+    "deepseek-coder-v2:16b": (9.0, 0.11),   # MoE 16B (2.4B active), ~8.9GB weights
     # Fallback catch-all for unknown models
     "_default":           (4.0,  0.063),
 }

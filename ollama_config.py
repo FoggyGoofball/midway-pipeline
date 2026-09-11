@@ -13,8 +13,8 @@ import time
 OLLAMA_HOST: str = "http://192.168.0.16:11434"
 
 # -- Model Names
-CODER_MODEL: str = "qwen3.5:9b"  # most capable Deck model; doubles as REVIEWER (no coder<->reviewer eviction)
-REVIEWER_MODEL: str = "qwen3.5:9b"
+CODER_MODEL: str = "deepseek-coder-v2:16b"  # code-specialized MoE (2.4B active) - fast, fits 12GB
+REVIEWER_MODEL: str = "deepseek-coder-v2:16b"
 FALLBACK_REVIEWER_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL: str = "phi3.5:latest"
 LIBRARIAN_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
@@ -51,6 +51,9 @@ _MODEL_CTX_PRECEDENCE: list[tuple[str, int]] = [
     ("phi-mini",   OLLAMA_NUM_CTX_MASSIVE),
     ("phi3:14b",   OLLAMA_NUM_CTX_LARGE),
     ("qwen3.5:14b", OLLAMA_NUM_CTX_LARGE),
+    ("deepseek-coder-v2", 16384),  # 16B MoE (8.9GB weights) - 16K fits 12GB
+    ("deepseek-v2",       16384),
+    ("deepseek-r1",       16384),
     ("14b",        OLLAMA_NUM_CTX_LARGE),
     ("9b",         OLLAMA_NUM_CTX_UPPER_MID),
     ("8b",         OLLAMA_NUM_CTX_8B),
