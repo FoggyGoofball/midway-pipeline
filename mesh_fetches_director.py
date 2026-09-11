@@ -39,6 +39,22 @@ def _run_director_phase(ctx: PipelineContext) -> PipelineContext:
     print(f"{'='*70}")
     ctx.output_parts.append("\n## Phase 3: Director - Task Decomposition\n")
 
+    # -- Skip redundant Director for the blueprint path -----------------------
+    # For NEW_ATTRACTION the blueprint phase already produced the full task
+    # list, and the bulk enricher (pipeline.py) rebuilds ctx.tasks_list from
+    # project_blueprint.md afterward — discarding whatever the Director emits.
+    # The Director pass is therefore ~9 minutes of redundant llama3.1 time
+    # (slow prefill + frequent early stop).  Skip it unless explicitly kept.
+    import os as _os_skip
+    _keep_director = bool(_os_skip.environ.get("MIDWAY_KEEP_DIRECTOR", ""))
+    _bp_ready = (ctx.project_root / "docs" / "project_blueprint.md").is_file()
+    if (not _keep_director) and _bp_ready and getattr(ctx, '_scope_mode', 'GENERAL') == "NEW_ATTRACTION":
+        print(f"  [Director] Skipped — NEW_ATTRACTION blueprint path owns task "
+              f"decomposition (bulk enricher rebuilds the full task list).")
+        ctx.director_output = ""
+        ctx.tasks_list = []
+        return ctx
+
     # ═══════════════════════════════════════════════════════════════════════
     # MONOLITHIC MODE — REMOVED 2026-06-04
     # The NARROW+NEW_ATTRACTION monolithic bypass has been eliminated.
