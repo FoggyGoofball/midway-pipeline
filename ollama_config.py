@@ -13,8 +13,8 @@ import time
 OLLAMA_HOST: str = "http://192.168.0.16:11434"
 
 # -- Model Names
-CODER_MODEL: str = "deepseek-coder-v2:16b"  # code-specialized MoE (2.4B active) - fast, fits 12GB
-REVIEWER_MODEL: str = "deepseek-coder-v2:16b"
+CODER_MODEL: str = "qwen3.5:9b"  # best SEARCH/REPLACE instruction-follower at this size (6.1GB)
+REVIEWER_MODEL: str = "qwen3.5:9b"
 FALLBACK_REVIEWER_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL: str = "phi3.5:latest"
 LIBRARIAN_MODEL: str = "llama3.1:8b-instruct-q4_K_M"

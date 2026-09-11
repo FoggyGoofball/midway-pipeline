@@ -682,6 +682,37 @@ def _run_blueprint_phase(ctx: PipelineContext, blueprint_path, gdd_snippet: str,
             if _injected_count:
                 print(f"  [Blueprint Validator] 🔧 Injected {_injected_count} mandatory task(s) into blueprint")
 
+            # -- Anchor-count reconciliation: a force-accepted blueprint shorter
+            # than the scaffold anchor list leaves the trailing TASK_N_INSERT_HOOK
+            # markers unfilled (orphaned), cascading into "SEARCH not found" for
+            # later tasks.  Pad the checklist up to the canonical anchor count so
+            # every marker gets exactly one task.  Filler titles reuse the anchor
+            # title so the enricher semantic matcher claims them 1:1.
+            if _scope_mode == "NEW_ATTRACTION":
+                try:
+                    from _anchors import get_all_anchor_tasks as _pad_get_tasks
+                    _pad_anchor_tasks = _pad_get_tasks()
+                except Exception:
+                    _pad_anchor_tasks = []
+                _pad_existing = len(re.findall(
+                    r'^[-*]?\s*\[ \]\s*(?:Task\s*\d+[:\.]?\s*)?',
+                    blueprint, re.MULTILINE
+                ))
+                _pad_missing = _anchor_minimum - _pad_existing
+                if _pad_missing > 0:
+                    _pad_file = _user_file_constraint_canonical or "attractions/strongman/strongman.lua"
+                    for _i in range(_pad_missing):
+                        _pad_idx = _pad_existing + _i
+                        if _pad_idx < len(_pad_anchor_tasks):
+                            _pad_title = (_pad_anchor_tasks[_pad_idx][2] or "").strip()
+                        else:
+                            _pad_title = ""
+                        if not _pad_title or _pad_title.lower() == "none":
+                            _pad_title = f"Fill anchor TASK_{_pad_idx + 1}"
+                        blueprint += f"\n- [ ] {_pad_title} - {_pad_file}"
+                    print(f"  [Blueprint Validator] 🔧 Padded {_pad_missing} filler task(s) to reach "
+                          f"{_anchor_minimum} anchors (was {_pad_existing})")
+
             _bp_issues = []  # Clear issues so we fall through to the accept path
 
         if _bp_issues:

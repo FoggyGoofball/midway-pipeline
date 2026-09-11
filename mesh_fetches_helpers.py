@@ -632,7 +632,15 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
                 elif re.match(r"File\s*:", sl, re.IGNORECASE):
                     raw = re.sub(r"File\s*:\s*", "", sl, flags=re.IGNORECASE)
                     if raw.strip().lower() != "none":
-                        target_file = raw.strip()
+                        # Strip trailing tags the model appended to the File line
+                        # (e.g. "attractions/x/x.lua [MATH_HEAVY]").  A bogus
+                        # target_file defeats the wave sorter same-file deferral
+                        # and routes the write to a phantom path.
+                        raw = re.sub(
+                            r"\s*\[[^\]]*MATH[_ ]?HEAVY[^\]]*\]\s*$",
+                            "", raw, flags=re.IGNORECASE,
+                        ).strip()
+                        target_file = raw
                 if inputs and outputs and hooks and target_file is not None:
                     break
 

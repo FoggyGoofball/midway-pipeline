@@ -143,11 +143,11 @@ _CTX = PipelineContext(
 # -- Configuration ----------------------------------------------------------
 OLLAMA_HOST = "http://192.168.0.16:11434"
 
-# Execution coder. deepseek-coder-v2:16b is a code-specialized MoE (2.4B active)
-# that fits 12 GB and is fast. Revert with MIDWAY_CODER_MODEL=qwen3.5:9b.
-CODER_MODEL = os.getenv("MIDWAY_CODER_MODEL", "deepseek-coder-v2:16b")
-# Reviewer: deepseek-coder-v2:16b by default; MIDWAY_REVIEWER_MODEL=qwen3.5:9b reverts.
-REVIEWER_MODEL = os.getenv("MIDWAY_REVIEWER_MODEL", "deepseek-coder-v2:16b")
+# Execution coder. qwen3.5:9b is the best SEARCH/REPLACE instruction-follower
+# at this size (8/11 first-try vs deepseek's 0/9). deepseek-coder-v2:16b reverts via MIDWAY_CODER_MODEL.
+CODER_MODEL = os.getenv("MIDWAY_CODER_MODEL", "qwen3.5:9b")
+# Reviewer: qwen3.5:9b by default; MIDWAY_REVIEWER_MODEL=deepseek-coder-v2:16b reverts.
+REVIEWER_MODEL = os.getenv("MIDWAY_REVIEWER_MODEL", "qwen3.5:9b")
 ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review

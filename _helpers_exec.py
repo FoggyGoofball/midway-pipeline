@@ -407,6 +407,70 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
         })
     return blocks
 
+def _unwrap_json_code(output: str) -> str:
+    """Unwrap deepseek-style JSON-wrapped code into plain code / SEARCH-REPLACE text.
+
+    deepseek-coder-v2 (and other chat-tuned models) wrap their answer in a
+    ```json fence with one of several shapes:
+        {"response": {"code_block": "..."}}
+        {"implementation": {"code": [...]}}
+        {"code": [{"search": ..., "replace": ...}]}
+        {"SEARCH": ..., "REPLACE": ...}
+    The downstream _extract_search_replace_blocks() / anchor-splice only
+    understand plain text, so such output is otherwise treated as "no
+    SEARCH/REPLACE" (worse: written verbatim as a bogus full-file scaffold).
+
+    Returns the original string unchanged when it is not JSON-wrapped.
+    """
+    import json as _json
+    _text = output.strip()
+    _fence = re.match(r'^```(?:json)?\s*\n?(.*?)\n?\s*```$', _text, re.DOTALL)
+    if _fence:
+        _text = _fence.group(1).strip()
+    _start = _text.find('{')
+    if _start == -1:
+        return output
+    _end = _text.rfind('}')
+    if _end <= _start:
+        return output
+    try:
+        _obj = _json.loads(_text[_start:_end + 1])
+    except Exception:
+        return output
+
+    _parts: list[str] = []
+    _seen_searches = set()
+
+    def _collect(v) -> None:
+        if isinstance(v, str):
+            if v.strip():
+                _parts.append(v)
+        elif isinstance(v, list):
+            for _item in v:
+                _collect(_item)
+        elif isinstance(v, dict):
+            _s = v.get("search") or v.get("SEARCH") or ""
+            _r = v.get("replace") or v.get("REPLACE") or ""
+            if _s or _r:
+                if isinstance(_r, list):
+                    _r = "\n".join(str(x) for x in _r)
+                _s = _s if isinstance(_s, str) else str(_s)
+                _key = (_s[:80], str(_r)[:80])
+                if _key not in _seen_searches:
+                    _seen_searches.add(_key)
+                    _parts.append(f"<<<<<<< SEARCH\n{_s}\n=======\n{_r}\n>>>>>>> REPLACE")
+                return
+            for _k in ("code_block", "code", "implementation", "response"):
+                if _k in v:
+                    _collect(v[_k])
+
+    _collect(_obj)
+    if not _parts:
+        return output
+    _joined = "\n".join(_parts)
+    return _joined if _joined.strip() != output.strip() else output
+
+
 
 # -- Anchor Splice Fallback: deterministic merge when LLM refuses SEARCH/REPLACE ----
 # When the LLM outputs a full file instead of a SEARCH/REPLACE block, this
@@ -1119,6 +1183,10 @@ def execute_task(task, user_prompt: str, director_output: str,
             _apply_target = None
 
         if _apply_target:
+            _unwrapped_output = _unwrap_json_code(output)
+            if _unwrapped_output != output:
+                print(f"  [JSON Unwrap] {task.task_id}: output was JSON-wrapped; extracted code for patching")
+                output = _unwrapped_output
             _blocks = _extract_search_replace_blocks(output)
 
             # -- Anchor Guard: validate SEARCH block targets the task's assigned anchor ---

@@ -27,7 +27,7 @@ def test_constants_exist():
     import pipeline
     assert pipeline.OLLAMA_HOST == "http://192.168.0.16:11434"
     import os
-    assert pipeline.CODER_MODEL == os.getenv("MIDWAY_CODER_MODEL", "deepseek-coder-v2:16b")
+    assert pipeline.CODER_MODEL == os.getenv("MIDWAY_CODER_MODEL", "qwen3.5:9b")
     # PROJECT_ROOT is set at import time from where pipeline.py lives
     assert isinstance(pipeline.PROJECT_ROOT, Path)
     assert pipeline.MAX_ITERATIONS == 3

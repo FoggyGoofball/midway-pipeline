@@ -24,11 +24,11 @@ except ImportError:
 
 # -- Constants (shared from pipeline.py top section) -------------------------
 # These constants are referenced by domain configurations below.
-# Execution coder. deepseek-coder-v2:16b is a code-specialized MoE (2.4B active).
+# Execution coder. qwen3.5:9b is the best SEARCH/REPLACE instruction-follower (6.1GB).
 # Override at runtime via MIDWAY_CODER_MODEL / MIDWAY_REVIEWER_MODEL (pipeline.py).
-EXECUTION_MODEL = "deepseek-coder-v2:16b"
-CODER_MODEL = "deepseek-coder-v2:16b"
-REVIEWER_MODEL = "deepseek-coder-v2:16b"
+EXECUTION_MODEL = "qwen3.5:9b"
+CODER_MODEL = "qwen3.5:9b"
+REVIEWER_MODEL = "qwen3.5:9b"
 REASONING_MODEL = REVIEWER_MODEL
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
 LIBRARIAN_MODEL = EXECUTION_MODEL
