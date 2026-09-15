@@ -61,11 +61,56 @@ def fetch_messages(since: str = "", timeout: float = 5.0) -> list:
         return []
 
 
+def subscribe_sse(timeout: float = 90.0):
+    """Subscribe to the topic via Server-Sent Events (SSE).
+
+    Yields message dicts (``event == "message"``) as they are published, in
+    real time — unlike the JSON feed this does NOT depend on ntfy's message
+    cache.  The generator ends when the connection drops or times out; the
+    caller should re-enter it to reconnect.  Never raises."""
+    if not TOPIC:
+        return
+    url = f"{SERVER}/{TOPIC}/sse"
+    try:
+        req = urllib.request.Request(url, method="GET",
+                                     headers={"Accept": "text/event-stream"})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=timeout) as resp:
+            data_parts = []
+            for raw in resp:
+                line = raw.decode("utf-8", "replace").rstrip("\r\n")
+                if line == "":
+                    if data_parts:
+                        try:
+                            msg = json.loads("".join(data_parts))
+                        except Exception:
+                            msg = None
+                        # ntfy encodes the event type INSIDE the JSON (it does
+                        # not always send a preceding `event:` line), so check
+                        # the parsed dict rather than the SSE event field.
+                        if msg is not None and msg.get("event") == "message":
+                            yield msg
+                    data_parts = []
+                elif line.startswith(":"):
+                    continue  # keepalive comment
+                elif line.startswith("data:"):
+                    data_parts.append(line[len("data:"):].lstrip())
+                # `event:` lines are ignored — the type lives in the JSON.
+    except Exception:
+        return
+
+
+def _safe_title(title: str) -> str:
+    """HTTP header values are latin-1; drop any character outside it (emoji,
+    arrows, etc.) so the Title header can never raise UnicodeEncodeError."""
+    return "".join(ch for ch in title if ord(ch) < 256).strip()[:250]
+
+
 def _send_sync(title: str, message: str, priority: str, tags: str) -> str:
     url = f"{SERVER}/{TOPIC}"
     data = message.encode("utf-8")
     headers = {
-        "Title": title[:250],
+        "Title": _safe_title(title),
         "Priority": str(priority),
     }
     if tags:

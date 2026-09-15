@@ -91,7 +91,6 @@ _state = _State()
 _started = False
 _lock = threading.Lock()
 _last_heartbeat = 0.0
-_last_cmd_ts = 0
 
 
 def _get_settings() -> dict:
@@ -282,20 +281,14 @@ def apply_command(text: str) -> str:
 
 
 def _command_loop() -> None:
-    global _last_cmd_ts
     if ntfy is None or not ntfy.configured():
         return
-    _last_cmd_ts = int(time.time())  # don't replay old cached messages on boot
     time.sleep(3)
     while True:
         try:
-            for m in ntfy.fetch_messages(since=str(_last_cmd_ts)):
-                try:
-                    mid = int(m.get("id", 0))
-                except Exception:
-                    mid = 0
-                if mid > _last_cmd_ts:
-                    _last_cmd_ts = mid
+            # SSE keeps an open stream and yields messages as the phone
+            # publishes them — no reliance on ntfy's message cache.
+            for m in ntfy.subscribe_sse():
                 if m.get("event") not in (None, "message"):
                     continue
                 text = m.get("message") or ""
@@ -305,7 +298,7 @@ def _command_loop() -> None:
                     ntfy.notify("Midway command", reply, priority="3", tags="incoming_envelope")
         except Exception:  # noqa: BLE001 - listener must never die
             pass
-        time.sleep(max(3.0, _get_settings().get("interval", 30) * 0.15))
+        time.sleep(2)  # brief pause before reconnecting
 
 
 def _loop() -> None:

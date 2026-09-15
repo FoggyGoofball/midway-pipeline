@@ -9,6 +9,15 @@ rem -- Phone push notifications via ntfy.sh. Install "ntfy" on the phone and
 rem    subscribe to this topic to receive watchdog degradation alerts.
 set "MIDWAY_NTFY_TOPIC=midway-f4a5ec27"
 
+rem -- Stale-instance guards: kill anything still listening on the Vite
+rem    dev-server ports and the pipeline port before starting fresh.
+for %%p in (5173 5174 5175 5176 5177 5178 5179 5180 8765) do (
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%%p " ^| findstr "LISTENING"') do (
+        echo [guard] killing stale listener on port %%p, PID %%a
+        taskkill /F /PID %%a >nul 2>&1
+    )
+)
+
 echo [Midway] Starting services...
 
 :: Health monitor - visible (it is the live status display).
