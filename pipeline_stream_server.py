@@ -166,6 +166,8 @@ class StreamHandler(BaseHTTPRequestHandler):
             self._serve_logs(params)
         elif parsed.path == "/api/ollama":
             self._serve_ollama()
+        elif parsed.path == "/api/logfile":
+            self._serve_logfile(params)
         elif parsed.path.startswith("/api/"):
             self.send_response(404)
             _add_cors_headers(self)
@@ -231,6 +233,15 @@ class StreamHandler(BaseHTTPRequestHandler):
             n = 100
         n = max(1, min(n, 800))
         self._serve_json({"lines": _status.get_logs(n)})
+
+    def _serve_logfile(self, params: dict):
+        try:
+            n = int(params.get("n", ["0"])[0])
+        except Exception:
+            n = 0
+        if n > 0:
+            n = min(n, 50000)
+        self._serve_json({"lines": _status.get_logfile(n)})
 
     def _serve_ollama(self):
         self._serve_json(_status.probe_ollama())

@@ -132,7 +132,7 @@ export default function App() {
 
   const refreshFullLogs = useCallback(async () => {
     try {
-      const r = await fetch('/api/logs?n=800')
+      const r = await fetch('/api/logfile')
       if (r.ok) {
         const j = await r.json()
         setFullLogs(j.lines || [])
@@ -159,7 +159,7 @@ export default function App() {
       return
     }
     refreshFullLogs()
-    const t = setInterval(refreshFullLogs, 2000)
+    const t = setInterval(refreshFullLogs, 3000)
     return () => clearInterval(t)
   }, [fullLog, refreshFullLogs])
 

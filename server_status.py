@@ -222,6 +222,21 @@ def get_logs(n: int = 60) -> list:
         return tail
 
 
+def get_logfile(n: int = 0) -> list:
+    """Read the on-disk run log and return its lines (last *n* when n > 0).
+
+    The file is flushed after every write, so a separate read handle always
+    sees the current contents — including everything up to a mid-run crash."""
+    try:
+        with open(_LOG_FILE_PATH, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except Exception:
+        return []
+    if n and n > 0:
+        lines = lines[-n:]
+    return lines
+
+
 # -- Ollama probe ------------------------------------------------------------
 
 def probe_ollama() -> dict:
