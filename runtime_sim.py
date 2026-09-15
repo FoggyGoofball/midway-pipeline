@@ -35,6 +35,8 @@ import textwrap
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from midway_api_signatures import SPAWN_ARITY, BODY_ARITY, ECONOMY_ARITY
+
 # -- Known API surfaces ---------------------------------------------------------
 # Keys: function name (lowercase). Values: expected arity range (min, max).
 # Keep in sync with docs/engine_lua_bridge_contract.md §7.
@@ -108,6 +110,15 @@ _ECONOMY_API: Dict[str, Tuple[int, int]] = {
     "gettokens":         (0, 0),
     "getstreak":         (0, 0),
 }
+
+# Rebuild both tables from the single source of truth (midway_api_signatures)
+# so runtime_sim can never drift from _preflight_static's arg-count checks.
+_MIDWAY_PHYSICS_API = {
+    **{k.lower(): v for k, v in SPAWN_ARITY.items()},
+    **{k.lower(): v for k, v in BODY_ARITY.items()},
+    "issenortriggered": (1, 1),  # common misspelling accepted for tolerance
+}
+_ECONOMY_API = {k.lower(): v for k, v in ECONOMY_ARITY.items()}
 
 # -- Regex helpers --------------------------------------------------------------
 

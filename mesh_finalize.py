@@ -881,7 +881,8 @@ def _save_output(ctx: PipelineContext) -> None:
     from ollama_client import _stream_crashed, _retry_counter
 
     ctx.final_output = "\n".join(ctx.output_parts)
-    output_path = ctx.project_root / f"pipeline_output_{ctx.run_id}.md"
+    _run_tag = (getattr(ctx, "run_id", "") or "").strip() or datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = ctx.project_root / f"pipeline_output_{_run_tag}.md"
 
     # -- Directive D: Snapshot rollback on stream crash ----------------
     if _stream_crashed:

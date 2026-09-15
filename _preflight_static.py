@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from models import PipelineContext
+from midway_api_signatures import SPAWN_ARITY as _SPAWN_SIGS
 
 
 def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
@@ -407,34 +408,8 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
         # Maps function name → (min_args, max_args).
         # Optional trailing args (e.g. mass, yawDeg) widen the max bound.
         # The bridge registers mass via sol::object so it is always optional in Lua.
-        _SPAWN_SIGS = {
-            # name:                (min, max)
-            "SpawnDynamicSphere":   (4, 5),  # lx ly lz r [mass]
-            "SpawnDynamicBox":      (6, 7),  # lx ly lz w h d [mass]
-            "SpawnDynamicCapsule":  (5, 6),  # lx ly lz halfH r [mass]
-            "SpawnDynamicCylinder": (5, 6),  # lx ly lz halfH r [mass]
-            "SpawnDynamicMesh":     (6, 6),  # lx ly lz yaw mass path
-            "SpawnDynamicBoxR":     (7, 8),  # lx ly lz w h d mass [yawDeg]
-            "SpawnDynamicSphereR":  (5, 6),  # lx ly lz r mass [yawDeg]
-            "SpawnDynamicCapsuleR": (6, 7),
-            "SpawnDynamicCylinderR":(6, 7),
-            "SpawnStaticBox":       (6, 6),  # lx ly lz w h d
-            "SpawnStaticSphere":    (4, 4),  # lx ly lz r
-            "SpawnStaticCapsule":   (5, 5),  # lx ly lz halfH r
-            "SpawnStaticCylinder":  (5, 5),  # lx ly lz halfH r
-            "SpawnStaticMesh":      (4, 8),  # lx ly lz yaw path [sx sy sz]
-            "SpawnStaticBoxR":      (7, 7),
-            "SpawnStaticSphereR":   (5, 5),
-            "SpawnStaticCapsuleR":  (6, 6),
-            "SpawnStaticCylinderR": (6, 6),
-            "SpawnKinematicBox":    (6, 6),
-            "SpawnKinematicSphere": (4, 4),
-            "SpawnKinematicCapsule":(5, 5),
-            "SpawnKinematicCylinder":(5, 5),
-            "SpawnKinematicBoxR":   (7, 7),
-            "SpawnSensorBox":       (6, 6),
-            "SpawnSensorSphere":    (4, 4),
-        }
+        # _SPAWN_SIGS is imported at module top from midway_api_signatures so
+        # the argument-count table can never drift from runtime_sim's.
         def _balanced_spawn_args(text: str, start_pos: int) -> str:
             """Extract the full argument string between balanced parentheses
             starting at the open-paren at position start_pos.
