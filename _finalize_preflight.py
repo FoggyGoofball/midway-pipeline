@@ -223,6 +223,12 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     _flush_results_to_workspace(ctx)
     ctx.pre_flight_errors = ""
 
+    # Deterministic cleanup BEFORE the static guard: prefix bare MidwayPhysics.*
+    # calls, strip phantom APIs / duplicate functions / comment monologues so the
+    # first static-guard pass sees cleaned code instead of re-flagging every
+    # bare `SetFriction()` / `MoveKinematic()` and burning a full fix cycle.
+    _post_process_workspace_lua_files(ctx)
+
     # Universal guard: catch empty or prose-only outputs before any compiler runs.
     _inject_empty_output_errors(ctx)
 
