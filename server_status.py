@@ -245,6 +245,11 @@ def snapshot(log_lines: int = 60) -> dict:
         if started:
             end = _state["finished_at"] or time.time()
             elapsed = round(max(0.0, end - started), 1)
+        # Build the log tail INLINE — calling get_logs() here would re-acquire
+        # _lock (a non-reentrant Lock) and deadlock the whole server.
+        _tail = list(_log_lines)[-log_lines:]
+        if _log_pending:
+            _tail = _tail + [_log_pending]
         return {
             "running": _state["running"],
             "phase": _state["phase"],
@@ -257,6 +262,6 @@ def snapshot(log_lines: int = 60) -> dict:
             "last_telemetry": _state["last_telemetry"],
             "last_error": _state["last_error"],
             "run_count": _state["run_count"],
-            "logs": get_logs(log_lines),
+            "logs": _tail,
             "server_time": datetime.now().isoformat(),
         }
