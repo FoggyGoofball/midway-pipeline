@@ -1461,10 +1461,33 @@ def execute_task(task, user_prompt: str, director_output: str,
                             _replace_text,
                         )
                         if _redef_m:
-                            print(f"  [Anchor Guard] ⛔ {task.task_id} REPLACE redefines "
-                                  f"'{_redef_m.group(1)}' — skipping block (lifecycle already "
-                                  f"provided by the skeleton)")
-                            continue
+                            # The task filled its anchor but also redefined a
+                            # lifecycle hook (a stale whole-file scaffold).  Instead
+                            # of discarding the entire block — which throws away the
+                            # task's real implementation — strip the lifecycle
+                            # wrappers and keep the game logic.  The skeleton already
+                            # provides the hooks; we only want the new logic.
+                            try:
+                                from _review_helpers import _strip_lifecycle as _slc
+                                _logic = (_slc(_replace_text) or "").strip()
+                            except Exception:
+                                _logic = ""
+                            _logic_has_code = any(
+                                ln.strip() and not ln.strip().startswith("--")
+                                for ln in _logic.splitlines()
+                            )
+                            if _logic_has_code:
+                                print(f"  [Anchor Guard] 🔀 {task.task_id} redefines "
+                                      f"'{_redef_m.group(1)}' — stripped wrappers, keeping "
+                                      f"{len(_logic)} chars of game logic.")
+                                # Re-insert the anchor line so the next task in the
+                                # chain can still find its SEARCH target.
+                                _replace_text = _logic + "\n" + _search_text
+                            else:
+                                print(f"  [Anchor Guard] ⛔ {task.task_id} REPLACE redefines "
+                                      f"'{_redef_m.group(1)}' — skipping block (lifecycle already "
+                                      f"provided by the skeleton)")
+                                continue
                         # Use fuzzy matching (exact -> normalized -> sliding window)
                         _new_content = _fuzzy_apply_patch(_file_content, _search_text, _replace_text)
                         if _new_content != _file_content:
