@@ -620,6 +620,13 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     print(f"  Midway Pipeline Stream Server (Hardened)")
     print(f"  Listening on http://{host}:{port}")
     print(f"{'='*60}\n")
+    # Start the deterministic degradation watchdog (best-effort: a watchdog
+    # failure must never block or kill the server).
+    try:
+        import watchdog
+        watchdog.start()
+    except Exception as e:
+        print(f"  [Watchdog] failed to start: {e}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

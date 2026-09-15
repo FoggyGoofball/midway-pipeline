@@ -6,6 +6,11 @@ cd /d "%~dp0"
 set "MIDWAY_PROJECT_ROOT=%~dp0..\midway"
 set "PYTHONUTF8=1"
 
+rem -- Phone push notifications via ntfy.sh (free Android app). Install "ntfy"
+rem    on the phone, subscribe to this topic, and the watchdog will push
+rem    degradation alerts to it. Change it if you want a different secret.
+set "MIDWAY_NTFY_TOPIC=midway-f4a5ec27"
+
 echo.
 echo ==============================================================
 echo     MIDWAY PIPELINE
