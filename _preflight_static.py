@@ -357,7 +357,18 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                 _file_content = _merged_block
             else:
                 try:
-                    _mf = ctx.project_root / str(task_obj.target_file)
+                    _mf = (ctx.project_root / str(task_obj.target_file)).resolve()
+                    # Staging-aware: the deterministic post-processor writes the
+                    # CLEANED accumulated file to staging; read that copy so the
+                    # guard sees the same content the post-processor produced.
+                    try:
+                        from _helpers_io import get_staging_path, is_staging_active
+                        if is_staging_active():
+                            _sp = get_staging_path(_mf, project_root=ctx.project_root)
+                            if _sp.is_file():
+                                _mf = _sp
+                    except Exception:
+                        pass
                     if _mf.is_file():
                         _file_content = _mf.read_text(encoding="utf-8", errors="replace")
                 except Exception:
@@ -647,7 +658,22 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                         _raw_bc,
                         extra_engine_namespaces={"sol"},
                     )
-                    _cv_violations = validate_lua_content(content, _lua_contract)
+                    # Validate the ACCUMULATED (already post-processed) file, not
+                    # the raw per-task fragment, so bare calls / phantoms that the
+                    # deterministic prefixer already fixed are not re-flagged every
+                    # cycle.  Dedupe per target file: every task shares one file.
+                    _c9_target = str(getattr(task_obj, 'target_file', None) or tid)
+                    _c9_key = ("c9_file", _c9_target)
+                    if _c9_key in _reported:
+                        _cv_violations = []
+                    else:
+                        _reported.add(_c9_key)
+                        _cv_source = (
+                            _file_content
+                            if (_file_content and _file_content.strip())
+                            else content
+                        )
+                        _cv_violations = validate_lua_content(_cv_source, _lua_contract)
                     _cv_phantom_names: set = set()
                     for _viol in _cv_violations:
                         if _viol.label.startswith("static cache of modifiers"):
