@@ -23,6 +23,7 @@ solver_*.py
 # ── 5. Ephemeral Session Outputs & Backups ───────────────────────────────────
 pipeline_output_*.md
 pipeline_inventory.json
+pipeline_run.log
 *.bkup_*
 *.old
 *.tmp

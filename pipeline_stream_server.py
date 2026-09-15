@@ -619,6 +619,7 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     print(f"\n{'='*60}")
     print(f"  Midway Pipeline Stream Server (Hardened)")
     print(f"  Listening on http://{host}:{port}")
+    print(f"  Run log: {LOCAL_DIR / 'pipeline_run.log'}")
     print(f"{'='*60}\n")
     # Start the deterministic degradation watchdog (best-effort: a watchdog
     # failure must never block or kill the server).

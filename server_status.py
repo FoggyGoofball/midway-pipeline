@@ -17,6 +17,7 @@ line into :func:`log_text`, so the dashboard can tail the exact console log
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -67,10 +68,42 @@ _log_lines: Deque[str] = deque(maxlen=_LOG_MAX_LINES)
 _log_pending: str = ""
 
 
+# -- On-disk run log ---------------------------------------------------------
+# A single fixed file that mirrors the console and is truncated at the start of
+# each pipeline run.  Between runs it stays open in append mode so a previous
+# run's log survives a server restart until the next run overwrites it.  It is
+# flushed after every write so a mid-run crash still leaves the full output on
+# disk for post-mortem analysis.
+_LOG_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pipeline_run.log")
+_log_file_handle = None
+
+
+def _open_log_file(mode: str = "a") -> None:
+    global _log_file_handle
+    try:
+        _log_file_handle = open(_LOG_FILE_PATH, mode, encoding="utf-8", errors="replace", buffering=1)
+    except Exception:  # pragma: no cover - disk logging is best-effort
+        _log_file_handle = None
+
+
+def _write_log_file(text: str) -> None:
+    if not text or _log_file_handle is None:
+        return
+    try:
+        _log_file_handle.write(text)
+        _log_file_handle.flush()
+    except Exception:  # pragma: no cover
+        pass
+
+
+_open_log_file("a")  # capture server startup; set_running() truncates per run
+
+
 # -- Pipeline state ----------------------------------------------------------
 
 def set_running(prompt: str = "") -> None:
     with _lock:
+        _open_log_file("w")  # overwrite the run log at the start of each run
         _state["running"] = True
         _state["prompt"] = prompt
         _state["started_at"] = time.time()
@@ -159,6 +192,7 @@ def log_text(text: str) -> None:
     if not text:
         return
     clean = strip_ansi(text)
+    _write_log_file(clean)  # mirror to disk (best-effort, outside the lock)
     with _lock:
         clean = _log_pending + clean
         while "\n" in clean:
