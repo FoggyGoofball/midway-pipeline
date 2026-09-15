@@ -386,21 +386,111 @@ def handle_file_list(signal_content: str, project_root: Path = None) -> str:
 
 # -- VRAM Stub Builder -----------------------------------------------------
 
-def _make_vram_stub(rel_path: str, content: str) -> str:
+# Model-generated summaries per file (keyed by rel_path + content hash) so a
+# large reference file is summarized ONCE per content revision, not once per
+# task (which would multiply Ollama calls ~11x per run).
+_VRAM_STUB_SUMMARY_CACHE: dict = {}
+
+
+def _summarize_file_for_stub(rel_path: str, content: str, domain: str = "") -> str:
+    """Produce a concise, architecture-relevant summary of a file for a
+    <VRAM_STUB> pointer.
+
+    Uses the pre-summarizer model (phi3.5, fast) so the agent sees the
+    architecture-relevant essence of the file (key APIs / rules / patterns)
+    rather than a useless first line.  Domain-aware (per-agent) but
+    task-independent so the shared KV-cache prefix stays byte-identical across
+    tasks in the same domain.  Falls back to the first non-empty line when the
+    model is unavailable or returns nothing useful.
+    """
+    _key = (rel_path, domain, hashlib.md5(content.encode("utf-8", "replace")).hexdigest()[:16])
+    _cached = _VRAM_STUB_SUMMARY_CACHE.get(_key)
+    if _cached is not None:
+        return _cached
+
+    # Deterministic fallback (first non-empty line) in case the model is down.
+    _first_line = ""
+    for _line in content.splitlines():
+        _s = _line.strip()
+        if _s:
+            _first_line = _s
+            break
+    if len(_first_line) > 100:
+        _first_line = _first_line[:100] + "..."
+    _fallback = _first_line
+
+    _summary = ""
+    _summ_model = ""
+    _co = None
+    _use_phi35 = False
+    try:
+        from ollama_client import PRE_SUMMARIZER_MODEL as _summ_model
+        from ollama_client import call_ollama as _co
+        from ollama_client import USE_PHI35_ORACLES as _use_phi35
+    except Exception:
+        pass
+
+    if _summ_model and _co is not None and _use_phi35 and content.strip():
+        # Sample head + tail (skip the middle) so API tables / signatures that
+        # live near the end of long docs still reach the summarizer.
+        _head = content[:4000]
+        _tail = content[-1500:] if len(content) > 4000 else ""
+        _sample = _head + ("\n...[middle truncated]...\n" + _tail if _tail else "")
+        if rel_path.endswith((".cpp", ".h", ".hpp")):
+            _system = (
+                "You are a code summarizer for a custom C++17/OpenGL game engine. "
+                "Summarize ONLY the architecture-relevant content of this file: the key "
+                "classes, public functions, and constants an agent must know to write "
+                "correct code against it. Be concise and accurate. Output under 250 "
+                "characters, plain text, no code blocks."
+            )
+        elif rel_path.endswith(".lua"):
+            _system = (
+                "You are a code summarizer for a Lua scripting layer in a custom game engine. "
+                "Summarize ONLY the architecture-relevant content of this file: the key "
+                "functions, lifecycle hooks, and patterns an agent must follow. Be concise "
+                "and accurate. Output under 250 characters, plain text, no code blocks."
+            )
+        else:
+            _system = (
+                "You are a document summarizer. Summarize ONLY the architecture-relevant "
+                "content of this file: the key rules, APIs, and constraints an agent must "
+                "obey. Be concise and accurate. Output under 250 characters."
+            )
+        try:
+            _res = _co(
+                _system,
+                f"## File: {rel_path}\n## Content (head + tail)\n```\n{_sample}\n```\n\n"
+                f"Summarize the architecture-relevant content.",
+                "VRAM Stub Summarizer",
+                _summ_model,
+                params={"num_predict": 120},
+                skip_pre_summarizer=True,
+            )
+            _res = (_res or "").strip()
+            if len(_res) > 30:
+                _summary = _res[:250]
+        except Exception:
+            _summary = ""
+
+    _final = _summary or _fallback
+    # Collapse whitespace and drop double quotes so the summary stays a safe
+    # XML attribute for the <VRAM_STUB ... /> pointer.
+    _final = " ".join(_final.split()).replace('"', "'")
+    _VRAM_STUB_SUMMARY_CACHE[_key] = _final
+    return _final
+
+
+def _make_vram_stub(rel_path: str, content: str, domain: str = "") -> str:
     """Build a <VRAM_STUB> pointer from file content for the Active Virtual Memory system.
 
-    Extracts the first non-empty line of the file as a summary (capped at 100 chars),
-    returning a lightweight pointer that the agent can PAGE_IN on demand.
+    The summary is a model-generated, concise, architecture-relevant description
+    of the file (domain-aware, cached), falling back to the first non-empty line
+    when the summarizer model is unavailable.  The agent can PAGE_IN the full
+    content on demand via the stub id.
     """
-    first_line = ""
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped:
-            first_line = stripped
-            break
-    if len(first_line) > 100:
-        first_line = first_line[:100] + "..."
-    return f'<VRAM_STUB id="{rel_path}" summary="{first_line}" />'
+    _summary = _summarize_file_for_stub(rel_path, content, domain)
+    return f'<VRAM_STUB id="{rel_path}" summary="{_summary}" />'
 
 
 # -- Autonomous File Reading ------------------------------------------------
@@ -486,7 +576,7 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
                 # VRAM-aware decision: stub or inject raw text
                 if (rel_path.startswith("docs/") or rel_path.startswith("GDD/")
                         or len(content) > 1500):
-                    stub = _make_vram_stub(rel_path, content)
+                    stub = _make_vram_stub(rel_path, content, domain=persona)
                     relevant.append((rel_path, stub))
                     print(f"  VRAM stub: {rel_path} ({len(content)} chars -> stub)")
                 else:
@@ -504,7 +594,7 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
                         # VRAM-aware: stub docs/ and large files; raw-inject only small src/attractions
                         if (rel.startswith("docs/") or rel.startswith("GDD/")
                                 or len(content) > 1500):
-                            stub = _make_vram_stub(rel, content)
+                            stub = _make_vram_stub(rel, content, domain=persona)
                             relevant.append((rel, stub))
                             print(f"  VRAM stub: {rel} ({len(content)} chars -> stub)")
                         else:

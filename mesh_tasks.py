@@ -1046,6 +1046,20 @@ def _enforce_one_anchor_per_task(ctx: PipelineContext) -> None:
         _target_path = (ctx.project_root / _tf).resolve()
         _content = build_skeleton_with_anchors(_target_path.stem, _extras)
         write_skeleton_content(_target_path, _content)
+        # -- Deterministic module-state injection (handles + primitives) --
+        # The Architect's design now declares primitive state + handles; inject
+        # them at module root HERE (pre-mesh, post-blueprint) so no task agent
+        # ever scopes a shared variable inside a lifecycle closure.
+        _design_state = getattr(ctx, 'attraction_design', None)
+        if _design_state is not None:
+            from _build_skeleton import inject_module_state
+            _handle_names = [getattr(_h, 'name', '') for _h in (getattr(_design_state, 'handles', None) or [])]
+            _handle_names = [str(_n).strip() for _n in _handle_names if _n and str(_n).strip()]
+            _state_vars = getattr(_design_state, 'module_state_variables', None) or []
+            _pool_keys = [str(_pk).strip() for _pk in (getattr(_design_state, 'pool_requirements', None) or {})]
+            _pool_keys = [_pk for _pk in _pool_keys if _pk]
+            _content = inject_module_state(_target_path, handles=_handle_names,
+                                           state_variables=_state_vars, pool_keys=_pool_keys)
         _rel = _tf.replace("\\", "/")
         ctx._anchor_baseline[_rel] = _content
         ctx._last_luac_clean_anchor[_rel] = _content
@@ -1105,6 +1119,18 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
     _target_abs = (_project_root / target_file).resolve()
     inject_skeleton(_target_abs, _target_abs.stem)
     print(f"  [Monolithic] Skeleton written: {_target_abs}")
+
+    # -- Deterministic module-state injection for the monolithic path too. --
+    _design_mono = getattr(ctx, 'attraction_design', None)
+    if _design_mono is not None:
+        from _build_skeleton import inject_module_state
+        _handle_names = [getattr(_h, 'name', '') for _h in (getattr(_design_mono, 'handles', None) or [])]
+        _handle_names = [str(_n).strip() for _n in _handle_names if _n and str(_n).strip()]
+        _pool_keys = [str(_pk).strip() for _pk in (getattr(_design_mono, 'pool_requirements', None) or {})]
+        _pool_keys = [_pk for _pk in _pool_keys if _pk]
+        inject_module_state(_target_abs, handles=_handle_names,
+                            state_variables=(getattr(_design_mono, 'module_state_variables', None) or []),
+                            pool_keys=_pool_keys)
 
     # -- Read current skeleton content (hardened) --
     # inject_skeleton() always writes above, so the file must exist.  Guard the

@@ -29,6 +29,20 @@ class EventEdge(BaseModel):
     owner_task: str = ""
 
 
+class StateVariable(BaseModel):
+    """A primitive module-level variable (counter, timer, flag, table, etc.).
+
+    Produced by the Architect Design Pass and injected at module root by the
+    deterministic Skeleton Builder so task agents never declare these
+    themselves (the #1 deadlock cause in the execution mesh).
+    """
+    name: str                          # exact snake_case Lua identifier
+    lua_type: str = "number"           # number | boolean | table | string | userdata
+    initial_value: Any = 0             # deterministic starting value (Lua literal)
+    description: str = ""              # why this state exists (from the GDD)
+    owner_task: str = ""               # DAG task id that primarily mutates this var
+
+
 class AttractionDesign(BaseModel):
     """
     Pre-decomposition design document produced by mesh_architect.py.
@@ -45,6 +59,7 @@ class AttractionDesign(BaseModel):
     economy_hooks: List[str] = Field(default_factory=list)     # e.g. ["AddScore", "SetMultiplier"]
     feature_checklist: List[str] = Field(default_factory=list) # plain-English features to verify
     task_anchors: List[Dict[str, str]] = Field(default_factory=list)  # [{task_id, hook, location}] for anchor-based patching
+    module_state_variables: List[StateVariable] = Field(default_factory=list)  # primitive state declared at module root
     raw_json: str = ""                                          # original LLM output preserved
 
     def to_context_block(self) -> str:
@@ -56,6 +71,13 @@ class AttractionDesign(BaseModel):
             parts.append("\n### Declared Handles")
             for h in self.handles:
                 parts.append(f"  {h.name} ({h.lua_type})  {h.description} [owner: {h.owner_task}, lifecycle: {h.lifecycle}]")
+        if self.module_state_variables:
+            parts.append("\n### Module State Variables (declared at module root by the skeleton builder)")
+            for sv in self.module_state_variables:
+                _iv = sv.initial_value
+                if isinstance(_iv, str):
+                    _iv = repr(_iv)
+                parts.append(f"  {sv.name} ({sv.lua_type}) = {_iv} - {sv.description} [task {sv.owner_task}]")
         if self.lifecycle_order:
             parts.append("\n### OnLoad Registration Order")
             for i, step in enumerate(self.lifecycle_order, 1):

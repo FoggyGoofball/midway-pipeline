@@ -41,17 +41,108 @@ def _flush_results_to_workspace(ctx: PipelineContext) -> None:
             atomic_write_text(target_path, clean_content)
 
     # Write individual task outputs, skipping any file covered by a merge.
+    #
+    # Per-anchor (chunked) mode: the real-time SEARCH/REPLACE patcher in
+    # _helpers_exec.py has ALREADY written the accumulated file to the real
+    # path.  The per-task entries in all_results_dict are FRAGMENTS (the raw
+    # SEARCH/REPLACE block each task emitted), NOT full files.  Flushing them
+    # here overwrites the accumulated result with the last task's snippet - the
+    # residual "revert-to-skeleton" failure (staged file shrank to a 189-char
+    # stub while the real file held ~19 KB).  Preserve the on-disk file and
+    # mirror it into staging instead of clobbering it with fragments.
+    _staging_active = False
+    try:
+        from _helpers_io import is_staging_active as _isa
+        _staging_active = bool(_isa())
+    except Exception:
+        _staging_active = False
+    _written_targets: set = set()
     for tid, content in ctx.all_results_dict.items():
         if tid.startswith("merged:"):
             continue  # already handled above
         task = ctx.task_map.get(tid)
-        if task and task.target_file:
-            if str(task.target_file).replace("\\", "/") in {p.replace("\\", "/") for p in merged_rel_paths}:
-                continue  # merged version takes priority
-            target_path = ctx.project_root / task.target_file
-            clean_content = _strip_search_replace_metadata(content)
+        if not task or not task.target_file:
+            continue
+        _tf_rel = str(task.target_file).replace("\\", "/")
+        if _tf_rel in {p.replace("\\", "/") for p in merged_rel_paths}:
+            continue  # merged version takes priority
+        if _tf_rel in _written_targets:
+            continue
+        target_path = ctx.project_root / task.target_file
+        # The accumulated file already exists on disk (written by the real-time
+        # patcher).  It is authoritative: mirror it into staging (if active) and
+        # do NOT overwrite it with a single task's fragment.
+        if target_path.is_file():
+            try:
+                _disk_content = target_path.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                _disk_content = ""
+            if _disk_content.strip():
+                _written_targets.add(_tf_rel)
+                if _staging_active:
+                    atomic_write_text(target_path, _disk_content)
+                continue
+        # Fallback: file does not exist on disk yet - write this task's content
+        # as the initial scaffold.
+        clean_content = _strip_search_replace_metadata(content)
+        if clean_content and clean_content.strip():
             target_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_text(target_path, clean_content)
+            _written_targets.add(_tf_rel)
+
+
+def _post_process_workspace_lua_files(ctx: PipelineContext) -> None:
+    """Deterministically post-process every on-disk .lua target file.
+
+    Runs the pure-Python fixes (bare-namespace prefixing, phantom-API cleanup,
+    duplicate-function stripping, comment-monologue collapsing, modifier-key
+    sanitizing) against the ACCUMULATED file after a flush.  This makes the
+    review loop see cleaned code every cycle instead of re-flagging the same
+    bare ``SetFriction()`` / ``MoveKinematic()`` calls until the circuit
+    breaker trips.  Idempotent and staging-aware.
+    """
+    try:
+        from _post_process_lua import post_process_lua_file
+        from _helpers_io import get_staging_path, is_staging_active
+    except Exception:
+        return
+
+    _staging = False
+    try:
+        _staging = bool(is_staging_active())
+    except Exception:
+        _staging = False
+
+    _targets: set = set()
+    for _rel in (getattr(ctx, 'merged_file_registry', {}) or {}).keys():
+        _targets.add(str(_rel).replace("\\", "/"))
+    for _t in (getattr(ctx, 'task_map', {}) or {}).values():
+        _tf = getattr(_t, 'target_file', '') or ''
+        if _tf:
+            _targets.add(str(_tf).replace("\\", "/"))
+
+    _seen: set = set()
+    for _rel in sorted(_targets):
+        if not _rel.endswith('.lua'):
+            continue
+        try:
+            _real = (ctx.project_root / _rel).resolve()
+            _path = (
+                get_staging_path(_real, project_root=ctx.project_root)
+                if _staging else _real
+            )
+        except Exception:
+            continue
+        if not _path.is_file():
+            continue
+        _pk = str(_path)
+        if _pk in _seen:
+            continue
+        _seen.add(_pk)
+        try:
+            post_process_lua_file(_path)
+        except Exception as _e:
+            print(f"  [Post-Process] ⚠ {_rel}: {_e}")
 
 
 def _strip_search_replace_metadata(content: str) -> str:
@@ -298,20 +389,21 @@ def _inject_empty_output_errors(ctx: PipelineContext) -> None:
                                 break
                         if not _fp_f0:
                             ctx.all_results.append({"task_id": tid, "output": _patched_content})
-                        for _otid, _otask in ctx.task_map.items():
-                            if _otid != tid and _otask.target_file == _task_obj.target_file:
-                                ctx.all_results_dict[_otid] = _patched_content
-                                _fp_f1 = False
-                                for _fp_i1, _fp_e1 in enumerate(ctx.all_results):
-                                    if _fp_e1.get("task_id") == _otid:
-                                        ctx.all_results[_fp_i1] = {"task_id": _otid, "output": _patched_content}
-                                        _fp_f1 = True
-                                        break
-                                if not _fp_f1:
-                                    ctx.all_results.append({"task_id": _otid, "output": _patched_content})
-                        # Write patched content to disk
-                        _target_path.parent.mkdir(parents=True, exist_ok=True)
-                        atomic_write_text(_target_path, _patched_content)
+                        # NOTE: The legacy "broadcast to sibling tasks" step is
+                        # removed.  In per-anchor mode each task owns its own
+                        # fragment (already applied by the real-time patcher);
+                        # overwriting siblings with this task's REPLACE content
+                        # made every task look identical and poisoned coverage /
+                        # reviewer signals (false "unfinished tasks").
+                        # Write patched content to disk ONLY when the target
+                        # file does not already exist.  In per-anchor mode the
+                        # real-time patcher has already applied this task's
+                        # SEARCH/REPLACE to the accumulated file; overwriting it
+                        # with the REPLACE-only snippet clobbers the whole file
+                        # (residual revert-to-skeleton bug).
+                        if not _target_path.is_file():
+                            _target_path.parent.mkdir(parents=True, exist_ok=True)
+                            atomic_write_text(_target_path, _patched_content)
                         print(f"  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to {_task_obj.target_file} via {tid}")
                         continue
             # Fall through if SR blocks couldn't be applied  do NOT throw

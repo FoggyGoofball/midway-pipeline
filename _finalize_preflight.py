@@ -41,6 +41,7 @@ from _preflight_helpers import (
     _is_comment_only,
     _task_has_code,
     _inject_empty_output_errors,
+    _post_process_workspace_lua_files,
 )  # noqa: F401
 
 def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
@@ -109,6 +110,107 @@ def _build_synthetic_scaffold(tid: str, domain: str, original_output: str) -> st
         )
 
     return TokenBudget._block_aware_collapse(_scaffold, 1500)
+
+
+def _task_requirements_brief(ctx, tid, task_obj, domain, broken_output) -> str:
+    """Ask a lightweight oracle model for a concise, accurate requirements
+    brief for a single task.  Used when the arch-fix has no clean anchor and
+    would otherwise emit a bare synthetic scaffold (a stub).  Cached per-run
+    on ctx so repeated fix cycles do not re-query the model.
+    """
+    _cache = getattr(ctx, '_task_brief_cache', None)
+    if _cache is None:
+        _cache = {}
+        ctx._task_brief_cache = _cache
+    _ck = (tid, domain)
+    if _ck in _cache:
+        return _cache[_ck]
+
+    _spec = getattr(task_obj, 'spec', '') or ''
+    _gdd = TokenBudget._block_aware_collapse(getattr(ctx, 'gdd_context', '') or '', 3000)
+    _bridge = ""
+    try:
+        from _finalize_review import build_fix_bridge_snippet as _bfbs
+        _bridge = TokenBudget._block_aware_collapse(_bfbs(ctx) or "", 1500)
+    except Exception:
+        _bridge = ""
+    _broken = TokenBudget._block_aware_collapse(broken_output or "", 1200)
+
+    _system = (
+        "You are a requirements oracle for a custom Lua game engine ('Midway to Nowhere'). "
+        "Given a task specification, summarize EXACTLY what that task must implement. "
+        "Be concise and accurate: list the concrete deliverables, the specific engine "
+        "APIs to use (only from the provided approved bridge list), and any "
+        "modifier/economy constraints. Do NOT write full code. Output a plain bulleted "
+        "brief under 900 characters."
+    )
+    _user = (
+        f"## Task Specification\n{_spec}\n\n"
+        f"## Approved Bridge APIs\n{_bridge or '(none provided)'}\n\n"
+        f"## GDD Context\n{_gdd or '(none provided)'}\n\n"
+        f"## Previous (broken) output for reference\n{_broken or '(none)'}\n\n"
+        f"Summarize what this task must implement, concisely and accurately."
+    )
+    _brief = ""
+    try:
+        from ollama_client import PRE_SUMMARIZER_MODEL as _summ_model
+        from ollama_client import USE_PHI35_ORACLES as _use_phi35
+        if not _use_phi35:
+            # VRAM guard: skip the phi3.5 oracle (default OFF) and fall back to
+            # a deterministic brief built from the task spec below.
+            print(f"  [Req Oracle] ⚠ phi3.5 oracle disabled — using deterministic brief for {tid}.")
+        else:
+            _res = call_ollama(
+                _system, _user, "Task Requirements Oracle", _summ_model,
+                params={"num_predict": 400},
+                skip_pre_summarizer=True,
+            )
+            if _res and len(_res.strip()) > 40:
+                # NOTE: do NOT use _block_aware_collapse here — the brief is a
+                # bulleted list with no markdown headers, and that function drops
+                # text with no structural blocks (returned "" -> "brief for task_N
+                # (0 chars)").  A plain truncation is correct for prose.
+                _brief = _res.strip()[:900]
+                print(f"  [Req Oracle] ✓ Requirements brief for {tid} ({len(_brief)} chars)")
+    except Exception as _e:
+        print(f"  [Req Oracle] ⚠ Failed to obtain brief for {tid}: {_e}")
+    if not _brief:
+        # Deterministic fallback: derive the brief from the task spec without
+        # any model call (avoids VRAM thrash and still beats a bare scaffold).
+        _spec_s = (_spec or "").strip()
+        if _spec_s:
+            _brief = _spec_s[:900]
+    _cache[_ck] = _brief
+    return _brief
+
+
+def _build_requirements_scaffold(ctx, tid, task_obj, domain, broken_output) -> str:
+    """Build an anchor scaffold for a task with no clean prior output.
+
+    Instead of a bare synthetic skeleton (which produced stubbed output every
+    cycle), ask the requirements oracle for a concise brief of what the task
+    needs and embed it as Lua comments above the minimal scaffold.  Falls back
+    to the plain synthetic scaffold when the oracle is unavailable or the
+    domain is not Lua.
+    """
+    _base = _build_synthetic_scaffold(tid, domain, broken_output)
+    if domain != "Lua":
+        return _base
+    _brief = _task_requirements_brief(ctx, tid, task_obj, domain, broken_output)
+    if not _brief:
+        return _base
+    _comment_brief = "\n".join("-- " + _ln for _ln in _brief.splitlines())
+    _banner = (
+        "-- ========== REQUIREMENTS BRIEF (oracle) ==========\n"
+        + _comment_brief
+        + "\n-- =================================================="
+    )
+    _marker = f'-- Minimal scaffold for {tid}'
+    if _marker in _base:
+        _base = _base.replace(_marker, _marker + "\n" + _banner, 1)
+    else:
+        _base = _banner + "\n\n" + _base
+    return _base
 
 
 def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
@@ -735,7 +837,10 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     # The dirty output contains violations that poisoned every
                     # previous fix cycle (Failure Mode 4). A synthetic scaffold
                     # gives the fix model valid structure to build on.
-                    _synthetic_scaffold = _build_synthetic_scaffold(_atid, domain, _aout)
+                    _task_obj_sc = ctx.task_map.get(_atid)
+                    _synthetic_scaffold = _build_requirements_scaffold(
+                        ctx, _atid, _task_obj_sc, domain, _aout
+                    )
                     _anchor_blocks.append(
                         f"### {_atid} [MINIMAL SYNTHETIC SCAFFOLD — extend this, do NOT discard]\n"
                         f"{_synthetic_scaffold}"
@@ -1296,6 +1401,15 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                     re.MULTILINE,
                                 )
                                 if domain == "Lua" and _bare_ns_re.search(_re_code):
+                                    # Deterministically prefix bare namespace calls
+                                    # instead of hard-rejecting (which cascades into
+                                    # fallback re-execution and the circuit breaker).
+                                    try:
+                                        from _post_process_lua import _add_midwayphysics_prefix as _prefix_ns
+                                        _re_code = _prefix_ns(_re_code)
+                                    except Exception:
+                                        pass
+                                if domain == "Lua" and _bare_ns_re.search(_re_code):
                                     print(f"  [Arch Fix] ⚠ Re-execution output for {tid} "
                                           f"({domain}) still contains bare namespace calls "
                                           f" rejecting and retaining previous output.")
@@ -1338,6 +1452,10 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
         ctx.pre_flight_errors = ""
         # Re-flush so patched task outputs (and invalidated merged keys) land on disk.
         _flush_results_to_workspace(ctx)
+        # Deterministically clean the accumulated file BEFORE re-running static
+        # checks so bare-namespace calls / phantom APIs / comment monologues are
+        # prefixed/removed this cycle instead of re-flagged forever.
+        _post_process_workspace_lua_files(ctx)
         _inject_empty_output_errors(ctx)
         _inject_static_pattern_errors(ctx)
         # Re-run the runtime simulator so runtime errors (nil-handle access,
@@ -1498,6 +1616,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             if ctx.pre_flight_errors:
                 ctx.pre_flight_errors = ""
                 _flush_results_to_workspace(ctx)
+                _post_process_workspace_lua_files(ctx)
                 _inject_empty_output_errors(ctx)
                 _inject_static_pattern_errors(ctx)
                 try:

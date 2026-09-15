@@ -30,6 +30,7 @@ from models import (
     AttractionDesign,
     HandleDeclaration,
     EventEdge,
+    StateVariable,
     IntegrationSchema,
     PipelineContext,
 )
@@ -64,6 +65,14 @@ ARCHITECT_SYSTEM = (
     '                       hook:    the literal anchor comment like "-- [TASK_3_INSERT_HOOK] -- physics / pool setup"\n'
     '                       location: where to insert in the scaffold like "inside OnLoad()",\n'
     '                                 "inside OnStep(dt)", "inside OnUnload()", or "at module root"\n\n'
+    '  "module_state_variables": array of {name, lua_type, initial_value, description, owner_task}\n'
+    '                       Every PRIMITIVE variable the game loop must persist across frames\n'
+    '                       (counters, timers, multipliers, cooldowns, flags, tables). These are\n'
+    '                       declared at MODULE ROOT by the deterministic skeleton builder - task\n'
+    '                       agents only reference them, never re-declare them. lua_type is one of\n'
+    '                       number | boolean | table | string. initial_value is a valid Lua\n'
+    '                       literal (0, false, {}, ""). Deduce them from the feature_checklist\n'
+    '                       and event_flow - one entry per persistent primitive.\n\n'
     "Rules:\n"
     "1. Only declare handles that are genuinely needed  do not invent extras.\n"
     "2. lifecycle_order must be complete enough that agents know what order to register.\n"
@@ -141,7 +150,12 @@ ARCHITECT_STRUCTURED_SYSTEM = (
     '  "economy_hooks"     : array of strings (economy API names needed)\n'
     '  "feature_checklist" : array of strings\n'
     '  "task_anchors"      : array of {task_id, hook, location}\n'
+    '  "module_state_variables" : array of {name, lua_type, initial_value, description, owner_task}\n'
     "Do NOT add any other top-level keys (no name, category, configuration, logic_flow, constraints, etc.).\n"
+    "DEDUCE module_state_variables FIRST: for every feature that tracks progress, timing, \n"
+    "cooldowns, streaks, wagers, or flags across frames, add one primitive entry with \n"
+    "a snake_case name and a concrete initial_value (0, false, {}, or \"\"). These are \n"
+    "declared at module root deterministically - never inside OnLoad/OnStep.\n"
     "Be CONCISE: keep the summary, every description, and every title to ONE short line. "
     "Do NOT pad, repeat, or invent extra placeholder entries. "
     "Return ONLY the JSON object — no prose, no markdown fences."
@@ -238,6 +252,17 @@ def _build_design_from_dict(data: dict, raw_json: str) -> AttractionDesign:
                 "location": str(a.get("location", "")),
             })
 
+    state_vars = []
+    for sv in data.get("module_state_variables") or []:
+        if isinstance(sv, dict) and sv.get("name"):
+            state_vars.append(StateVariable(
+                name=str(sv["name"]),
+                lua_type=str(sv.get("lua_type", "number")),
+                initial_value=sv.get("initial_value", 0),
+                description=str(sv.get("description", "")),
+                owner_task=str(sv.get("owner_task", "")),
+            ))
+
     return AttractionDesign(
         title=str(data.get("title") or ""),
         summary=str(data.get("summary") or ""),
@@ -248,6 +273,7 @@ def _build_design_from_dict(data: dict, raw_json: str) -> AttractionDesign:
         economy_hooks=[str(x) for x in (data.get("economy_hooks") or [])],
         feature_checklist=[str(x) for x in (data.get("feature_checklist") or [])],
         task_anchors=task_anchors,
+        module_state_variables=state_vars,
         raw_json=raw_json,
     )
 
@@ -320,7 +346,8 @@ def _try_structured_architect(prompt: str) -> Optional[AttractionDesign]:
 
         print(f"  [Architect] ✅ Structured design extracted: '{design.title}' "
               f"({len(design.handles)} handles, {len(design.event_flow)} event edges, "
-              f"{len(design.feature_checklist)} checklist items).")
+              f"{len(design.feature_checklist)} checklist items, "
+              f"{len(design.module_state_variables)} state vars).")
         return design.to_attraction_design()
     except Exception as e:
         print(f"  [Architect] ⚠ Structured extraction failed ({e}); falling back to legacy parser.")
@@ -414,7 +441,8 @@ def run_architect_pass(ctx: PipelineContext) -> PipelineContext:
 
         print(f"  [Architect] ✅ Design doc created: '{design.title}'")
         print(f"             {len(design.handles)} handles, {len(design.event_flow)} event edges, "
-              f"{len(design.feature_checklist)} checklist items")
+              f"{len(design.feature_checklist)} checklist items, "
+              f"{len(design.module_state_variables)} state vars")
 
         # Append the design summary to output_parts so it appears in the run log
         ctx.output_parts.append(

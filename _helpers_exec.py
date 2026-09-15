@@ -219,7 +219,15 @@ def _distill_gdd_for_task(task_spec: str, gdd_text: str,
     try:
         from ollama_client import call_ollama as _call_ollama
         from ollama_client import PRE_SUMMARIZER_MODEL as _SUMM_MODEL
+        from ollama_client import USE_PHI35_ORACLES as _USE_PHI35
     except ImportError:
+        return gdd_text
+
+    # VRAM guard: the distiller is a phi3.5 oracle.  When oracles are disabled
+    # (default) fall straight through to the deterministic pass-through so we
+    # never evict the resident coder model to load the mini model.
+    if not _USE_PHI35:
+        _GDD_DISTILL_CACHE[_cache_key] = gdd_text
         return gdd_text
 
     _attraction_clause = ""
@@ -404,12 +412,125 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
     # Delimiters are lenient ({5,7}) because small coder models often emit
     # 5-char "<<<<<" markers instead of the canonical 7-char conflict markers.
     pattern = r'<{5,7}\s*SEARCH\s*\n(.*?)\n\s*={5,7}\s*\n(.*?)\n\s*>{5,7}\s*REPLACE'
+    # A small coder sometimes re-emits a "corrected" copy of a block after a
+    # stray second "=======" (or "---====") separator.  A literal "=======" line
+    # is NOT valid Lua ("== == ==" is a syntax error) and was the root cause of
+    # the persistent "unexpected symbol near '=='" luac failures.  Split on any
+    # pure marker line and keep the FINAL segment (the corrected version).
+    _marker_line_re = re.compile(r'^\s*[<>=]{5,}\s*$')
     for match in re.finditer(pattern, output, re.DOTALL):
+        _search = match.group(1)
+        _replace = match.group(2)
+        _search_seg = re.split(r'^\s*[<>=]{5,}\s*$', _search, flags=re.MULTILINE)
+        _replace_seg = re.split(r'^\s*[<>=]{5,}\s*$', _replace, flags=re.MULTILINE)
+        if _search_seg:
+            _search = _search_seg[0].strip("\n")
+        if _replace_seg:
+            _replace = _replace_seg[-1].strip("\n")
+        _search = "\n".join(ln for ln in _search.splitlines()
+                             if not _marker_line_re.match(ln))
+        _replace = "\n".join(ln for ln in _replace.splitlines()
+                              if not _marker_line_re.match(ln))
+        # Skip degenerate blocks (nothing left on either side).
+        if not _search.strip() and not _replace.strip():
+            continue
         blocks.append({
-            "search": match.group(1),
-            "replace": match.group(2),
+            "search": _search,
+            "replace": _replace,
         })
     return blocks
+
+def _extract_lua_fence(output: str) -> str:
+    """Extract the largest fenced Lua code block from a model's output.
+
+    Returns the raw block content (without the ```lua fences) or an empty
+    string when no fenced block is present.
+    """
+    _fences = re.findall(
+        r'```(?:lua|luau)?\s*\n(.*?)```', output, re.DOTALL | re.IGNORECASE
+    )
+    if not _fences:
+        return ""
+    return max(_fences, key=len)
+
+
+def _apply_full_file_rewrite_via_diff(current: str, output: str) -> str:
+    """Convert a model full-file rewrite into a surgical patch against *current*.
+
+    The coder model frequently ignores the SEARCH/REPLACE mandate and emits an
+    entire file (or a fenced Lua block).  Rather than rejecting that output
+    every cycle (which forces a fallback re-execution and eventually trips the
+    circuit breaker), this helper diffs the proposed file against the current
+    on-disk content and applies only the CHANGED hunks, while preserving the
+    deterministic module-state block and any task anchor markers that the model
+    would otherwise clobber.
+
+    Returns the patched content, or ``current`` unchanged when the output is
+    not a diffable full-file rewrite.
+    """
+    if not current.strip() or not (output or "").strip():
+        return current
+
+    _proposed = _extract_lua_fence(output)
+    if not _proposed:
+        # No fence: only treat the raw output as a full file when it clearly
+        # contains the lifecycle/skeleton markers of a whole Lua module.
+        _raw = output.strip()
+        if (
+            'function OnLoadStatic' in _raw
+            or 'function OnLoad' in _raw
+            or 'AttractionConstants' in _raw
+            or 'SLOT_ID' in _raw
+        ):
+            _proposed = _raw
+        else:
+            return current
+
+    # Fragment guard: a true full-file rewrite is roughly file-sized.  A short
+    # fragment (one or two function bodies) would diff into a single massive
+    # "replace everything" hunk that deletes the rest of the file.  Reject it.
+    if len(_proposed) < int(len(current) * 0.5) and '-- [TASK_' not in _proposed:
+        return current
+
+    import difflib
+    _a = current.splitlines()
+    _b = _proposed.splitlines()
+    _sm = difflib.SequenceMatcher(a=_a, b=_b, autojunk=False)
+
+    # Protected lines: the deterministic module-state block and task anchors
+    # are owned by the skeleton builder / anchor invariant and must survive a
+    # full-file rewrite untouched.
+    _protected_re = re.compile(
+        r'^\s*--\s*\[TASK_\d+_INSERT_HOOK\]'
+        r'|DETERMINISTIC MODULE STATE'
+        r'|MODULE-LEVEL STATE'
+    )
+
+    _result: list[str] = []
+    _changed = False
+    for _tag, _i1, _i2, _j1, _j2 in _sm.get_opcodes():
+        if _tag == 'equal':
+            _result.extend(_a[_i1:_i2])
+        else:
+            _old_seg = _a[_i1:_i2]
+            if any(_protected_re.match(ln) for ln in _old_seg):
+                # Protected region: keep the current lines, discard the edit.
+                _result.extend(_old_seg)
+            else:
+                _result.extend(_b[_j1:_j2])
+                if _i1 != _i2 or _j1 != _j2:
+                    _changed = True
+
+    if not _changed:
+        return current
+
+    _merged = "\n".join(_result)
+    # Destructive-rewrite guard: never let a "patch" shrink the file to less
+    # than half its size — that means the proposed text was a fragment and the
+    # diff is deleting real code.
+    if len(_merged) < int(len(current) * 0.5):
+        return current
+    return _merged
 
 def _unwrap_json_code(output: str) -> str:
     """Unwrap deepseek-style JSON-wrapped code into plain code / SEARCH-REPLACE text.
@@ -883,22 +1004,49 @@ def execute_task(task, user_prompt: str, director_output: str,
                         # -- Shared handle contract: pin the exact handle names from
                         # the Architect design so tasks don't each invent their own
                         # (malletHandles vs mallet_kinematic vs bellHandle).
-                        _design_handle_contract = ""
+                        _design_state_contract = ""
                         try:
                             _design_obj = getattr(_stage_ctx, 'attraction_design', None)
                             _design_handles = getattr(_design_obj, 'handles', None) if _design_obj else None
                             _handle_names = [getattr(_h, 'name', '') for _h in (_design_handles or [])]
-                            _handle_names = [n.strip() for n in _handle_names if n and n.strip()]
+                            _handle_names = [str(n).strip() for n in _handle_names if n and str(n).strip()]
+                            _state_vars = getattr(_design_obj, 'module_state_variables', None) if _design_obj else None
+                            _pool_keys = [str(k).strip() for k in (getattr(_design_obj, 'pool_requirements', None) or {})]
+                            _pool_keys = [k for k in _pool_keys if k]
                         except Exception:
                             _handle_names = []
-                        if _handle_names:
-                            _design_handle_contract = (
-                                "\n## SHARED HANDLE CONTRACT (MANDATORY)\n"
-                                "These are the ONLY handle variable names for this attraction.\n"
-                                "They are declared at module scope by Task 1; reference these exact\n"
-                                "names. Do NOT invent new handle names (no malletHandles, bellHandle, etc.).\n"
-                                + "".join(f"- `{n}`\n" for n in _handle_names)
-                            )
+                            _state_vars = []
+                            _pool_keys = []
+                        if _handle_names or _state_vars or _pool_keys:
+                            _contract_lines = [
+                                "\n## SHARED STATE CONTRACT (MANDATORY)",
+                                "The module-level variables below are ALREADY declared at the file root",
+                                "by the deterministic skeleton builder. Reference them by exact name.",
+                                "Do NOT re-declare them with `local` inside OnLoad/OnStep/OnUnload.",
+                                "Do NOT invent new handle names (no malletHandles, bellHandle, etc.).",
+                            ]
+                            for _n in _handle_names:
+                                _contract_lines.append(f"- `{_n}`  (handle: already `local {_n} = nil` at module root)")
+                            for _sv in (_state_vars or []):
+                                _sv_name = _sv.get('name') if isinstance(_sv, dict) else getattr(_sv, 'name', '')
+                                _sv_name = str(_sv_name or '').strip()
+                                if _sv_name:
+                                    _sv_type = _sv.get('lua_type', 'number') if isinstance(_sv, dict) else getattr(_sv, 'lua_type', 'number')
+                                    _contract_lines.append(f"- `{_sv_name}`  ({_sv_type}: already declared at module root)")
+                            if _pool_keys:
+                                _contract_lines.append(
+                                    "\nPOOLED ENTITY CONVENTION: each pooled entity has a POOL NAME string "
+                                    "constant (`<name>_pool`, already declared at module root) and an ACTIVE "
+                                    "instance HANDLE (`<name>`, nil until acquired). Never treat the pool name "
+                                    "and the active handle as the same variable."
+                                )
+                                for _pk in _pool_keys:
+                                    _contract_lines.append(
+                                        f"  - pool name = `{_pk}_pool` (string); active handle = `{_pk}` (nil until acquired). "
+                                        f"Acquire: `{_pk} = MidwayPhysics.PoolAcquire({_pk}_pool, x, y, z)`. "
+                                        f"Return: `MidwayPhysics.PoolReturn({_pk}_pool, {_pk})`."
+                                    )
+                            _design_state_contract = "\n" + "\n".join(_contract_lines)
                         _stage_block = (
                             f"\n\n## ⚡ CURRENT ON-DISK STATE: {task.target_file}\n"
                             f"Relevant region around your anchor marker:\n"
@@ -910,9 +1058,12 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"you only fill this anchor.\n"
                             f"- Do NOT redefine `function OnLoadStatic/OnLoad/OnStep/OnUnload`.\n"
                             f"- Do NOT copy other tasks' code, other anchors, or surrounding file content.\n"
+                            f"- Comments must be ONE short line max. NEVER write essays/chain-of-thought "
+                            f"inside comments. If a requirement seems contradictory, implement the "
+                            f"most literal reading and do NOT argue in comments.\n"
                             f"- SEARCH is exactly the one anchor line; REPLACE is your "
                             f"implementation (a few lines) + the anchor re-inserted at the end.\n"
-                            f"{_design_handle_contract}"
+                            f"{_design_state_contract}"
                             f"Output EXACTLY ONE block:\n"
                             f"<<<<<<< SEARCH\n"
                             f"    {_anchor_marker}\n"
@@ -1294,6 +1445,22 @@ def execute_task(task, user_prompt: str, director_output: str,
                     for _block in _blocks:
                         _search_text = _block.get("search", "")
                         _replace_text = _block.get("replace", "")
+                        # ── Lifecycle-redefinition guard ─────────────────────
+                        # The skeleton already defines OnLoadStatic/OnLoad/OnUnload
+                        # and registers OnStep. A per-anchor task that re-defines
+                        # them (e.g. a stale "scaffold the whole file" Task 1)
+                        # would duplicate the hooks and make every later luac
+                        # snapshot dirty. Refuse such blocks.
+                        _redef_m = re.search(
+                            r'(?m)^\s*(?:local\s+)?function\s+'
+                            r'(OnLoadStatic|OnLoad|OnStep|OnUnload)\s*\(',
+                            _replace_text,
+                        )
+                        if _redef_m:
+                            print(f"  [Anchor Guard] ⛔ {task.task_id} REPLACE redefines "
+                                  f"'{_redef_m.group(1)}' — skipping block (lifecycle already "
+                                  f"provided by the skeleton)")
+                            continue
                         # Use fuzzy matching (exact -> normalized -> sliding window)
                         _new_content = _fuzzy_apply_patch(_file_content, _search_text, _replace_text)
                         if _new_content != _file_content:
@@ -1367,18 +1534,42 @@ def execute_task(task, user_prompt: str, director_output: str,
                             )
                             _tmp_luac.write(_file_content)
                             _tmp_luac.close()
-                            _luac_snap_proc = _sp_luac_snap.run(
-                                ["luac", "-p", _tmp_luac.name], capture_output=True, text=True, timeout=20
-                            )
-                            _os_luac_snap.unlink(_tmp_luac.name)
-                            if _luac_snap_proc.returncode == 0:
+                            _luac_ok = False
+                            try:
+                                _luac_snap_proc = _sp_luac_snap.run(
+                                    ["luac", "-p", _tmp_luac.name],
+                                    capture_output=True, text=True, timeout=20
+                                )
+                                _luac_ok = (_luac_snap_proc.returncode == 0)
+                            except FileNotFoundError:
+                                # luac not on PATH: accept the patch (it came from a
+                                # successful SEARCH/REPLACE application) so the baseline
+                                # still advances instead of pinning to the skeleton.
+                                _luac_ok = True
+                            if _luac_ok:
                                 from pipeline import _CTX as _snap_ctx
                                 if _snap_ctx is not None:
                                     _snap_map = getattr(_snap_ctx, '_last_luac_clean_anchor', None)
                                     if _snap_map is not None:
-                                        _snap_map[task.target_file] = _file_content
+                                        _snap_key = task.target_file.replace("\\", "/")
+                                        _snap_map[_snap_key] = _file_content
+                                        print(f"  [Snapshot] ✓ luac-clean baseline updated for "
+                                              f"{_snap_key} ({len(_file_content)} chars)")
+                                    else:
+                                        print(f"  [Snapshot] ⚠ _last_luac_clean_anchor missing on "
+                                              f"ctx — baseline NOT updated")
+                                else:
+                                    print(f"  [Snapshot] ⚠ pipeline._CTX is None — baseline NOT "
+                                          f"updated")
+                            else:
+                                print(f"  [Snapshot] ⚠ post-patch file not luac-clean for "
+                                      f"{task.target_file} — baseline retained at last-clean state")
+                            try:
+                                _os_luac_snap.unlink(_tmp_luac.name)
+                            except Exception:
+                                pass
                         except Exception as _snap_e:
-                            pass
+                            print(f"  [Snapshot] ⚠ snapshot update failed: {_snap_e}")
                     elif not _apply_target.is_file() and len(_blocks) == 0:
                         # No blocks at all and file doesn't exist - write full output
                         _apply_target.parent.mkdir(parents=True, exist_ok=True)

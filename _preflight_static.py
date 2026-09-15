@@ -523,7 +523,8 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                             "SpawnSensorBox":       "lx, ly, lz, w, h, d",
                             "SpawnSensorSphere":    "lx, ly, lz, radius",
                         }
-                        _pos_hint = _POS_LABELS.get(_fn_name, f"{_min_exp}{_max_exp} positional args")
+                        _pos_hint = _POS_LABELS.get(_fn_name, f"{_min_exp}..{_max_exp} positional args")
+                        _fg_patched = False
                         # ── Fix G: Deterministic auto-patch ──────────────────────
                         # Instead of relying on the LLM fix loop (which wastes 4 cycles
                         # repeatedly getting arg counts wrong), apply a DIRECT string
@@ -588,6 +589,8 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                             _new_content_g = _old_content_g.replace(_bad_call_raw, _corrected_call, 1)
                             if _new_content_g != _old_content_g:
                                 ctx.all_results_dict[tid] = _new_content_g
+                                _fg_patched = True
+                                content = _new_content_g
                                 _fg_found = False
                                 for _fg_i, _fg_e in enumerate(ctx.all_results):
                                     if _fg_e.get("task_id") == tid:
@@ -606,10 +609,13 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                                     pass
                         # ── End Fix G ─────────────────────────────────────────────
 
+                        if _fg_patched:
+                            continue
+
                         ctx.pre_flight_errors += (
                             f"\n## Static Pattern Violation  Task {tid} [Lua]\n"
                             f"**Rule:** MidwayPhysics.{_fn_name} wrong argument count "
-                            f"(got {_actual}, expected {_min_exp}{_max_exp})\n"
+                            f"(got {_actual}, expected {_min_exp}..{_max_exp})\n"
                             f"**Why this is always wrong:** Wrong argument count causes a "
                             f"runtime error or silent incorrect physics.\n"
                             f"**Required call signature:** "
@@ -622,7 +628,7 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                             f"or MidwayPhysics.{_fn_name}(handle, ...).\n"
                             f"Fix this before the reviewer sees the code.\n"
                         )
-                        print(f"  [Static Guard] ❌ Task {tid} [Lua]: {_fn_name} arg count {_actual}≠{_min_exp}{_max_exp}")
+                        print(f"  [Static Guard] ❌ Task {tid} [Lua]: {_fn_name} arg count {_actual}≠{_min_exp}..{_max_exp}")
 
         # ── C9: Contract-driven API validation ────────────────────────────────
         # Instead of a growing blacklist of known-bad names, we validate
@@ -874,3 +880,79 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                     f"Fix this before the reviewer sees the code.\n"
                 )
                 print(f"  [Static Guard] ❌ Task {tid} [Lua]: Engine.GetStreak() polled at module level")
+
+        # ── C19: Pre-registered module state re-declared by a task ───────────
+        # The Skeleton Builder deterministically declares the Architect's handles
+        # + module_state_variables at file root.  A task that writes `local <name>`
+        # again (inside a function, or as a duplicate at root) shadows the
+        # module-level declaration — the #1 deadlock cause in the execution mesh.
+        if domain == "Lua":
+            _design_c19 = getattr(ctx, 'attraction_design', None)
+            _predeclared: set = set()
+            if _design_c19 is not None:
+                for _h in (getattr(_design_c19, 'handles', None) or []):
+                    _hn = getattr(_h, 'name', '')
+                    if _hn:
+                        _predeclared.add(str(_hn).strip())
+                for _sv in (getattr(_design_c19, 'module_state_variables', None) or []):
+                    _sn = getattr(_sv, 'name', '')
+                    if _sn:
+                        _predeclared.add(str(_sn).strip())
+            if _predeclared:
+                _state_depth = 0
+                _state_decls: dict = {}  # name -> [depths where `local name` appears]
+                for _sln in _file_content.splitlines():
+                    _sclean = re.sub(r'--.*$', '', _sln).strip()
+                    if not _sclean:
+                        continue
+                    _is_open = bool(
+                        re.search(r'\bfunction\b', _sclean)
+                        or re.match(r'\b(do|if|for|while|repeat)\b', _sclean)
+                    )
+                    _is_close = bool(
+                        re.match(r'\bend\b', _sclean)
+                        or re.match(r'\buntil\b', _sclean)
+                    )
+                    if not _is_open:
+                        _loc_m = re.search(
+                            r'\blocal\s+([A-Za-z_]\w*)\s*(?:=|---|$)', _sclean
+                        )
+                        if _loc_m and _loc_m.group(1) in _predeclared:
+                            _state_decls.setdefault(_loc_m.group(1), []).append(_state_depth)
+                    if _is_open:
+                        _state_depth += 1
+                    if _is_close:
+                        _state_depth = max(0, _state_depth - 1)
+                for _pre_name in sorted(_predeclared):
+                    _depths = _state_decls.get(_pre_name)
+                    if not _depths:
+                        continue  # never re-declared — canonical declaration is present
+                    _non_root = any(d > 0 for d in _depths)
+                    _dup_count = len(_depths)
+                    if not _non_root and _dup_count <= 1:
+                        continue  # the single canonical module-root declaration
+                    _dedup_key = (
+                        "lua:state_redeclare", _pre_name,
+                        getattr(task_obj, 'target_file', None) or tid,
+                    )
+                    if _dedup_key in _reported:
+                        continue
+                    _reported.add(_dedup_key)
+                    if _non_root:
+                        _why = ("declared inside a function (not at module root) — it will be "
+                                "re-initialized every frame and be nil in OnUnload")
+                        _fix = (f"remove the `local` keyword and assign to the module-level "
+                                f"`{_pre_name}` instead")
+                    else:
+                        _why = ("declared more than once — it is already declared at module root "
+                                "by the skeleton builder")
+                        _fix = f"remove the duplicate `local {_pre_name}` declaration"
+                    ctx.pre_flight_errors += (
+                        f"\n## Static Pattern Violation  Task {tid} [Lua]\n"
+                        f"**Rule:** pre-registered variable `{_pre_name}` re-declared ({_dup_count}×)\n"
+                        f"**Why this is always wrong:** {_why}.\n"
+                        f"**How to fix:** {_fix}.\n"
+                        f"Fix this before the reviewer sees the code.\n"
+                    )
+                    print(f"  [Static Guard] ❌ Task {tid} [Lua]: `{_pre_name}` re-declared "
+                          f"(module-level state already exists)")

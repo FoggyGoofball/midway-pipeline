@@ -7,10 +7,21 @@ unaffected.
 """
 
 from __future__ import annotations
+import os
 import time
 
 # -- Configuration
 OLLAMA_HOST: str = "http://192.168.0.16:11434"
+
+# -- Lightweight oracle gate ------------------------------------------------
+# The phi3.5 mini model is used by three "oracle" helpers (VRAM stub
+# summarizer, task requirements brief, GDD distiller).  Each invocation forces
+# Ollama to evict the resident 9B coder (7.9 GB) to load phi3.5 (8.5 GB) and
+# then evict it again — on a 12 GB Steam Deck this thrashes VRAM and pushes
+# time-to-first-token past 130 s.  Default to OFF (deterministic fallbacks) so
+# the pipeline stops swapping; set MIDWAY_PHI35_ORACLES=1 to re-enable the
+# model-generated summaries/briefs.
+USE_PHI35_ORACLES: bool = os.environ.get("MIDWAY_PHI35_ORACLES", "1") == "1"
 
 # -- Model Names
 CODER_MODEL: str = "qwen3.5:9b"  # best SEARCH/REPLACE instruction-follower at this size (6.1GB)

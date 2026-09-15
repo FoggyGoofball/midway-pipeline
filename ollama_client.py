@@ -66,6 +66,41 @@ _stream_crashed: bool = False  # Directive D: flag set to True when socket drops
 _last_model_call_ts: float = 0.0  # wall-clock of the last streamed call (cooldown pacing)
 
 
+def _wait_for_ollama(label: str, max_wait: float = 300.0, poll_interval: float = 15.0) -> bool:
+    """Block and poll /api/tags until the Ollama server is reachable again.
+
+    The Steam Deck Wi-Fi / Ollama runner periodically goes offline mid-run
+    (WinError 10060 / socket drops) and can stay down for minutes.  Burning
+    the retry budget into a dead server just cascades task failures, so we
+    wait for recovery before retrying instead.
+
+    Returns True when reachable, False after max_wait elapses.
+    Tune via MIDWAY_OLLAMA_WAIT_SECONDS / MIDWAY_OLLAMA_POLL_SECONDS.
+    """
+    import os as _os_wait
+    _max = float(_os_wait.environ.get("MIDWAY_OLLAMA_WAIT_SECONDS", str(max_wait)) or max_wait)
+    _poll = float(_os_wait.environ.get("MIDWAY_OLLAMA_POLL_SECONDS", str(poll_interval)) or poll_interval)
+    _deadline = time.time() + _max
+    _announced = False
+    while time.time() < _deadline:
+        try:
+            with urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=5.0) as _resp:
+                _resp.read(1)
+            print(f"\n  [Ollama Watchdog] OK: {label}: Ollama is reachable again.")
+            sys.stdout.flush()
+            return True
+        except Exception:
+            if not _announced:
+                print(f"\n  [Ollama Watchdog] WAIT: {label}: Ollama unreachable - waiting for it "
+                      f"to come back (up to {_max:.0f}s, polling every {_poll:.0f}s)...")
+                _announced = True
+            sys.stdout.flush()
+            time.sleep(_poll)
+    print(f"\n  [Ollama Watchdog] FAIL: {label}: Ollama still unreachable after {_max:.0f}s.")
+    sys.stdout.flush()
+    return False
+
+
 def _cooldown_and_retry(
     exception: Exception,
     system: str, user: str, label: str, model: str,
@@ -97,12 +132,21 @@ def _cooldown_and_retry(
     print(f"  Retry attempt: {_retry_counter['attempt']}")
     print("=" * 60)
 
-    # 2. VRAM cooldown
+    # 2. Wait for Ollama to come back.  A socket drop mid-stream is usually
+    #    a server outage on the Steam Deck (WinError 10060), not a transient
+    #    blip - retrying immediately would just hit the same dead server.
+    if not _wait_for_ollama(label, max_wait=120.0, poll_interval=10.0):
+        msg = f"[FATAL] Ollama unreachable after recovery wait for '{label}' -- giving up."
+        print(f"  {msg}")
+        yield msg
+        return
+
+    # 3. VRAM cooldown
     cooldown = 5.0
     print(f"  [VRAM Cooldown] Sleeping for {cooldown}s to allow thermal dissipation...")
     time.sleep(cooldown)
 
-    # 3. Decrement temperature (floor 0.1)
+    # 4. Decrement temperature (floor 0.1)
     current_temp = _retry_counter["temperature"]
     new_temp = max(0.1, current_temp - 0.1)
     _retry_counter["temperature"] = new_temp
@@ -111,7 +155,7 @@ def _cooldown_and_retry(
     retry_params = dict(params or {})
     retry_params["temperature"] = new_temp
 
-    # 4. Single automatic retry
+    # 5. Single automatic retry
     if _retry_counter["attempt"] >= 2:
         global _stream_crashed
         _stream_crashed = True
@@ -296,7 +340,7 @@ from ollama_config import (
     EXECUTION_MODEL, REASONING_MODEL, MODEL, DIRECTOR_MODEL,
     MAX_TOKENS, KEEP_ALIVE, _MODEL_CTX_PRECEDENCE, resolve_ctx_size,
     _TPS_BASELINE, _TPS_WINDOW_SEC, _TPS_WINDOW_TOKENS, _TPS_MIN_STREAM_SEC,
-    _TpsWatchdog,
+    _TpsWatchdog, USE_PHI35_ORACLES,
 )
 from ollama_config import VramOverrunError as _VramOverrunErrorBase
 # -- unload_model and is_fatal_ollama_error live in ollama_extras
@@ -742,20 +786,20 @@ def call_ollama_streamed(
             _url_attempt = getattr(_run_stream_cycle, '_url_retry_count', 0) + 1
             _run_stream_cycle._url_retry_count = _url_attempt
             _MAX_URL_RETRIES = 3
-            _RETRY_DELAYS = [10, 20, 40]  # seconds
             if _url_attempt <= _MAX_URL_RETRIES:
-                _delay = _RETRY_DELAYS[_url_attempt - 1]
                 print(f"\n  [Network Retry] ⚠ URLError for '{label}' (attempt {_url_attempt}/{_MAX_URL_RETRIES}): {e.reason}")
-                print(f"  [Network Retry] Waiting {_delay}s before retry...")
                 sys.stdout.flush()
-                time.sleep(_delay)
-                yield from _run_stream_cycle(payload_override=payload_override, cycle_label=cycle_label)
-            else:
-                _run_stream_cycle._url_retry_count = 0
-                msg = f"[SYSTEM ERROR: OLLAMA TIMEOUT] Could not reach Ollama at {OLLAMA_HOST} after {_MAX_URL_RETRIES} retries: {e.reason}"
-                print(f"\n  [Network Retry] ❌ All {_MAX_URL_RETRIES} retries exhausted for '{label}'. Task marked FAILED.")
-                sys.stdout.flush()
-                yield msg
+                # Wait for Ollama to come back instead of a fixed 10/20/40s
+                # backoff.  The Steam Deck can stay offline for minutes; a
+                # blind retry just hits the same dead server and cascades.
+                if _wait_for_ollama(label):
+                    yield from _run_stream_cycle(payload_override=payload_override, cycle_label=cycle_label)
+                    return
+            _run_stream_cycle._url_retry_count = 0
+            msg = f"[SYSTEM ERROR: OLLAMA TIMEOUT] Could not reach Ollama at {OLLAMA_HOST}: {e.reason}"
+            print(f"\n  [Network Retry] ❌ Ollama unreachable after recovery wait for '{label}'. Task marked FAILED.")
+            sys.stdout.flush()
+            yield msg
         except Exception as e:
             msg = f"[ERROR] {e}"
             print(msg)

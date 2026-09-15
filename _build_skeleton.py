@@ -280,6 +280,227 @@ def validate_skeleton(content: str) -> list[str]:
     return missing
 
 
+# ─── Deterministic Module-State Injection ───────────────────────────────────
+# The Architect design doc now carries a ``module_state_variables`` array plus
+# a ``handles`` array.  This section renders those into Lua ``local``
+# declarations and injects them at the absolute module root — BEFORE any
+# lifecycle function — so the execution mesh never has to invent or scope a
+# shared variable.  This is the deterministic handoff that removes variable
+# scoping from the LLM entirely.
+
+_LUA_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+# Lua 5.4 reserved words — a state var must never collide with these.
+_LUA_KEYWORDS = frozenset({
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
+    "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return",
+    "then", "true", "until", "while",
+})
+
+
+def _lua_identifier(name: object) -> str:
+    """Return a valid Lua identifier for *name*, sanitizing invalid characters.
+
+    Reserved words are prefixed with ``_`` so an Architect that emits ``end``
+    or ``local`` as a state name cannot produce a syntax error.
+    """
+    raw = str(name or "").strip()
+    if not raw:
+        return ""
+    if not _LUA_IDENT_RE.match(raw):
+        cleaned = re.sub(r"[^A-Za-z0-9_]", "_", raw)
+        if not cleaned or cleaned[0].isdigit():
+            cleaned = "var_" + cleaned
+        raw = cleaned
+    if raw in _LUA_KEYWORDS:
+        return "_" + raw
+    return raw
+
+
+def _coerce_lua_initial(lua_type: str, initial_value: object) -> str:
+    """Coerce a JSON initial value into a valid Lua literal string."""
+    t = (lua_type or "").strip().lower()
+
+    def _default_for(_t: str) -> str:
+        if _t in ("number", "float", "integer", "int", "double"):
+            return "0"
+        if _t in ("boolean", "bool"):
+            return "false"
+        if _t == "table":
+            return "{}"
+        if _t == "string":
+            return '""'
+        return "nil"
+
+    if initial_value is None:
+        return _default_for(t)
+    # bool first: isinstance(True, int) is True, so check booleans up front.
+    if isinstance(initial_value, bool):
+        return "true" if initial_value else "false"
+    if isinstance(initial_value, (int, float)):
+        if t in ("boolean", "bool"):
+            return "true" if initial_value else "false"
+        if t == "string":
+            return '"' + str(initial_value) + '"'
+        return repr(initial_value)
+    if isinstance(initial_value, (dict, list)):
+        return "{}"
+    if isinstance(initial_value, str):
+        s = initial_value.strip()
+        if s == "":
+            return _default_for(t)
+        if t == "string":
+            return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        if s in ("true", "false", "nil"):
+            return s
+        if s == "{}" or s.startswith("{"):
+            return s
+        try:
+            float(s)
+            return s
+        except ValueError:
+            return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return "nil"
+
+
+def _state_comment_suffix(description: str, owner_task: str) -> str:
+    parts = []
+    if owner_task:
+        parts.append(f"task {owner_task}")
+    if description:
+        parts.append(str(description).replace("\n", " ").strip())
+    if not parts:
+        return ""
+    text = " ".join(parts).strip()
+    return f"  -- {text}" if text else ""
+
+
+def render_module_state_block(handles: list | None = None,
+                              state_variables: list | None = None,
+                              pool_keys: list | None = None) -> str:
+    """Render module-level ``local`` declarations for handles + primitive state.
+
+    Accepts either dicts or objects exposing ``.name`` / ``.lua_type`` /
+    ``.initial_value`` / ``.description`` / ``.owner_task`` attributes.
+    For every pooled entity key a dedicated POOL NAME string constant
+    (``<key>_pool = "<key>"``) is declared alongside the active handle so
+    tasks never conflate the pool name with the live instance handle.
+
+    Returns an empty string when there is nothing to declare.
+    """
+    lines: list[str] = []
+    seen: set[str] = set()
+
+    def _emit(name: str, decl: str) -> None:
+        if name and name not in seen:
+            seen.add(name)
+            lines.append(decl)
+
+    for h in handles or []:
+        if isinstance(h, str):
+            name = _lua_identifier(h)
+        elif isinstance(h, dict):
+            name = _lua_identifier(h.get("name"))
+        else:
+            name = _lua_identifier(getattr(h, "name", None))
+        if not name:
+            continue
+        _emit(name, f"local {name} = nil  -- physics handle (spawned in OnLoadStatic/OnLoad)")
+
+    for pk in pool_keys or []:
+        pk_name = _lua_identifier(str(pk))
+        if not pk_name:
+            continue
+        # Pooled entities get a string constant holding the pool NAME so tasks
+        # can call PoolAcquire(puck_dynamic_pool, ...) without inventing their
+        # own pool name strings. The active instance handle remains the bare
+        # handle name (e.g. `puck_dynamic`), NOT `active_puck_dynamic`.
+        _emit(f"{pk_name}_pool",
+              f'local {pk_name}_pool = "{pk_name}"  -- pool name string (PoolAcquire/PoolReturn)')
+
+    for sv in state_variables or []:
+        if isinstance(sv, dict):
+            name = _lua_identifier(sv.get("name", ""))
+            lua_type = sv.get("lua_type", "number")
+            initial = sv.get("initial_value")
+            desc = sv.get("description", "")
+            owner = sv.get("owner_task", "")
+        else:
+            name = _lua_identifier(getattr(sv, "name", ""))
+            lua_type = getattr(sv, "lua_type", "number")
+            initial = getattr(sv, "initial_value", None)
+            desc = getattr(sv, "description", "")
+            owner = getattr(sv, "owner_task", "")
+        if not name:
+            continue
+        value = _coerce_lua_initial(lua_type, initial)
+        _emit(name, f"local {name} = {value}{_state_comment_suffix(desc, owner)}")
+
+    if not lines:
+        return ""
+    return (
+        "-- ─── DETERMINISTIC MODULE STATE (injected by Skeleton Builder) ──\n"
+        + "\n".join(lines)
+        + "\n"
+    )
+
+
+def _insert_state_block(content: str, block: str) -> str:
+    """Insert *block* at the module root of *content*."""
+    # Preferred: immediately above the module-state anchor so declarations sit
+    # at module root, right where the skeleton's MODULE-LEVEL STATE header points.
+    marker = "-- [TASK_1_INSERT_HOOK]"
+    idx = content.find(marker)
+    if idx != -1:
+        line_start = content.rfind("\n", 0, idx) + 1
+        return content[:line_start] + block + content[line_start:]
+
+    # Fallback 1: immediately after the constants table declaration.
+    marker = "local CONST = {}"
+    idx = content.find(marker)
+    if idx != -1:
+        line_end = content.find("\n", idx)
+        if line_end == -1:
+            line_end = len(content)
+        return content[:line_end + 1] + "\n" + block + content[line_end + 1:]
+
+    # Fallback 2: prepend at the very top.
+    return block + "\n" + content
+
+
+def inject_module_state(target_path: Path,
+                        handles: list | None = None,
+                        state_variables: list | None = None,
+                        pool_keys: list | None = None) -> str:
+    """Deterministically inject module-level state declarations into *target_path*.
+
+    Reads the file, renders ``local`` declarations for the given handles,
+    primitive state variables, and pooled-entity pool-name string constants,
+    inserts them at the module root, writes the file back, and returns the
+    final content (so callers can refresh their revert-on-regression baselines).
+
+    Returns the unchanged content (without writing) when there is nothing to
+    inject or the file is missing.
+    """
+    if not target_path.is_file():
+        return ""
+    block = render_module_state_block(handles, state_variables, pool_keys)
+    if not block:
+        return target_path.read_text(encoding="utf-8", errors="replace")
+
+    content = target_path.read_text(encoding="utf-8", errors="replace")
+    # Avoid double-injection on re-entrant calls (blueprint continuation).
+    if block.splitlines()[0] in content:
+        return content
+    new_content = _insert_state_block(content, block)
+    if new_content != content:
+        target_path.write_text(new_content, encoding="utf-8")
+        print(f"  [Skeleton Builder] 🧬 Injected {len(handles or [])} handle(s) + "
+              f"{len(state_variables or [])} state var(s) + "
+              f"{len(pool_keys or [])} pool name(s) at module root of {target_path}")
+    return new_content
+
+
 # ─── CLI entry point ─────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

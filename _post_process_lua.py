@@ -411,9 +411,13 @@ def _add_midwayphysics_prefix(content: str) -> str:
     # Negative lookahead: not a Lua keyword or local function def
     for symbol in sorted(symbols, key=len, reverse=True):
         # Pattern: bare call like `SpawnDynamicSphere(lx, ly, lz, r)`
-        # Not preceded by MidwayPhysics., not part of a larger identifier
+        # Not preceded by MidwayPhysics., not part of a larger identifier, and
+        # NOT a function DEFINITION (`function SetFriction(` / `local function
+        # OnStep(`) — prefixing a definition corrupts it into
+        # `function MidwayPhysics.SetFriction(` which is never what we want.
         pattern = re.compile(
-            r'(?<!MidwayPhysics\.)(?<!\.)(?<![\w.])\b'
+            r'(?<!MidwayPhysics\.)(?<!\.)(?<![\w.])'
+            r'(?<!function\s)(?<!local\s)\b'
             + re.escape(symbol)
             + r'\s*\('
         )
@@ -775,6 +779,74 @@ def _auto_declare_handles(content: str) -> str:
     return content
 
 
+def _strip_comment_monologues(content: str) -> str:
+    """Collapse long runs of prose comment-only lines into a single line.
+
+    The coder model sometimes enters "analysis paralysis" and writes multi-line
+    essays INSIDE Lua comments arguing with the spec instead of writing code
+    (e.g. a ~50-line debate about whether SetLinearVelocity can "teleport").
+    These monologues bloat the accumulated file, trip the reviewer, and crowd
+    out real code.  Deterministically collapse any run of 5+ consecutive
+    comment-only lines (none of which are structural markers) to one line.
+
+    Structural markers (separators, task anchors, TODO markers, module-state
+    headers, lifecycle-section headers, generated declaration comments) are
+    preserved verbatim so the skeleton/anchor machinery keeps working.
+    """
+    _KEEP_RE = re.compile(
+        r'^--\s*('
+        r'[─━═┌┐└┘│╌]+'             # box-drawing / separator headers
+        r'|\[TASK_'                 # -- [TASK_N_INSERT_HOOK] anchors
+        r'|TODO'                    # -- TODO [TASK_N]: ...
+        r'|DETERMINISTIC MODULE STATE'
+        r'|MODULE-LEVEL STATE'
+        r'|Slot identity'
+        r'|OnLoadStatic'
+        r'|OnLoad\b'
+        r'|OnStep\b'
+        r'|OnUnload\b'
+        r'|\[phantom removed'
+        r'|auto-declared'
+        r'|physics handle'
+        r'|pool name'
+        r'|spawned in'
+        r'|pool name string'
+        r')'
+    )
+
+    lines = content.splitlines()
+    result: list[str] = []
+    _run: list[int] = []  # indices of the current consecutive comment-only run
+    _removed = 0
+
+    def _flush_run() -> None:
+        nonlocal _removed
+        if len(_run) < 5:
+            result.extend(lines[i] for i in _run)
+            _run.clear()
+            return
+        # Only collapse when NO line in the run is a structural marker.
+        if any(_KEEP_RE.match(lines[i].lstrip()) for i in _run):
+            result.extend(lines[i] for i in _run)
+        else:
+            result.append(lines[_run[0]].strip())
+            _removed += len(_run) - 1
+        _run.clear()
+
+    for i, line in enumerate(lines):
+        is_comment_only = line.lstrip().startswith('--')
+        if is_comment_only:
+            _run.append(i)
+        else:
+            _flush_run()
+            result.append(line)
+    _flush_run()
+
+    if _removed:
+        print(f"  [Post-Process Fix #11] Collapsed {_removed} prose comment-monologue line(s)")
+    return "\n".join(result)
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -791,6 +863,7 @@ def post_process_lua(content: str) -> str:
     # Order matters: strip artifacts first so they don't interfere with
     # structural fixes, then fix structure, then add missing pieces.
     content = _strip_pipeline_artifacts(content)      # Fix #3 first
+    content = _strip_comment_monologues(content)       # Fix #11 — kill prose comment essays
     content = _strip_module_level_mod(content)         # Fix #2
     content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
     content = _strip_duplicate_functions(content)      # Fix #1

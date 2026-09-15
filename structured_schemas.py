@@ -20,7 +20,7 @@ Pydantic v2 is required (matching the existing ``models.py`` usage).
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -94,6 +94,17 @@ class TaskAnchorSpec(BaseModel):
     location: str = Field("", description="e.g. 'inside OnLoad()', 'at module root'")
 
 
+class StateVariableSpec(BaseModel):
+    """A primitive module-level variable the game loop must persist across frames."""
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(..., min_length=1, description="exact snake_case Lua identifier")
+    lua_type: str = "number"
+    initial_value: Any = 0
+    description: str = ""
+    owner_task: str = ""
+
+
 class AttractionDesignOutput(BaseModel):
     """Schema for the Architect pass (replaces _extract_json / _repair_json)."""
     # extra="ignore": the reasoning model sometimes adds stray top-level keys
@@ -110,6 +121,7 @@ class AttractionDesignOutput(BaseModel):
     economy_hooks: List[str] = Field(default_factory=list)
     feature_checklist: List[str] = Field(default_factory=list)
     task_anchors: List[TaskAnchorSpec] = Field(default_factory=list)
+    module_state_variables: List[StateVariableSpec] = Field(default_factory=list)
 
     @field_validator("pool_requirements")
     @classmethod
@@ -119,7 +131,7 @@ class AttractionDesignOutput(BaseModel):
 
     def to_attraction_design(self) -> "AttractionDesign":  # noqa: F821 (resolved lazily)
         """Bridge into the legacy ``models.AttractionDesign`` object."""
-        from models import AttractionDesign, HandleDeclaration, EventEdge
+        from models import AttractionDesign, HandleDeclaration, EventEdge, StateVariable
 
         return AttractionDesign(
             title=self.title,
@@ -142,6 +154,16 @@ class AttractionDesignOutput(BaseModel):
             economy_hooks=self.economy_hooks,
             feature_checklist=self.feature_checklist,
             task_anchors=[a.model_dump() for a in self.task_anchors],
+            module_state_variables=[
+                StateVariable(
+                    name=s.name,
+                    lua_type=s.lua_type,
+                    initial_value=s.initial_value,
+                    description=s.description,
+                    owner_task=s.owner_task,
+                )
+                for s in self.module_state_variables
+            ],
             raw_json=self.model_dump_json(),
         )
 

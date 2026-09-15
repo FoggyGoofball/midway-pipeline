@@ -196,6 +196,51 @@ def _coverage_gaps(ctx: PipelineContext) -> list[str]:
             if _kws and not any(kw in _out_lower for kw in _kws[:4]):
                 gaps.append(f"[checklist] {_feature}")
 
+    # 3. State-ledger coverage — every pre-registered handle + primitive state
+    #    variable must actually be USED (not just declared) in the final code.
+    #    Reads the effective on-disk/merged file content so the injected
+    #    `local <name> = ...` declaration counts as occurrence #1; a name with
+    #    ≤1 occurrence is declared-but-never-used.
+    if _design is not None:
+        _ledger_names: list[tuple[str, str]] = []
+        for _h in (getattr(_design, 'handles', None) or []):
+            _hn = getattr(_h, 'name', '')
+            if _hn:
+                _ledger_names.append((str(_hn), getattr(_h, 'owner_task', '') or ''))
+        for _sv in (getattr(_design, 'module_state_variables', None) or []):
+            _sn = getattr(_sv, 'name', '')
+            if _sn:
+                _ledger_names.append((str(_sn), getattr(_sv, 'owner_task', '') or ''))
+        if _ledger_names:
+            _owned_files: set = set()
+            _mono = getattr(ctx, '_monolithic_lua_target', None)
+            if _mono and str(_mono).endswith('.lua'):
+                _owned_files.add(str(_mono))
+            for _t in getattr(ctx, 'task_map', {}).values():
+                _tf = getattr(_t, 'target_file', '')
+                if _tf and _tf.endswith('.lua'):
+                    _owned_files.add(_tf)
+            _ledger_blob = ""
+            for _rel in sorted(_owned_files):
+                _merged = ctx.all_results_dict.get("merged:" + _rel)
+                if _merged:
+                    _ledger_blob += str(_merged) + "\n"
+                    continue
+                _abs = ctx.project_root / _rel
+                if _abs.is_file():
+                    try:
+                        _ledger_blob += _abs.read_text(encoding="utf-8", errors="replace") + "\n"
+                    except Exception:
+                        pass
+            if _ledger_blob.strip():
+                for _ln, _owner in _ledger_names:
+                    _uses = len(re.findall(r'\b' + re.escape(_ln) + r'\b', _ledger_blob))
+                    if _uses <= 1:
+                        gaps.append(
+                            f"[state] `{_ln}` declared but never used"
+                            + (f" (task {_owner})" if _owner else "")
+                        )
+
     ctx.coverage_gaps = gaps
     return gaps
 
@@ -1282,15 +1327,22 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                           f"but NONE matched the current file — keeping existing content "
                           f"(refusing full-file rewrite).")
                 else:
-                    # No SEARCH/REPLACE blocks could be extracted (malformed
-                    # markers, prose, etc.).  The coder was instructed to emit
-                    # ONLY patches, so treating its output as a full file would
-                    # write raw conflict markers into the target.  Keep current
-                    # content; the next cycle re-prompts with fresh errors and
-                    # the insanity detector bounds the loop.
-                    _mono_fixed = _mono_snippet
-                    print("  [Monolithic Fix] ⚠ Surgical: no valid SEARCH/REPLACE blocks "
-                          "extracted — keeping current content (refusing full-file rewrite).")
+                    # No SEARCH/REPLACE blocks were extracted.  Before giving up,
+                    # try converting a full-file rewrite (the coder ignoring the
+                    # patch mandate) into a surgical diff against the current file.
+                    # This deterministically lands the fix instead of re-flagging
+                    # the same errors every cycle.
+                    from _helpers_exec import (
+                        _apply_full_file_rewrite_via_diff as _mono_diff,
+                    )
+                    _mono_diffed = _mono_diff(_mono_snippet, _mono_fixed)
+                    if _mono_diffed != _mono_snippet:
+                        _mono_fixed = _mono_diffed
+                        print("  [Monolithic Fix] 🔀 converted full-file rewrite into a surgical diff patch.")
+                    else:
+                        _mono_fixed = _mono_snippet
+                        print("  [Monolithic Fix] ⚠ Surgical: no valid SEARCH/REPLACE blocks "
+                              "extracted and no diffable rewrite — keeping current content.")
 
                 # Write fixed content to disk
                 _mono_abs = ctx.project_root / _mono_target
@@ -1389,6 +1441,9 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # Snapshot results BEFORE any fix writes so the post-fix revert has a
                 # clean previous-cycle value to fall back to (not the just-written bad one).
                 _pre_fix_snapshot = dict(ctx.all_results_dict)
+                # Tasks whose fix SEARCH/REPLACE was already applied to the file;
+                # these must not be reverted by the post-fix full-dump guard.
+                _file_applied_tids: set = set()
                 for tid in sorted(task_ids_in_review):
                     task_obj = ctx.task_map.get(tid)
                     if task_obj is None:
@@ -1483,6 +1538,123 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     print(f"  [SANDBOX] ⛔ {domain_name} ({tid}) output rejected  "
                           f"cross-domain file write detected. Using truncated safe stub.")
                     agent_fix_output = safe_output
+
+                # -- Surgical file application (per-anchor fix path) ----------
+                # Apply the fix model's SEARCH/REPLACE blocks to the ACCUMULATED
+                # file (staging-aware) so the fix lands this cycle instead of
+                # waiting for the arch-fix re-exec fallback.  luac-gated so a
+                # syntax-broken fix never persists.  Mirrors the monolithic path.
+                _fix_target_file = getattr(task_obj, 'target_file', '') or ''
+                if _fix_target_file.endswith('.lua') and agent_fix_output and agent_fix_output.strip():
+                    try:
+                        from _helpers_exec import (
+                            _extract_search_replace_blocks as _fx_extract,
+                            _fuzzy_apply_patch as _fx_patch,
+                        )
+                        from _helpers_io import (
+                            get_staging_path as _fx_sp,
+                            is_staging_active as _fx_sa,
+                            atomic_write_text as _fx_write,
+                        )
+                        _fx_blocks = _fx_extract(agent_fix_output)
+                        _fx_real = ctx.project_root / _fix_target_file
+                        _fx_read = (
+                            _fx_sp(_fx_real, project_root=ctx.project_root)
+                            if _fx_sa() else _fx_real
+                        )
+                        _fx_current = (
+                            _fx_read.read_text(encoding="utf-8", errors="replace")
+                            if _fx_read.is_file() else ""
+                        )
+                        _fx_patched = _fx_current
+                        _fx_applied = 0
+                        for _fx_b in _fx_blocks:
+                            _fx_new = _fx_patch(
+                                _fx_patched,
+                                _fx_b.get("search", ""),
+                                _fx_b.get("replace", ""),
+                            )
+                            if _fx_new != _fx_patched:
+                                _fx_patched = _fx_new
+                                _fx_applied += 1
+                        if not _fx_applied and _fx_current.strip():
+                            # Full-file rewrite fallback: the coder ignored the
+                            # SEARCH/REPLACE mandate and emitted a whole file (the
+                            # "#2 persistent anti-pattern").  Convert it into a
+                            # surgical patch by diffing against the on-disk file,
+                            # preserving the deterministic module-state block and
+                            # task anchors.  This lets the fix actually land
+                            # instead of being rejected every cycle.
+                            from _helpers_exec import (
+                                _apply_full_file_rewrite_via_diff as _fx_diff,
+                            )
+                            _fx_diffed = _fx_diff(_fx_current, agent_fix_output)
+                            if _fx_diffed != _fx_current:
+                                _fx_patched = _fx_diffed
+                                _fx_applied = 1
+                                print(f"  [Anchor Fix] 🔀 {tid}: converted full-file "
+                                      f"rewrite into a surgical diff patch.")
+                        if _fx_applied:
+                            # luac-gate the patched content.
+                            import subprocess as _fx_spx
+                            import tempfile as _fx_tf
+                            _fx_tmp = _fx_tf.NamedTemporaryFile(
+                                suffix='.lua', mode='w', encoding='utf-8', delete=False
+                            )
+                            _fx_tmp.write(_fx_patched)
+                            _fx_tmp.close()
+                            _fx_luac_ok = True
+                            try:
+                                _fx_proc = _fx_spx.run(
+                                    ["luac", "-p", _fx_tmp.name],
+                                    capture_output=True, text=True, timeout=20,
+                                )
+                                _fx_luac_ok = (_fx_proc.returncode == 0)
+                            except FileNotFoundError:
+                                _fx_luac_ok = True  # luac absent: accept
+                            except Exception:
+                                _fx_luac_ok = False
+                            try:
+                                Path(_fx_tmp.name).unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            if _fx_luac_ok:
+                                _fx_write(_fx_real, _fx_patched)
+                                # Deterministic post-process the accumulated file so
+                                # bare-namespace calls, phantom APIs, duplicate
+                                # functions and comment monologues are cleaned THIS
+                                # cycle rather than re-flagged every review cycle.
+                                try:
+                                    from _post_process_lua import post_process_lua_file as _fx_pp
+                                    _fx_pp(_fx_read)
+                                except Exception:
+                                    pass
+                                try:
+                                    _fx_snap = getattr(ctx, '_last_luac_clean_anchor', None)
+                                    if _fx_snap is not None:
+                                        _fx_snap[_fix_target_file.replace("\\", "/")] = _fx_patched
+                                except Exception:
+                                    pass
+                                print(f"  [Anchor Fix] ✅ Applied {_fx_applied} SEARCH/REPLACE "
+                                      f"block(s) for {tid} to {_fix_target_file} "
+                                      f"({len(_fx_patched)} chars).")
+                                # Store REPLACE-only content so the next review
+                                # cycle / static guard see the fixed code, not the
+                                # diff markers or the SEARCH side's pre-fix text.
+                                from _preflight_helpers import (
+                                    _strip_search_replace_metadata as _fx_strip,
+                                )
+                                agent_fix_output = _fx_strip(agent_fix_output)
+                                _file_applied_tids.add(tid)
+                            else:
+                                print(f"  [Anchor Fix] ⚠ {tid}: fix failed luac — "
+                                      f"keeping current file for arch-fix fallback.")
+                        else:
+                            print(f"  [Anchor Fix] ⚠ {tid}: {len(_fx_blocks)} SEARCH "
+                                  f"block(s) emitted but none matched {_fix_target_file} — "
+                                  f"keeping file.")
+                    except Exception as _fx_e:
+                        print(f"  [Anchor Fix] ⚠ file application failed for {tid}: {_fx_e}")
 
                 # -- Phase III: LangGraph AST Patch State Reducer --------------
                 # Extract AST_PATCH signals from agent output, validate them,
@@ -1615,6 +1787,8 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     _re_postfix.IGNORECASE | _re_postfix.MULTILINE,
                 )
                 for _ftid, _fout in list(domain_fix_outputs.items()):
+                    if _ftid in _file_applied_tids:
+                        continue  # fix already applied to the file; keep cleaned content
                     _has_code = bool(_code_fence_re.search(_fout))
                     _is_delegate = bool(_delegate_only_re.search(_fout)) and not _has_code
                     # Full-file dump guard: ARCHITECT_FIX_SYSTEM mandates SEARCH/REPLACE.

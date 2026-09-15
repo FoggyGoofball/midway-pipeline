@@ -471,9 +471,12 @@ _LUA_TICK_HARNESS = textwrap.dedent("""\
 
 def _run_live_harness(task_id: str, lua_text: str, tmp_dir: Path) -> List[str]:
     """Run a live Lua tick harness if `lua` is on PATH.  Returns error strings."""
-    # Write the attraction script to a temp file
-    script_path = tmp_dir / f"{task_id}_attraction.lua"
-    harness_path = tmp_dir / f"{task_id}_harness.lua"
+    # Write the attraction script to a temp file.  task_id may now be a
+    # relative path (e.g. "attractions/strongman/strongman.lua"); sanitize it
+    # to a flat filename so the temp-dir write never hits a missing directory.
+    _safe_id = re.sub(r'[^A-Za-z0-9_.-]+', '_', task_id) or "task"
+    script_path = tmp_dir / f"{_safe_id}_attraction.lua"
+    harness_path = tmp_dir / f"{_safe_id}_harness.lua"
 
     # Write the attraction script
     script_path.write_text(lua_text, encoding="utf-8")
@@ -525,6 +528,76 @@ def _extract_lua(text: str) -> str:
     return text.strip()
 
 
+def _effective_lua_files(ctx) -> Dict[str, str]:
+    """Return {rel_path: content} of the authoritative accumulated Lua files.
+
+    In per-anchor (chunked) mode the real-time SEARCH/REPLACE patcher writes
+    the accumulated script to disk; the per-task entries in all_results_dict
+    are raw SEARCH/REPLACE fragments that are NOT valid Lua.  Validation must
+    therefore run against the on-disk file (real or staging), not the
+    fragments.  Falls back to merged keys / joined fragments only when no file
+    exists on disk yet (monolithic mode, or before the first flush).
+    """
+    try:
+        from _helpers_io import is_staging_active, get_staging_path
+    except Exception:
+        is_staging_active = lambda: False  # noqa: E731
+        get_staging_path = lambda p, project_root=None: p  # noqa: E731
+
+    files: Dict[str, str] = {}
+
+    # 1. Collect unique target files (task_map + monolithic + merged keys).
+    targets: Dict[str, str] = {}  # normalized rel -> original rel
+    for _t in (getattr(ctx, 'task_map', None) or {}).values():
+        _tf = getattr(_t, 'target_file', None) or ""
+        if _tf.endswith('.lua'):
+            targets[_tf.replace("\\", "/")] = _tf
+    _mono = getattr(ctx, '_monolithic_lua_target', None) or ""
+    if _mono.endswith('.lua'):
+        targets[_mono.replace("\\", "/")] = _mono
+    for _key in (getattr(ctx, 'all_results_dict', None) or {}):
+        if _key.startswith("merged:") and _key.endswith(".lua"):
+            _rel = _key[len("merged:"):]
+            targets[_rel.replace("\\", "/")] = _rel
+
+    if not targets:
+        return files
+
+    _staging = bool(is_staging_active())
+    for _rel, _orig in targets.items():
+        _real = ctx.project_root / _orig
+        _read = get_staging_path(_real, project_root=ctx.project_root) if _staging else _real
+        # If staging is active but the staged copy does not exist yet (e.g.
+        # monolithic mode or before the first flush mirrors it), fall back to
+        # the real path so validation never runs on an empty view.
+        if not _read.is_file() and _staging:
+            _read = _real
+        if _read.is_file():
+            try:
+                _content = _read.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                _content = ""
+            if _content.strip():
+                files[_rel] = _content
+                continue
+        # Fallback: merged key content.
+        _mk = "merged:" + _rel
+        if (_mk in (getattr(ctx, 'all_results_dict', None) or {})
+                and (ctx.all_results_dict.get(_mk, "") or "").strip()):
+            files[_rel] = ctx.all_results_dict[_mk]
+            continue
+        # Fallback: join fragments (legacy behaviour for monolithic / pre-flush).
+        _parts: List[str] = []
+        for _tid, _out in (getattr(ctx, 'all_results_dict', None) or {}).items():
+            _t = (getattr(ctx, 'task_map', None) or {}).get(_tid)
+            if _t and str(getattr(_t, 'target_file', '') or '').replace("\\", "/") == _rel:
+                _chunk = _extract_lua(_out)
+                if _chunk:
+                    _parts.append(_chunk)
+        files[_rel] = "\n".join(_parts)
+    return files
+
+
 # -- Public entry point --------------------------------------------------------
 
 def run_runtime_sim(ctx) -> List[str]:
@@ -544,25 +617,11 @@ def run_runtime_sim(ctx) -> List[str]:
         import tempfile, os
         tmp_dir = Path(tempfile.mkdtemp(prefix="midway_sim_"))
 
-        for task_id, output in (ctx.all_results_dict or {}).items():
-            if not output or not output.strip():
-                continue
-
-            # Determine the domain for this task
-            task_obj = (ctx.task_map or {}).get(task_id)
-            domain = getattr(task_obj, "agent", "") if task_obj else ""
-
-            # Only simulate Lua / physics domain outputs
-            if domain not in _LUA_DOMAINS:
-                # But still run static checks if the output contains Lua patterns
-                if not (
-                    "MidwayPhysics." in output
-                    or "function OnLoad" in output
-                    or "economy:" in output
-                ):
-                    continue
-
-            lua_code = _extract_lua(output)
+        # Validate the ACCUMULATED Lua files, not the per-task fragments.  In
+        # per-anchor mode all_results_dict holds raw SEARCH/REPLACE blocks (not
+        # valid Lua); the real script lives on disk / in staging.
+        for task_id, lua_code in _effective_lua_files(ctx).items():
+            lua_code = (lua_code or "").strip()
             if not lua_code:
                 continue
 
@@ -657,31 +716,12 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
 
     _LUA_DOMAINS = {"Lua", "lua", "PHYS", "phys"}
 
-    # -- Pre-build: merged Lua content grouped by target file -----------------
-    # Checks 4 & 5 (modifier consumption, economy hook) must be evaluated
-    # against the *complete* merged content for each output file, not against
-    # each individual task chunk.  A task that handles physics setup need not
-    # duplicate the economy hook that a later task already adds.
-    _file_to_tasks: dict = {}
-    for _tid, _out in (ctx.all_results_dict or {}).items():
-        if not _out or not _out.strip():
-            continue
-        _task_obj = (ctx.task_map or {}).get(_tid)
-        _tgt_file = getattr(_task_obj, "target_file", None) or ""
-        _file_to_tasks.setdefault(_tgt_file, []).append((_tid, _out))
-
-    # Collect merged Lua per file and the set of task-ids that contribute to it.
-    _file_merged: dict = {}  # file -> (merged_lua_str, [task_ids])
-    for _tgt_file, _pairs in _file_to_tasks.items():
-        _parts: List[str] = []
-        _tids: List[str] = []
-        for _tid, _out in _pairs:
-            _lua_chunk = _extract_lua(_out)
-            if _lua_chunk:
-                _parts.append(_lua_chunk)
-                _tids.append(_tid)
-        if _parts:
-            _file_merged[_tgt_file] = ("\n".join(_parts), _tids)
+    # -- Authoritative file contents ------------------------------------------
+    # Per-anchor mode stores raw SEARCH/REPLACE fragments in all_results_dict;
+    # those are NOT valid Lua.  Validate the ACCUMULATED file (disk / staging)
+    # instead, falling back to merged keys / joined fragments only when no file
+    # exists on disk yet (monolithic or pre-flush).
+    _files: dict = _effective_lua_files(ctx)
     _ENGINE_CALL_RE = re.compile(r"\bEngine\.([A-Za-z][A-Za-z0-9_]*)\s*\(", re.MULTILINE)
     _PHYSICS_CALL_RE_FINAL = re.compile(
         r"\bMidwayPhysics\.([A-Za-z][A-Za-z0-9_]*)\s*\(", re.MULTILINE
@@ -712,24 +752,8 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
     )
 
     try:
-        for task_id, output in (ctx.all_results_dict or {}).items():
-                if not output or not output.strip():
-                    continue
-
-                task_obj = (ctx.task_map or {}).get(task_id)
-                domain = getattr(task_obj, "agent", "") if task_obj else ""
-
-                # Only scan Lua/physics domain outputs, or any output that smells like Lua.
-                if domain not in _LUA_DOMAINS:
-                    if not (
-                        "MidwayPhysics." in output
-                        or "function OnLoad" in output
-                        or "Engine." in output
-                        or "economy:" in output
-                    ):
-                        continue
-
-                lua_code = _extract_lua(output)
+        for task_id, lua_code in _files.items():
+                lua_code = (lua_code or "").strip()
                 if not lua_code:
                     continue
 
@@ -787,8 +811,10 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
         # A single OnStep with modifier reads + a single AwardTickets call is
         # sufficient for the entire file; we must not flag every task that
         # doesn't individually duplicate those lines.
-        for _tgt_file, (_merged_lua, _task_ids) in _file_merged.items():
-            _repr_task = _task_ids[0] if _task_ids else "unknown"
+        for _tgt_file, _merged_lua in _files.items():
+            _repr_task = _tgt_file
+            _merged_lua = re.sub(r'--\[\[.*?\]\]', '', _merged_lua, flags=re.DOTALL)
+            _merged_lua = re.sub(r'--[^\n]*', '', _merged_lua)
 
             # -- 4. Modifier consumption check -------------------------------
             has_modifier_access = (
