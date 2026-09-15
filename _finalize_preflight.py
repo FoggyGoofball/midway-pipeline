@@ -1135,10 +1135,28 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         r'^function\s+(OnLoadStatic|OnLoad|OnUnload)\s*\(', _af_code, re.MULTILINE
                     ))
                     if _lifecycle_redefs:
-                        print(f"  [Arch Fix] Refusing full-file lifecycle rewrite for {tid} "
-                              f"({domain}) - redefines {sorted(_lifecycle_redefs)} "
-                              f"(anchor tasks must patch their hook, not rebuild the file).")
-                        continue
+                        # The coder ignored the SEARCH/REPLACE mandate and rebuilt
+                        # the lifecycle wrappers.  Instead of discarding the whole
+                        # block (which cascades into fallback re-execution and the
+                        # circuit breaker), strip the wrappers and keep the
+                        # game-specific logic they contained.
+                        try:
+                            from _review_helpers import _strip_lifecycle as _strip_lc
+                            _logic_only = (_strip_lc(_af_code) or "").strip()
+                        except Exception:
+                            _logic_only = ""
+                        if (_logic_only and _task_has_code(_logic_only)
+                                and not _is_comment_only(_logic_only)):
+                            print(f"  [Arch Fix] 🔀 {tid} ({domain}) redefined "
+                                  f"{sorted(_lifecycle_redefs)} — stripped wrappers, "
+                                  f"keeping {len(_logic_only)} chars of game logic.")
+                            _af_code = _logic_only
+                        else:
+                            print(f"  [Arch Fix] Refusing full-file lifecycle rewrite for {tid} "
+                                  f"({domain}) - redefines {sorted(_lifecycle_redefs)} "
+                                  f"and no game logic remains (anchor tasks must patch "
+                                  f"their hook, not rebuild the file).")
+                            continue
                     ctx.all_results_dict[tid] = _af_code
                     # Keep all_results list in sync.
                     _af_found = False
