@@ -74,6 +74,19 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
             f"*(Please switch to the terminal window running the Midway server to type your response)*\n\n"
         )
         event_queue.put(("announce", msg))
+        # Nudge the phone: a gate is blocking on interactive input.  This only
+        # fires when AUTO_APPROVE_GATES is off, because auto-approved gates
+        # never call input() in the first place.
+        try:
+            import ntfy as _ntfy
+            if _ntfy.configured():
+                _ntfy.notify(
+                    "⌨️ Midway awaiting input",
+                    (prompt_text or "").strip()[:400] or "A gate is waiting for a response.",
+                    priority="5", tags="keyboard",
+                )
+        except Exception:
+            pass
         return _original_input(prompt_text)
     
     builtins.input = _stream_aware_input
