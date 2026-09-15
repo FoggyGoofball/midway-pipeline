@@ -314,6 +314,21 @@ class StreamHandler(BaseHTTPRequestHandler):
         _status.request_stop()
         self._serve_json({"stopping": True, "running": _status.is_running()})
 
+    def _handle_kill(self):
+        # Kill this server WITHOUT auto-restarting (the start/stop toggle).
+        self._serve_json({"stopping": True})
+        try:
+            self.wfile.flush()
+        except Exception:
+            pass
+        import threading as _thr
+
+        def _kill():
+            time.sleep(0.6)
+            os._exit(0)
+
+        _thr.Thread(target=_kill, daemon=True).start()
+
     def _handle_restart(self):
         self._serve_json({"restarting": True})
         try:
@@ -428,6 +443,9 @@ class StreamHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/stop":
             self._handle_stop()
+            return
+        if parsed.path == "/api/kill":
+            self._handle_kill()
             return
         if parsed.path == "/api/restart":
             self._handle_restart()

@@ -75,13 +75,16 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [follow, setFollow] = useState(true)
+  const [serverUp, setServerUp] = useState(true)
   const logRef = useRef(null)
 
   const refreshStatus = useCallback(async () => {
     try {
       const r = await fetch('/api/status')
       setStatus(await r.json())
+      setServerUp(true)
     } catch {
+      setServerUp(false)
       /* server unreachable — keep last known state */
     }
   }, [])
@@ -147,6 +150,7 @@ export default function App() {
 
   const stop = async () => {
     if (busy) return
+    if (!window.confirm('Stop the current pipeline run?')) return
     setBusy(true)
     setNotice('')
     try {
@@ -165,16 +169,27 @@ export default function App() {
     }
   }
 
-  const restartServer = async () => {
-    const ok = window.confirm(
-      'Restart the pipeline server?\n\nThis briefly interrupts requests, then the server comes back automatically. The React app stays up.'
-    )
-    if (!ok) return
-    setNotice('Restarting server…')
+  const stopServer = async () => {
+    if (!window.confirm('Stop the pipeline server?\n\nThe React app stays up. Use the Start button (or a start script) to bring it back.')) return
+    setNotice('Stopping server…')
     try {
-      await fetch('/api/restart', { method: 'POST' }).catch(() => {})
+      await fetch('/api/kill', { method: 'POST' }).catch(() => {})
     } catch {
       /* server is dying — expected */
+    }
+  }
+
+  const startServer = async () => {
+    setNotice('Starting server…')
+    try {
+      const r = await fetch('/__control/start', { method: 'POST' })
+      if (r.ok) {
+        setNotice('Server starting…')
+      } else {
+        setNotice('Could not start the server from here. Run a start script.')
+      }
+    } catch {
+      setNotice('Could not reach the control endpoint. Run a start script.')
     }
   }
 
@@ -201,11 +216,11 @@ export default function App() {
           )}
           <span>Ollama {ollama?.version || ''}</span>
           <button
-            className="restart"
-            onClick={restartServer}
-            title="Kill and restart the pipeline server (React app stays up)"
+            className={`restart${serverUp ? '' : ' go'}`}
+            onClick={serverUp ? stopServer : startServer}
+            title={serverUp ? 'Stop the pipeline server (React app stays up)' : 'Start the pipeline server'}
           >
-            ↻ Restart
+            {serverUp ? '■ Stop server' : '▶ Start server'}
           </button>
         </div>
       </header>

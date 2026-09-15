@@ -178,8 +178,20 @@ button.restart {
 }
 
 button.restart:hover {
-  color: var(--amber);
-  border-color: var(--amber);
+  color: var(--red);
+  border-color: var(--red);
+}
+
+button.restart.go {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+button.restart.go:hover {
+  color: #fff;
+  border-color: var(--green);
+  filter: brightness(1.1);
 }
 
 .row {
