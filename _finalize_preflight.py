@@ -184,6 +184,84 @@ def _task_requirements_brief(ctx, tid, task_obj, domain, broken_output) -> str:
     return _brief
 
 
+def _oracle_sos_fixplan(ctx, tid, task_obj, domain, per_task_errors) -> str:
+    """Reactive SOS triage: ask the oracle for a strict fix-plan on the FINAL
+    attempt only.
+
+    The primary coder (qwen3.5:9b) handles standard generation; the phi3.5
+    oracle is only loaded when a task reaches its last re-execution strike
+    (strike 2 → 3).  The oracle ingests the domain-scoped static-guard errors,
+    the approved bridge contract, the GDD context, and the broken output, then
+    returns a concrete ordered fix-plan the primary model executes verbatim.
+
+    Gated by ``USE_PHI35_ORACLES`` and cached per task so a task is never
+    double-queried.  Returns "" when disabled / unavailable (the plain error
+    injection remains the fallback).
+    """
+    try:
+        from ollama_client import USE_PHI35_ORACLES as _use_phi35
+        from ollama_client import PRE_SUMMARIZER_MODEL as _summ_model
+        from ollama_client import call_ollama
+    except Exception:
+        return ""
+    if not _use_phi35:
+        return ""
+
+    _cache = getattr(ctx, '_sos_fixplan_cache', None)
+    if _cache is None:
+        _cache = {}
+        ctx._sos_fixplan_cache = _cache
+    if tid in _cache:
+        return _cache[tid]
+
+    _spec = getattr(task_obj, 'spec', '') or ''
+    _gdd = (getattr(ctx, 'gdd_context', '') or '')[:3000]
+    _bridge = ""
+    try:
+        from _finalize_review import build_fix_bridge_snippet as _bfbs
+        _bridge = (_bfbs(ctx) or "")[:1500]
+    except Exception:
+        _bridge = ""
+    _broken = (ctx.all_results_dict.get(tid, '') or '')[:1200]
+
+    _system = (
+        "You are the escalation oracle for a Lua game-engine code pipeline. "
+        "The primary coder has already failed this task twice. Produce a STRICT, "
+        "ordered fix-plan that a small coder model can execute VERBATIM. For each "
+        "error list: the exact function/line to change and the exact replacement "
+        "code (or a SEARCH/REPLACE block). Use ONLY the approved bridge APIs. "
+        "Be concrete and terse — no essays, no commentary, under 1200 characters."
+    )
+    _user = (
+        f"## Task specification\n{_spec}\n\n"
+        f"## Approved bridge APIs\n{_bridge or '(none provided)'}\n\n"
+        f"## GDD context\n{_gdd or '(none provided)'}\n\n"
+        f"## Current (broken) output\n{_broken or '(none)'}\n\n"
+        f"## Static guard errors to fix\n{per_task_errors}\n\n"
+        f"Produce the fix-plan now."
+    )
+
+    _plan = ""
+    try:
+        _res = call_ollama(
+            _system, _user, "SOS Escalation Oracle", _summ_model,
+            params={"num_predict": 600},
+            skip_pre_summarizer=True,
+        )
+        if _res and len(_res.strip()) > 40:
+            _plan = (
+                "\n## 🧯 SOS FIX-PLAN (oracle — FINAL attempt, follow EXACTLY)\n"
+                + _res.strip()[:1200]
+                + "\n"
+            )
+            print(f"  [SOS Oracle] ✓ fix-plan for {tid} ({len(_plan)} chars)")
+    except Exception as _e:
+        print(f"  [SOS Oracle] ⚠ failed for {tid}: {_e}")
+
+    _cache[tid] = _plan
+    return _plan
+
+
 def _build_requirements_scaffold(ctx, tid, task_obj, domain, broken_output) -> str:
     """Build an anchor scaffold for a task with no clean prior output.
 
@@ -1361,6 +1439,14 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                             f"Re-implement the task correctly. "
                             f"Do NOT repeat any of the violations listed above."
                         )
+
+                        # Reactive SOS triage: on the FINAL attempt (strike 2 -> 3)
+                        # swap in the oracle to produce a strict, executable
+                        # fix-plan the primary model then follows verbatim.
+                        if _strike == 2:
+                            _sos_plan = _oracle_sos_fixplan(ctx, tid, task_obj, domain, _per_task_errors)
+                            if _sos_plan:
+                                _error_injection += "\n" + _sos_plan
 
                         # Temporarily extend task.context with the error feedback.
                         _saved_context = task_obj.context or ""
