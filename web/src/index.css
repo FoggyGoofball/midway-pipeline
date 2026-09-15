@@ -326,6 +326,32 @@ button.restart.go:hover {
   cursor: pointer;
 }
 
+.logcontrols {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cheat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.cheat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.cheat-row code {
+  color: #79b8ff;
+  font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .log {
   margin: 10px 0 0;
   padding: 10px;

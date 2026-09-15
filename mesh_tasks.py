@@ -423,6 +423,12 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                         "Omitting either of these will cause an automatic pipeline failure.\n"
                     )
 
+                try:
+                    import server_status as _ss_task
+                    _ss_task.set_current_task(task.task_id)
+                except Exception:
+                    pass
+
                 output = execute_task(
                     task, ctx.user_prompt, ctx.director_output,
                     ctx.all_results_dict, file_context, ctx.gdd_context,

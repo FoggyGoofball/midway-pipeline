@@ -89,6 +89,8 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [follow, setFollow] = useState(true)
   const [serverUp, setServerUp] = useState(true)
+  const [fullLog, setFullLog] = useState(false)
+  const [fullLogs, setFullLogs] = useState([])
   const logRef = useRef(null)
 
   const refreshStatus = useCallback(async () => {
@@ -128,6 +130,18 @@ export default function App() {
     setOllama({ host: '', reachable: false, version: null, models: [], error: 'no probe available' })
   }, [])
 
+  const refreshFullLogs = useCallback(async () => {
+    try {
+      const r = await fetch('/api/logs?n=800')
+      if (r.ok) {
+        const j = await r.json()
+        setFullLogs(j.lines || [])
+      }
+    } catch {
+      /* server unreachable — keep last known logs */
+    }
+  }, [])
+
   useEffect(() => {
     refreshStatus()
     refreshOllama()
@@ -140,10 +154,20 @@ export default function App() {
   }, [refreshStatus, refreshOllama])
 
   useEffect(() => {
+    if (!fullLog) {
+      setFullLogs([])
+      return
+    }
+    refreshFullLogs()
+    const t = setInterval(refreshFullLogs, 2000)
+    return () => clearInterval(t)
+  }, [fullLog, refreshFullLogs])
+
+  useEffect(() => {
     if (follow && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight
     }
-  }, [status?.logs, follow])
+  }, [status?.logs, fullLogs, follow])
 
   const onLogScroll = () => {
     const el = logRef.current
@@ -251,7 +275,7 @@ export default function App() {
 
   const running = !!status?.running
   const tel = status?.last_telemetry
-  const logs = status?.logs || []
+  const logs = fullLog ? fullLogs : (status?.logs || [])
 
   return (
     <div className="app">
@@ -318,6 +342,17 @@ export default function App() {
           <div>
             <span className="k">Elapsed</span>
             <span className="v">{fmtElapsed(status?.elapsed_s)}</span>
+          </div>
+          <div>
+            <span className="k">Task</span>
+            <span className="v">{status?.current_task || '—'}</span>
+          </div>
+          <div>
+            <span className="k">Call</span>
+            <span className="v">
+              {status?.current_label || tel?.label || '—'}
+              {status?.current_model ? <span className="dim"> ({status.current_model})</span> : null}
+            </span>
           </div>
           <div>
             <span className="k">Prompt</span>
@@ -405,13 +440,42 @@ export default function App() {
       <section className="card">
         <div className="row space">
           <h2>Console log</h2>
-          <label className="follow">
-            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-            follow
-          </label>
+          <div className="logcontrols">
+            <label className="follow">
+              <input type="checkbox" checked={fullLog} onChange={(e) => setFullLog(e.target.checked)} />
+              full log
+            </label>
+            <label className="follow">
+              <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+              follow
+            </label>
+          </div>
         </div>
         <div className="log" ref={logRef} onScroll={onLogScroll}>
           {logs.map((line, i) => renderLogLine(line, i))}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Phone commands (ntfy)</h2>
+        <div className="cheat">
+          {[
+            ['!help', 'list commands'],
+            ['!status', 'current thresholds'],
+            ['!ping', 'immediate alive reply'],
+            ['!mute / !unmute', 'alerts off / on'],
+            ['!set ttft <s>', 'TTFT threshold (seconds)'],
+            ['!set tps <x>', 'min effective tok/s'],
+            ['!set stall <m>', 'stall timeout (minutes)'],
+            ['!set cooldown <s>', 'repeat alert cooldown (seconds)'],
+            ['!set interval <s>', 'check interval (seconds)'],
+            ['!set heartbeat <m>', 'ping frequency (minutes)'],
+          ].map(([cmd, desc]) => (
+            <div className="cheat-row" key={cmd}>
+              <code>{cmd}</code>
+              <span className="dim">{desc}</span>
+            </div>
+          ))}
         </div>
       </section>
     </div>

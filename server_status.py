@@ -56,6 +56,7 @@ _state = {
     "finished_at": None,       # epoch seconds
     "current_model": "",
     "current_label": "",
+    "current_task": "",        # e.g. "task_1"
     "last_telemetry": None,    # dict
     "last_error": None,        # str
     "run_count": 0,
@@ -78,6 +79,7 @@ def set_running(prompt: str = "") -> None:
         _state["detail"] = f"Processing: {prompt[:60]}..." if prompt else ""
         _state["last_error"] = None
         _state["stop_requested"] = False
+        _state["current_task"] = ""
 
 
 def set_idle() -> None:
@@ -87,6 +89,7 @@ def set_idle() -> None:
         _state["phase"] = "complete"
         _state["detail"] = ""
         _state["stop_requested"] = False
+        _state["current_task"] = ""
 
 
 def set_phase(phase: str, status: str, detail: str = "") -> None:
@@ -105,6 +108,11 @@ def set_current_call(model: str, label: str) -> None:
     with _lock:
         _state["current_model"] = model or ""
         _state["current_label"] = label or ""
+
+
+def set_current_task(task_id: str) -> None:
+    with _lock:
+        _state["current_task"] = task_id or ""
 
 
 def set_telemetry(telemetry: dict) -> None:
@@ -284,6 +292,7 @@ def snapshot(log_lines: int = 60) -> dict:
             "elapsed_s": elapsed,
             "current_model": _state["current_model"],
             "current_label": _state["current_label"],
+            "current_task": _state["current_task"],
             "last_telemetry": _state["last_telemetry"],
             "last_error": _state["last_error"],
             "run_count": _state["run_count"],
