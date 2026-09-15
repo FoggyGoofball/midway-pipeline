@@ -501,6 +501,18 @@ def _strip_phantom_api_calls(content: str) -> str:
         print(f"  [Post-Process Fix #8] Rewrote {_sb_count} 'MidwayPhysics.SpawnSharedBooth' "
               f"-> bare 'SpawnSharedBooth'")
 
+    # `Engine.DestroyBody` is a phantom: body destruction belongs to
+    # MidwayPhysics.* — the Economy `Engine.*` namespace only has Award*/Get*
+    # hooks.  The coder repeatedly emits it; rewrite deterministically so it
+    # never reaches the final PhantomAPIGate.
+    _content_no_edb, _edb_count = re.subn(
+        r'\bEngine\.DestroyBody\s*\(', 'MidwayPhysics.DestroyBody(', content
+    )
+    if _edb_count:
+        content = _content_no_edb
+        print(f"  [Post-Process Fix #8] Rewrote {_edb_count} 'Engine.DestroyBody' "
+              f"-> 'MidwayPhysics.DestroyBody'")
+
     # Phase 2: collect all phantom function names found in the content.
     modifications = 0
     _phantom_names_found: set[str] = set()
