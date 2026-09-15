@@ -169,18 +169,31 @@ export default function App() {
     if (busy) return
     if (!window.confirm('Stop the current pipeline run?')) return
     setBusy(true)
-    setNotice('')
+    setNotice('Sending stop…')
+    // Timed retry with graceful backoff: a busy server can briefly refuse or
+    // drop the request, so retry a few times before reporting failure.
+    const delays = [250, 750, 1500]
+    let lastError = ''
     try {
-      const r = await fetch('/api/stop', { method: 'POST' })
-      const j = await r.json().catch(() => ({}))
-      if (r.ok) {
-        setNotice('Stop requested — finishing the current task…')
-        refreshStatus()
-      } else {
-        setNotice(j.error || `HTTP ${r.status}`)
+      for (let attempt = 0; attempt <= delays.length; attempt++) {
+        try {
+          const r = await fetch('/api/stop', { method: 'POST' })
+          if (r.ok) {
+            setNotice('Stop requested — finishing the current task…')
+            refreshStatus()
+            return
+          }
+          const j = await r.json().catch(() => ({}))
+          lastError = j.error || `HTTP ${r.status}`
+        } catch {
+          lastError = 'Could not reach the pipeline server.'
+        }
+        if (attempt < delays.length) {
+          setNotice(`Stop not acknowledged (attempt ${attempt + 1}/${delays.length + 1}) — retrying…`)
+          await new Promise((resolve) => setTimeout(resolve, delays[attempt]))
+        }
       }
-    } catch {
-      setNotice('Could not reach the pipeline server.')
+      setNotice(lastError || 'Stop failed.')
     } finally {
       setBusy(false)
     }
