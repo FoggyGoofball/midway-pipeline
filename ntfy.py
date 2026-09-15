@@ -22,6 +22,7 @@ connection, so a slow or unreachable ntfy server can never wedge the pipeline
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import threading
@@ -34,6 +35,26 @@ TOPIC = os.environ.get("MIDWAY_NTFY_TOPIC", "").strip()
 def configured() -> bool:
     """True when a topic is set (i.e. notifications can actually be sent)."""
     return bool(TOPIC)
+
+
+def fetch_messages(since: str = "", timeout: float = 5.0) -> list:
+    """Poll the ntfy JSON feed for messages newer than *since* (a message ID
+    or Unix timestamp).  Returns a list of message dicts.  Never raises — a
+    network failure just yields an empty list so the command listener can keep
+    polling forever."""
+    if not TOPIC:
+        return []
+    url = f"{SERVER}/{TOPIC}/json"
+    if since:
+        url += f"?since={since}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
 
 
 def _send_sync(title: str, message: str, priority: str, tags: str) -> str:

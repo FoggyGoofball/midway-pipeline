@@ -27,6 +27,11 @@ Environment:
   MIDWAY_WATCHDOG_TTFT         TTFT threshold in seconds    (default 100)
   MIDWAY_WATCHDOG_MIN_EFFECTIVE_TPS  collapse threshold     (default 0.5)
   MIDWAY_WATCHDOG_STALL_MINUTES     stall threshold         (default 20)
+  MIDWAY_WATCHDOG_HEARTBEAT    minutes between pings        (default 30)
+
+Phone commands (publish to the ntfy topic with the "!" prefix):
+  !help / !status / !ping / !mute / !unmute
+  !set ttft <s> | tps <x> | stall <m> | cooldown <s> | interval <s> | heartbeat <m>
 """
 
 from __future__ import annotations
@@ -46,11 +51,27 @@ try:
 except Exception:  # pragma: no cover - ntfy is always present in-repo
     ntfy = None
 
-INTERVAL = float(os.environ.get("MIDWAY_WATCHDOG_INTERVAL", "30"))
-COOLDOWN = float(os.environ.get("MIDWAY_WATCHDOG_COOLDOWN", "900"))
-TTFT_THRESHOLD = float(os.environ.get("MIDWAY_WATCHDOG_TTFT", "100"))
-MIN_EFFECTIVE_TPS = float(os.environ.get("MIDWAY_WATCHDOG_MIN_EFFECTIVE_TPS", "0.5"))
-STALL_MINUTES = float(os.environ.get("MIDWAY_WATCHDOG_STALL_MINUTES", "20"))
+# Mutable settings — initial values come from the environment, but phone
+# commands (!set / !mute) adjust them at runtime via apply_command().
+_settings_lock = threading.Lock()
+_settings = {
+    "enabled": True,
+    "ttft": float(os.environ.get("MIDWAY_WATCHDOG_TTFT", "100")),
+    "tps": float(os.environ.get("MIDWAY_WATCHDOG_MIN_EFFECTIVE_TPS", "0.5")),
+    "stall": float(os.environ.get("MIDWAY_WATCHDOG_STALL_MINUTES", "20")),
+    "cooldown": float(os.environ.get("MIDWAY_WATCHDOG_COOLDOWN", "900")),
+    "interval": float(os.environ.get("MIDWAY_WATCHDOG_INTERVAL", "30")),
+    "heartbeat": float(os.environ.get("MIDWAY_WATCHDOG_HEARTBEAT", "30")),
+}
+
+_SETTABLE = {
+    "ttft": "ttft (seconds)",
+    "tps": "tps (min effective tok/s)",
+    "stall": "stall (minutes)",
+    "cooldown": "cooldown (seconds)",
+    "interval": "interval (seconds)",
+    "heartbeat": "heartbeat (minutes)",
+}
 
 _ERROR_MARKERS = ("ERROR", "[Pipeline Error]", "Traceback", "⛔", "❌", "✗")
 _VRAM_MARKERS = ("VRAM_OVERRUN", "VRAM Abort Guard", "VRAM overrun")
@@ -69,11 +90,26 @@ class _State:
 _state = _State()
 _started = False
 _lock = threading.Lock()
+_last_heartbeat = 0.0
+_last_cmd_ts = 0
+
+
+def _get_settings() -> dict:
+    with _settings_lock:
+        return dict(_settings)
+
+
+def _set_setting(key: str, value) -> None:
+    with _settings_lock:
+        _settings[key] = value
 
 
 def _alert(kind: str, title: str, message: str, tags: str = "", priority: str = "3") -> None:
+    cfg = _get_settings()
+    if not cfg.get("enabled", True):
+        return
     last = _state.notified.get(kind, 0.0)
-    if time.time() - last < COOLDOWN:
+    if time.time() - last < cfg.get("cooldown", 900):
         return
     _state.notified[kind] = time.time()
     # Always surface the flag in the dashboard console, even without ntfy.
@@ -101,6 +137,7 @@ def _tick() -> None:
     except Exception:
         return
 
+    cfg = _get_settings()
     logs = snap.get("logs") or []
     running = bool(snap.get("running"))
     tel = snap.get("last_telemetry")
@@ -121,12 +158,12 @@ def _tick() -> None:
     if tel and tel.get("ts") != _state.last_tel_ts:
         _state.last_tel_ts = tel.get("ts")
         ttft = tel.get("ttft")
-        if isinstance(ttft, (int, float)) and ttft > TTFT_THRESHOLD:
+        if isinstance(ttft, (int, float)) and ttft > cfg["ttft"]:
             _alert("ttft_extreme", "⚠ Midway: extreme TTFT",
                    f"TTFT {ttft:.1f}s on '{tel.get('label', '?')}' ({tel.get('model', '?')})",
                    tags="warning", priority="4")
         eff = tel.get("effective_tps")
-        if isinstance(eff, (int, float)) and running and eff < MIN_EFFECTIVE_TPS:
+        if isinstance(eff, (int, float)) and running and eff < cfg["tps"]:
             _alert("tps_collapse", "🚨 Midway: TPS collapse",
                    f"Effective {eff:.1f} tok/s on '{tel.get('label', '?')}' — possible VRAM thrash",
                    tags="rotating_light", priority="4")
@@ -154,11 +191,121 @@ def _tick() -> None:
     if sig != _state.last_progress:
         _state.last_progress = sig
         _state.last_progress_time = time.time()
-    if running and (time.time() - _state.last_progress_time) > STALL_MINUTES * 60:
+    if running and (time.time() - _state.last_progress_time) > cfg["stall"] * 60:
         _alert("stall", "⏳ Midway: no progress",
-               f"No phase/log change for {int(STALL_MINUTES)}m in phase '{snap.get('phase')}'.",
+               f"No phase/log change for {int(cfg['stall'])}m in phase '{snap.get('phase')}'.",
                tags="hourglass", priority="3")
         _state.last_progress_time = time.time()  # don't re-alert until progress resumes
+
+
+# -- Heartbeat (session-start ping + periodic "still alive") ------------------
+
+def _ping_message() -> str:
+    try:
+        snap = server_status.snapshot()
+        running = bool(snap.get("running"))
+        phase = snap.get("phase", "idle")
+        runs = snap.get("run_count", 0)
+        return f"hello — Midway alive. running={running} phase={phase} runs={runs}"
+    except Exception:
+        return "hello — Midway alive."
+
+
+def _send_heartbeat(force: bool = False) -> None:
+    global _last_heartbeat
+    hb_min = _get_settings().get("heartbeat", 30)
+    now = time.time()
+    if not force and (now - _last_heartbeat) < hb_min * 60:
+        return
+    _last_heartbeat = now
+    if ntfy is not None and ntfy.configured():
+        ntfy.notify("💓 Midway ping", _ping_message(), priority="1", tags="heartbeat")
+    else:
+        print(f"  [Watchdog] ping — {_ping_message()}", flush=True)
+
+
+# -- Phone command bridge (!-prefixed messages on the ntfy topic) -------------
+
+_COMMAND_PREFIX = "!"
+
+
+def apply_command(text: str) -> str:
+    """Parse a phone-published command and mutate watchdog settings.
+
+    Returns a human-readable response string, or "" when *text* is not a
+    command.  Only whitelisted, watchdog-scoped commands are accepted."""
+    t = (text or "").strip()
+    if not t.startswith(_COMMAND_PREFIX):
+        return ""
+    cmd = t[len(_COMMAND_PREFIX):].strip()
+    parts = cmd.split()
+    if not parts:
+        return ""
+    verb = parts[0].lower()
+
+    if verb in ("help", "?"):
+        return ("Commands: !status | !ping | !mute | !unmute | "
+                "!set ttft|tps|stall|cooldown|interval|heartbeat <number>")
+
+    if verb == "status":
+        cfg = _get_settings()
+        return ("Watchdog: enabled=%s ttft>%gs tps<%.2f stall>%gm "
+                "cooldown=%gs interval=%gs heartbeat=%gm"
+                % (cfg["enabled"], cfg["ttft"], cfg["tps"], cfg["stall"],
+                   cfg["cooldown"], cfg["interval"], cfg["heartbeat"]))
+
+    if verb == "ping":
+        return _ping_message()
+
+    if verb == "mute":
+        _set_setting("enabled", False)
+        return "Watchdog alerts muted (!unmute to re-enable)."
+
+    if verb == "unmute":
+        _set_setting("enabled", True)
+        return "Watchdog alerts unmuted."
+
+    if verb == "set" and len(parts) >= 3:
+        key = parts[1].lower()
+        if key not in _SETTABLE:
+            return f"Unknown setting '{key}'. Use: {', '.join(_SETTABLE)}."
+        try:
+            value = float(parts[2])
+        except ValueError:
+            return f"Cannot parse number: {parts[2]!r}"
+        if value <= 0:
+            return f"Value must be positive (got {value})."
+        _set_setting(key, value)
+        return f"Watchdog {key} set to {value} ({_SETTABLE[key]})."
+
+    return "Unknown command — send !help."
+
+
+def _command_loop() -> None:
+    global _last_cmd_ts
+    if ntfy is None or not ntfy.configured():
+        return
+    _last_cmd_ts = int(time.time())  # don't replay old cached messages on boot
+    time.sleep(3)
+    while True:
+        try:
+            for m in ntfy.fetch_messages(since=str(_last_cmd_ts)):
+                try:
+                    mid = int(m.get("id", 0))
+                except Exception:
+                    mid = 0
+                if mid > _last_cmd_ts:
+                    _last_cmd_ts = mid
+                if m.get("event") not in (None, "message"):
+                    continue
+                text = m.get("message") or ""
+                reply = apply_command(text)
+                if reply:
+                    print(f"  [Watchdog] cmd '{text}' -> {reply}", flush=True)
+                    ntfy.notify("Midway command", reply, priority="3", tags="incoming_envelope")
+        except Exception:  # noqa: BLE001 - listener must never die
+            pass
+        time.sleep(max(3.0, _get_settings().get("interval", 30) * 0.15))
 
 
 def _loop() -> None:
@@ -166,9 +313,10 @@ def _loop() -> None:
     while True:
         try:
             _tick()
+            _send_heartbeat()
         except Exception:  # noqa: BLE001 - a watchdog must never die
             pass
-        time.sleep(INTERVAL)
+        time.sleep(_get_settings().get("interval", 30))
 
 
 def start() -> None:
@@ -181,11 +329,15 @@ def start() -> None:
         _started = True
     if ntfy is not None and ntfy.configured():
         print(f"  [Watchdog] started (ntfy -> {ntfy.SERVER}/{ntfy.TOPIC}, "
-              f"interval {INTERVAL:.0f}s)", flush=True)
+              f"interval {_get_settings()['interval']:.0f}s; "
+              f"commands: send !help on the topic)", flush=True)
     else:
         print("  [Watchdog] started (ntfy NOT configured — set MIDWAY_NTFY_TOPIC "
-              "to get phone alerts)", flush=True)
+              "to get phone alerts/commands)", flush=True)
     threading.Thread(target=_loop, daemon=True, name="midway-watchdog").start()
+    threading.Thread(target=_command_loop, daemon=True, name="midway-ntfy-cmd").start()
+    # Hello-world ping at session start.
+    _send_heartbeat(force=True)
 
 
 def main(argv=None) -> int:
