@@ -224,15 +224,33 @@ def _prune_fix_context(
                 + isolated_context
             )
         else:
-            # Fallback: use collapsed anchor but strip lifecycle invariants
-            # so the model sees only the game-specific logic sections.
+            # Fallback: strip lifecycle invariants so the model sees only the
+            # game-specific logic sections.
             _stripped = _strip_lifecycle(last_good_output)
-            _collapsed = TokenBudget._block_aware_collapse(_stripped, 1500)
+            # Root-cause fix (task_9 death-spiral): collapsing the live file here
+            # produced <VRAM_STUB> placeholders which the fix agent copied verbatim
+            # into the SEARCH half of its patch. Those tags never exist in the real
+            # file, so every patch failed to match and the circuit breaker tripped.
+            # Inline the file verbatim when it fits; only collapse large files.
+            if len(_stripped) <= 8000:
+                _anchor = _stripped
+            else:
+                _anchor = TokenBudget._block_aware_collapse(_stripped, 8000)
+            _no_stub_note = ""
+            if "<VRAM_STUB" in _anchor:
+                _no_stub_note = (
+                    "\n\nCRITICAL: The <VRAM_STUB ... /> tags below are placeholders "
+                    "and the real function bodies are NOT shown. You MUST NOT copy a "
+                    "<VRAM_STUB> tag into your <<<<<<< SEARCH block; such a patch can "
+                    "never match the real file and will be rejected. Only patch code "
+                    "that is fully visible.\n"
+                )
             parts.append(
                 "## Previous Implementation (ANCHOR  repair this, do NOT rewrite from scratch)\n"
                 "The following is the last known implementation for this task.\n"
                 "You MUST base your fix on this code. Do NOT discard it and produce an empty skeleton.\n"
-                + _collapsed
+                + _anchor
+                + _no_stub_note
             )
 
 

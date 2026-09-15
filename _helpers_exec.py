@@ -446,6 +446,15 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
         if any(m in _replace for m in _halluc_markers):
             print("  [PatchParser] Skipping block with cross-domain (Roblox/Unity) APIs.", flush=True)
             continue
+        # Reject VRAM_STUB leakage: the fix agent sometimes copies the
+        # <VRAM_STUB .../> placeholders from its collapsed context straight into
+        # the SEARCH half of a patch. Those tags never exist in the real file
+        # (which holds the full offloaded body), so the block can never match -
+        # this was the task_9 death-spiral root cause. Drop it rather than let
+        # it silently fail every fuzzy fallback.
+        if "<VRAM_STUB" in _search or "<VRAM_STUB" in _replace:
+            print("  [PatchParser] Skipping block containing <VRAM_STUB> placeholder.", flush=True)
+            continue
         # Skip degenerate blocks (nothing left on either side).
         if not _search.strip() and not _replace.strip():
             continue
