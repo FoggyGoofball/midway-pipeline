@@ -162,6 +162,10 @@ button:disabled {
   cursor: default;
 }
 
+button.stop {
+  background: #da3633;
+}
+
 .row {
   display: flex;
   align-items: center;

@@ -145,6 +145,26 @@ export default function App() {
     }
   }
 
+  const stop = async () => {
+    if (busy) return
+    setBusy(true)
+    setNotice('')
+    try {
+      const r = await fetch('/api/stop', { method: 'POST' })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok) {
+        setNotice('Stop requested — finishing the current task…')
+        refreshStatus()
+      } else {
+        setNotice(j.error || `HTTP ${r.status}`)
+      }
+    } catch {
+      setNotice('Could not reach the pipeline server.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const running = !!status?.running
   const tel = status?.last_telemetry
   const logs = status?.logs || []
@@ -155,7 +175,7 @@ export default function App() {
         <div className="title">
           <h1>Midway Pipeline</h1>
           <span className={`pill ${running ? 'on' : 'off'}`}>
-            {running ? '● RUNNING' : '○ IDLE'}
+            {running ? (status?.stop_requested ? '● STOPPING' : '● RUNNING') : '○ IDLE'}
           </span>
         </div>
         <div className="conn">
@@ -179,8 +199,12 @@ export default function App() {
           placeholder="e.g. refer to the GDD and build the strongman striker"
         />
         <div className="row">
-          <button onClick={run} disabled={busy || running}>
-            {busy ? '…' : running ? 'Running…' : 'Run pipeline'}
+          <button
+            onClick={running ? stop : run}
+            disabled={busy || (running && status?.stop_requested)}
+            className={running && !status?.stop_requested ? 'stop' : ''}
+          >
+            {busy ? '…' : running ? (status?.stop_requested ? 'Stopping…' : 'Stop pipeline') : 'Run pipeline'}
           </button>
           {notice && <span className="notice">{notice}</span>}
         </div>

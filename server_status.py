@@ -59,6 +59,7 @@ _state = {
     "last_telemetry": None,    # dict
     "last_error": None,        # str
     "run_count": 0,
+    "stop_requested": False,
 }
 
 _log_lines: Deque[str] = deque(maxlen=_LOG_MAX_LINES)
@@ -76,6 +77,7 @@ def set_running(prompt: str = "") -> None:
         _state["phase"] = "init"
         _state["detail"] = f"Processing: {prompt[:60]}..." if prompt else ""
         _state["last_error"] = None
+        _state["stop_requested"] = False
 
 
 def set_idle() -> None:
@@ -84,6 +86,7 @@ def set_idle() -> None:
         _state["finished_at"] = time.time()
         _state["phase"] = "complete"
         _state["detail"] = ""
+        _state["stop_requested"] = False
 
 
 def set_phase(phase: str, status: str, detail: str = "") -> None:
@@ -121,6 +124,18 @@ def set_error(error: str) -> None:
 def is_running() -> bool:
     with _lock:
         return bool(_state["running"])
+
+
+def request_stop() -> None:
+    """Flag the active run for cooperative stop (checked between tasks)."""
+    with _lock:
+        _state["stop_requested"] = True
+
+
+def stop_requested() -> bool:
+    """True once the user has asked the active run to stop."""
+    with _lock:
+        return bool(_state["stop_requested"])
 
 
 def bump_run_count() -> None:
@@ -272,6 +287,7 @@ def snapshot(log_lines: int = 60) -> dict:
             "last_telemetry": _state["last_telemetry"],
             "last_error": _state["last_error"],
             "run_count": _state["run_count"],
+            "stop_requested": _state["stop_requested"],
             "logs": _tail,
             "server_time": datetime.now().isoformat(),
         }

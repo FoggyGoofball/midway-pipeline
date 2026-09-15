@@ -431,6 +431,22 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
                     shared_file_context=shared_file_context,
                 )
 
+                # -- User Stop Request -----------------------------------------
+                # Cooperative stop: checked after each task completes so the
+                # user can abort a run from the dashboard without killing the
+                # server process.  Mirrors the VRAM Circuit Breaker below.
+                try:
+                    import server_status as _ss_stop
+                    if _ss_stop.stop_requested():
+                        print(f"\n  [Stop] \u23f9 User requested stop after {task.task_id}. "
+                              f"Aborting remaining waves.")
+                        ctx.review_verdict = "BLOCKED"
+                        ctx.final_verdict = "STOPPED_BY_USER"
+                        ctx.final_output = "## \u23f9 Pipeline stopped by user."
+                        return ctx
+                except Exception:
+                    pass
+
                 # -- VRAM Circuit Breaker --------------------------------------
                 from ollama_client import vram_overrun_abort, get_vram_abort_diagnostics
                 if vram_overrun_abort():

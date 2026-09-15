@@ -833,15 +833,18 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         # -- Phase 4: Task Execution --
         ctx = run_tasks(ctx)
 
-        # -- VRAM Abort Guard: Skip Phases 58 if TPS watchdog fired --
+        # -- VRAM Abort Guard: Skip Phases 5–8 if TPS watchdog fired --
         # If the VRAM Circuit Breaker in run_tasks detected token speed below
         # 2.0 tok/s, ctx.final_verdict is set to "VRAM_OVERRUN" and all
-        # remaining waves are aborted. We must NOT proceed to Phases 58
+        # remaining waves are aborted. We must NOT proceed to Phases 5–8
         # because that will immediately load models and trigger another
         # cascade of VRAM overruns (as seen in the Architect Syntax Fix loop).
-        if getattr(ctx, 'final_verdict', None) == "VRAM_OVERRUN":
-            print(f"\n  [VRAM Abort Guard] ⛔ Pipeline aborted during task execution "
-                  f"(VRAM overrun). Skipping Phases 58.\n")
+        if getattr(ctx, 'final_verdict', None) in ("VRAM_OVERRUN", "STOPPED_BY_USER"):
+            if ctx.final_verdict == "VRAM_OVERRUN":
+                print(f"\n  [VRAM Abort Guard] ⛔ Pipeline aborted during task execution "
+                      f"(VRAM overrun). Skipping Phases 5–8.\n")
+            else:
+                print(f"\n  [Stop Guard] ⏹ Pipeline stopped by user. Skipping Phases 5–8.\n")
             output_path = PROJECT_ROOT / f"pipeline_abort_{datetime.now():%Y%m%d_%H%M%S}.md"
             atomic_write_text(output_path, ctx.final_output)
             print(f"  Abort report saved to {output_path.name}")

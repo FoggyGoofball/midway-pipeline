@@ -310,6 +310,10 @@ class StreamHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps({"accepted": True, "prompt": prompt}).encode("utf-8"))
 
+    def _handle_stop(self):
+        _status.request_stop()
+        self._serve_json({"stopping": True, "running": _status.is_running()})
+
     def _serve_stream(self, params: dict):
         prompt = params.get("prompt", [""])[0]
         if not prompt:
@@ -393,6 +397,9 @@ class StreamHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/run":
             self._handle_run()
+            return
+        if parsed.path == "/api/stop":
+            self._handle_stop()
             return
         if parsed.path not in ("/v1/chat/completions",):
             self.send_response(404)
