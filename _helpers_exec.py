@@ -433,6 +433,19 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
                              if not _marker_line_re.match(ln))
         _replace = "\n".join(ln for ln in _replace.splitlines()
                               if not _marker_line_re.match(ln))
+        # Reject nested-diff hallucinations: a block whose content still carries
+        # literal conflict markers is a diff inside a diff — fuzzy-matching it
+        # would corrupt the target file.
+        if any(m in _search or m in _replace for m in ("<<<<<<<", "=======", ">>>>>>>")):
+            print("  [PatchParser] Skipping block with nested conflict markers.", flush=True)
+            continue
+        # Reject cross-domain hallucination: Roblox/Unity method calls and globals
+        # have no equivalent in the Midway Lua contract and were the signature of
+        # the task_9 / task_11 death-spiral.
+        _halluc_markers = ("IsA(", "BasePart", "game.Workspace", ":Destroy()", "_G.")
+        if any(m in _replace for m in _halluc_markers):
+            print("  [PatchParser] Skipping block with cross-domain (Roblox/Unity) APIs.", flush=True)
+            continue
         # Skip degenerate blocks (nothing left on either side).
         if not _search.strip() and not _replace.strip():
             continue

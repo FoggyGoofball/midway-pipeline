@@ -27,29 +27,73 @@ def build_fix_bridge_snippet(ctx: 'PipelineContext') -> str:
     Returns an empty string when no cartridge is mounted.
     """
     _build_bridge_fn = getattr(ctx, '_cartridge_build_bridge_contract', None)
-    if not callable(_build_bridge_fn):
-        return ""
-    try:
-        _bc = _build_bridge_fn()
-        if not _bc or not isinstance(_bc, dict):
-            return ""
-        _api   = list((_bc.get("midwayphysics_spawn_api") or {}).keys())
-        _pool  = list((_bc.get("object_pools") or {}).keys())
-        _econ  = list((_bc.get("economy_api") or {}).keys())
-        _input = list((_bc.get("input_api") or {}).keys())
-        if not _api:
-            return ""
-        return (
-            "## Active Bridge Contract  APPROVED APIs (exhaustive list)\n"
-            "Use ONLY these exact function names. Any other name is a phantom API.\n"
+    _bc = {}
+    if callable(_build_bridge_fn):
+        try:
+            _bc = _build_bridge_fn() or {}
+        except Exception:
+            _bc = {}
+    if not isinstance(_bc, dict):
+        _bc = {}
+
+    def _names(section: str) -> list:
+        v = _bc.get(section) or {}
+        if isinstance(v, dict):
+            return list(v.keys())
+        if isinstance(v, (list, tuple)):
+            return [str(x) for x in v]
+        return []
+
+    _api   = _names("midwayphysics_spawn_api") or _names("midwayphysics_api")
+    _pool  = _names("object_pools")
+    _econ  = _names("economy_api")
+    _input = _names("input_api")
+
+    # Hardcoded fallback: exact signatures for the canonical Midway Lua API,
+    # kept in sync with docs/engine_lua_bridge_contract.md.
+    _FALLBACK_PHYSICS = [
+        "SpawnStaticBox(lx, ly, lz, w, h, d)", "SpawnStaticSphere(lx, ly, lz, radius)",
+        "SpawnStaticCapsule(lx, ly, lz, halfHeight, radius)", "SpawnStaticMesh(lx, ly, lz, yaw, path)",
+        "SpawnKinematicBox(lx, ly, lz, w, h, d)", "SpawnKinematicCapsule(lx, ly, lz, halfHeight, radius)",
+        "SpawnDynamicBox(lx, ly, lz, w, h, d [, mass])", "SpawnDynamicSphere(lx, ly, lz, radius [, mass])",
+        "SpawnDynamicCapsule(lx, ly, lz, halfHeight, radius [, mass])",
+        "SpawnSensorBox(lx, ly, lz, w, h, d)", "SpawnSensorSphere(lx, ly, lz, radius)",
+        "MoveKinematic(handle, lx, ly, lz, dt)", "ApplyImpulse(handle, ix, iy, iz)",
+        "ApplyAngularImpulse(handle, ix, iy, iz)", "SetLinearVelocity(handle, vx, vy, vz)",
+        "AddLinearVelocity(handle, vx, vy, vz)", "SetFriction(handle, v)", "SetRestitution(handle, v)",
+        "SetGravityFactor(handle, v)", "SetMass(handle, kg)", "SetLinearDamping(handle, v)",
+        "SetAngularDamping(handle, v)", "GetPosition(handle)", "GetVelocity(handle)",
+        "IsActive(handle)", "IsSensorTriggered(handle)", "DestroyBody(handle)",
+        "OnStep(function(dt) ... end)",
+    ]
+    _FALLBACK_POOL = [
+        "CreatePool(name, hotN, coldN, paramsTable)", "PoolAcquire(name, lx, ly, lz)",
+        "PoolReturn(name, handle)", "PoolCullBelow(name, yThreshold)", "PoolFree(name)", "PoolTotal(name)",
+    ]
+    _FALLBACK_ECON = [
+        "Engine.AwardTickets(n, label)", "Engine.AwardTokens(n, label)",
+        "Engine.GetTickets()", "Engine.GetTokens()", "Engine.GetStreak()",
+    ]
+    if not _api:
+        _api = _FALLBACK_PHYSICS
+    if not _pool:
+        _pool = _FALLBACK_POOL
+    if not _econ:
+        _econ = _FALLBACK_ECON
+
+    return (
+            "## Active Bridge Contract  APPROVED APIs with EXACT signatures\n"
+            "Use ONLY these exact function names AND argument counts. Any other "
+            "name, arity, or namespace is a phantom API and will be rejected.\n"
+            "NEVER use Roblox/Unity/Unreal APIs (_G, IsA(), :Destroy(), BasePart, "
+            "game.Workspace). NEVER pass a handle or name string as the first "
+            "argument to a Spawn* call - the first argument is ALWAYS lx (a number).\n"
             "Physics: " + ", ".join(_api) + "\n"
             "Pools: "   + ", ".join(_pool) + "\n"
             "Economy: " + ", ".join(_econ) + "\n"
             "Input (use ONLY these action names with MidwayInput.IsActionDown): "
             + ", ".join(_input) + "\n"
         )
-    except Exception as _e:
-        return ""
 
 
 
