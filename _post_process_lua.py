@@ -779,6 +779,106 @@ def _auto_declare_handles(content: str) -> str:
     return content
 
 
+def _dedupe_onstep_registrations(content: str) -> str:
+    """Keep only ONE ``MidwayPhysics.OnStep(function ... end)`` registration.
+
+    The skeleton already declares a single per-frame callback inside OnLoad().
+    The coder repeatedly emits ADDITIONAL nested ``MidwayPhysics.OnStep(...)``
+    registrations inside its own task hooks, which the engine would register
+    as overlapping callbacks (a race condition).  This pass keeps the canonical
+    (outermost, MOD-bearing) registration and strips every other full
+    registration block.
+    """
+    _start_re = re.compile(r'MidwayPhysics\.OnStep\s*\(\s*function\b')
+    _starts = [m for m in _start_re.finditer(content)]
+    if len(_starts) <= 1:
+        return content
+
+    def _word_boundary(s: str, i: int, j: int) -> bool:
+        prev = s[i - 1] if i > 0 else ' '
+        nxt = s[j] if j < len(s) else ' '
+        return (not (prev.isalnum() or prev == '_')) and (not (nxt.isalnum() or nxt == '_'))
+
+    def _span_end(func_idx: int) -> int:
+        """Return the exclusive end index of the OnStep registration whose
+        `function` keyword starts at func_idx (i.e. just past the closing `)`)."""
+        n = len(content)
+        i = func_idx + len('function')
+        depth = 1
+        in_str = None
+        in_lc = False
+        while i < n:
+            c = content[i]
+            nxt = content[i + 1] if i + 1 < n else ''
+            if in_lc:
+                if c == '\n':
+                    in_lc = False
+                i += 1
+                continue
+            if in_str:
+                if c == '\\':
+                    i += 2
+                    continue
+                if c == in_str:
+                    in_str = None
+                i += 1
+                continue
+            if c == '-' and nxt == '-':
+                in_lc = True
+                i += 2
+                continue
+            if c in ('"', "'"):
+                in_str = c
+                i += 1
+                continue
+            if content.startswith('function', i) and _word_boundary(content, i, i + 8):
+                depth += 1
+                i += 8
+                continue
+            if content.startswith('end', i) and _word_boundary(content, i, i + 3):
+                depth -= 1
+                i += 3
+                if depth == 0:
+                    j = i
+                    while j < n and content[j] in ' \t\r\n':
+                        j += 1
+                    if j < n and content[j] == ')':
+                        return j + 1
+                    return i
+                continue
+            i += 1
+        return n
+
+    # Compute the span (start of `MidwayPhysics`, exclusive end) of each
+    # registration and locate the canonical one: it contains the skeleton's
+    # `local MOD = AttractionConstants.modifiers` marker and is the outermost
+    # span (nested registrations live INSIDE it).
+    spans: list[tuple[int, int]] = []
+    for _m in _starts:
+        _func_idx = content.find('function', _m.start())
+        spans.append((_m.start(), _span_end(_func_idx)))
+
+    _mod_marker = 'local MOD = AttractionConstants.modifiers'
+    _with_mod = [s for s in spans if _mod_marker in content[s[0]:s[1]]]
+    _pool = _with_mod or spans
+
+    # Outermost span = not contained inside any other span in the pool.
+    _outermost = [
+        s for s in _pool
+        if not any(o != s and o[0] <= s[0] and s[1] <= o[1] for o in _pool)
+    ]
+    _keep = _outermost[0] if _outermost else _pool[0]
+
+    _removed = 0
+    for (s, e) in sorted((sp for sp in spans if sp != _keep), key=lambda t: t[0], reverse=True):
+        content = content[:s] + '-- [nested OnStep registration removed]' + content[e:]
+        _removed += 1
+
+    if _removed:
+        print(f"  [Post-Process Fix #12] Removed {_removed} nested/duplicate OnStep registration(s)")
+    return content
+
+
 def _strip_comment_monologues(content: str) -> str:
     """Collapse long runs of prose comment-only lines into a single line.
 
@@ -869,6 +969,7 @@ def post_process_lua(content: str) -> str:
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
+    content = _dedupe_onstep_registrations(content)    # Fix #12 — one OnStep callback only
     # Full-file invariants (#4 OnLoadStatic, #5 SLOT_ID) only apply to a whole
     # Lua module, not to a SEARCH/REPLACE patch fragment.  Applying them to
     # fragments injected duplicate `local SLOT_ID` lines and spurious

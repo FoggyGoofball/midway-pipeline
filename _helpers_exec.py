@@ -1057,6 +1057,8 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"The orchestrator wraps your code in the correct lifecycle function; "
                             f"you only fill this anchor.\n"
                             f"- Do NOT redefine `function OnLoadStatic/OnLoad/OnStep/OnUnload`.\n"
+                            f"- Do NOT emit `MidwayPhysics.OnStep(` — the single per-frame callback "
+                            f"already exists in OnLoad; write plain per-frame logic only.\n"
                             f"- Do NOT copy other tasks' code, other anchors, or surrounding file content.\n"
                             f"- Comments must be ONE short line max. NEVER write essays/chain-of-thought "
                             f"inside comments. If a requirement seems contradictory, implement the "
