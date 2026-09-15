@@ -29,7 +29,11 @@ import threading
 import urllib.request
 
 SERVER = os.environ.get("MIDWAY_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
-TOPIC = os.environ.get("MIDWAY_NTFY_TOPIC", "").strip()
+# Default topic baked in so notifications work regardless of how the server is
+# launched (bat, dashboard Start button via Vite, or plain `python ...`).
+# MIDWAY_NTFY_TOPIC still overrides it.  Treat this as a password — if the repo
+# is ever made public, change it and set MIDWAY_NTFY_TOPIC to the new value.
+TOPIC = os.environ.get("MIDWAY_NTFY_TOPIC", "midway-f4a5ec27").strip()
 
 
 def configured() -> bool:
