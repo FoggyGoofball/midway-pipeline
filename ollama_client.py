@@ -26,6 +26,31 @@ from pathlib import Path
 _active_model = None
 
 
+# -- Reactive summarizer budget -------------------------------------------
+# The phi3.5 summarizer is VRAM-expensive: loading it evicts the resident 9B
+# coder and thrashes VRAM.  Budget its use: ONE upfront summary per run, then
+# deterministic fallbacks everywhere EXCEPT the deadlock-triggered SOS oracle
+# (which may re-invoke it when instructions contradict the plan / are nonsense).
+_oracle_upfront_done = False
+
+
+def reset_oracle_budget() -> None:
+    """Reset the per-run oracle budget (call at the start of each run)."""
+    global _oracle_upfront_done
+    _oracle_upfront_done = False
+
+
+def mark_oracle_upfront_done() -> None:
+    """Mark the one-time upfront oracle summary as consumed."""
+    global _oracle_upfront_done
+    _oracle_upfront_done = True
+
+
+def oracle_upfront_done() -> bool:
+    """True once the upfront oracle summary has been consumed this run."""
+    return _oracle_upfront_done
+
+
 # Frozen-stream detection: a healthy stream emits data continuously.  The
 # FIRST read may block for a full cold load (up to OLLAMA_TIMEOUT), but once
 # the first byte arrives, every subsequent read should return within this

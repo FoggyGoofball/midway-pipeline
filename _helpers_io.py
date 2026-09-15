@@ -392,6 +392,153 @@ def handle_file_list(signal_content: str, project_root: Path = None) -> str:
 _VRAM_STUB_SUMMARY_CACHE: dict = {}
 
 
+def _build_upfront_run_summary(ctx) -> str:
+    """ONE phi3.5 call at run start summarizing the most-likely-needed data.
+
+    Summarizes the task plan (director breakdown), the GDD context, and the
+    approved bridge contract into a compact shared brief stored on
+    ``ctx._run_summary``.  After this call the oracle budget is marked
+    exhausted, so every per-task summarizer helper switches to deterministic
+    fallbacks and the pipeline stops thrashing VRAM with model swaps.
+
+    Returns the summary (may be "" when oracles are disabled / unavailable).
+    """
+    try:
+        from ollama_client import (
+            PRE_SUMMARIZER_MODEL as _sm,
+            USE_PHI35_ORACLES as _use,
+            call_ollama,
+            mark_oracle_upfront_done,
+        )
+    except Exception:
+        return ""
+
+    _existing = getattr(ctx, '_run_summary', '') or ''
+    if _existing:
+        mark_oracle_upfront_done()
+        return _existing
+    if not _use:
+        mark_oracle_upfront_done()
+        return ""
+
+    _plan = (getattr(ctx, 'director_output', '') or '')[:2500]
+    _gdd = (getattr(ctx, 'gdd_context', '') or '')[:3000]
+    _bridge = ""
+    try:
+        from _finalize_review import build_fix_bridge_snippet as _bfbs
+        _bridge = (_bfbs(ctx) or "")[:1500]
+    except Exception:
+        _bridge = ""
+
+    _system = (
+        "You are the run-summary oracle for a Lua game-engine pipeline. "
+        "Summarize the plan, the key GDD rules/values, and the approved APIs "
+        "that ALL tasks in this run will need. Be concise and accurate, under "
+        "1800 characters, plain text."
+    )
+    _user = (
+        f"## Task plan (director breakdown)\n{_plan or '(none)'}\n\n"
+        f"## GDD context\n{_gdd or '(none)'}\n\n"
+        f"## Approved bridge APIs\n{_bridge or '(none)'}\n\n"
+        f"Produce the shared run summary."
+    )
+    try:
+        _res = call_ollama(_system, _user, "Run Summary Oracle", _sm,
+                           params={"num_predict": 500}, skip_pre_summarizer=True)
+    except Exception as _e:
+        print(f"  [Run Summary] ⚠ failed: {_e}")
+        _res = ""
+
+    _summary = (_res or "").strip()[:1800]
+    if _summary:
+        print(f"  [Run Summary] ✓ one-time upfront summary ({len(_summary)} chars)")
+    ctx._run_summary = _summary
+    mark_oracle_upfront_done()
+    return _summary
+
+
+def _instructions_coherent(ctx) -> bool:
+    """Deterministic sanity check: are the generated task instructions usable?
+
+    Returns False when the task list is empty, any spec is blank or trivially
+    short (garbled), or two tasks carry identical specs (a contradiction).
+    This is the trigger for re-invoking the oracle on a logic deadlock.
+    """
+    _tasks = getattr(ctx, 'tasks_list', None) or []
+    if not _tasks:
+        return False
+    _seen: set = set()
+    for _t in _tasks:
+        _spec = str((_t.get('title') or _t.get('spec') or '')).strip()
+        if len(_spec) < 10:
+            return False
+        _key = _spec.lower()
+        if _key in _seen:
+            return False
+        _seen.add(_key)
+    return True
+
+
+def _oracle_reconcile_instructions(ctx) -> str:
+    """Re-invoke the oracle when the generated instructions are incoherent.
+
+    The user's "call again on a logic deadlock" trigger: when the generated
+    task instructions contradict the plan or don't make sense, ask the oracle
+    ONCE for a corrected, coherent instruction set and prepend it to the
+    director breakdown so every task sees it in the shared prefix.
+    """
+    try:
+        from ollama_client import (
+            PRE_SUMMARIZER_MODEL as _sm,
+            USE_PHI35_ORACLES as _use,
+            call_ollama,
+        )
+    except Exception:
+        return ""
+    if not _use:
+        return ""
+
+    _plan = (getattr(ctx, 'director_output', '') or '')[:2500]
+    _gdd = (getattr(ctx, 'gdd_context', '') or '')[:3000]
+    _tasks_txt = "\n".join(
+        f"- {_t.get('id')}: {(_t.get('title') or _t.get('spec') or '')}"
+        for _t in (getattr(ctx, 'tasks_list', None) or [])
+    )[:3000]
+
+    _system = (
+        "You are a plan-reconciliation oracle. The generated task instructions "
+        "are incoherent (empty, garbled, or contradictory). Produce a corrected, "
+        "ordered, coherent instruction list for every task, each concise and "
+        "unambiguous. Under 1800 characters, plain text."
+    )
+    _user = (
+        f"## Original plan\n{_plan or '(none)'}\n\n"
+        f"## GDD context\n{_gdd or '(none)'}\n\n"
+        f"## Generated (incoherent) task list\n{_tasks_txt or '(empty)'}\n\n"
+        f"Produce the corrected instruction set."
+    )
+    try:
+        _res = call_ollama(_system, _user, "Plan Reconciliation Oracle", _sm,
+                           params={"num_predict": 600}, skip_pre_summarizer=True)
+    except Exception as _e:
+        print(f"  [Reconcile] ⚠ failed: {_e}")
+        _res = ""
+
+    _recon = (_res or "").strip()[:1800]
+    if _recon:
+        ctx._reconciled_instructions = _recon
+        # Prepend to the director breakdown so the corrected instructions reach
+        # every task's byte-identical shared prefix.
+        ctx.director_output = (
+            "## 🧯 RECONCILED INSTRUCTIONS (oracle — original plan was incoherent)\n"
+            + _recon
+            + "\n\n"
+            + (ctx.director_output or "")
+        )
+        print(f"  [Reconcile] ✓ corrected incoherent instructions ({len(_recon)} chars)")
+    return _recon
+
+
 def _summarize_file_for_stub(rel_path: str, content: str, domain: str = "") -> str:
     """Produce a concise, architecture-relevant summary of a file for a
     <VRAM_STUB> pointer.
@@ -423,14 +570,19 @@ def _summarize_file_for_stub(rel_path: str, content: str, domain: str = "") -> s
     _summ_model = ""
     _co = None
     _use_phi35 = False
+    _budget_done = False
     try:
         from ollama_client import PRE_SUMMARIZER_MODEL as _summ_model
         from ollama_client import call_ollama as _co
         from ollama_client import USE_PHI35_ORACLES as _use_phi35
+        from ollama_client import oracle_upfront_done as _budget_done
     except Exception:
         pass
 
-    if _summ_model and _co is not None and _use_phi35 and content.strip():
+    # Per-file model summaries are SKIPPED once the one-time upfront run
+    # summary has consumed the oracle budget — we fall back to the deterministic
+    # first-line summary instead of thrashing VRAM with another phi3.5 load.
+    if _summ_model and _co is not None and _use_phi35 and not _budget_done() and content.strip():
         # Sample head + tail (skip the middle) so API tables / signatures that
         # live near the end of long docs still reach the summarizer.
         _head = content[:4000]

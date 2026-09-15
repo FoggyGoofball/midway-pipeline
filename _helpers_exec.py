@@ -220,13 +220,15 @@ def _distill_gdd_for_task(task_spec: str, gdd_text: str,
         from ollama_client import call_ollama as _call_ollama
         from ollama_client import PRE_SUMMARIZER_MODEL as _SUMM_MODEL
         from ollama_client import USE_PHI35_ORACLES as _USE_PHI35
+        from ollama_client import oracle_upfront_done as _budget_done
     except ImportError:
         return gdd_text
 
     # VRAM guard: the distiller is a phi3.5 oracle.  When oracles are disabled
-    # (default) fall straight through to the deterministic pass-through so we
-    # never evict the resident coder model to load the mini model.
-    if not _USE_PHI35:
+    # OR the one-time upfront run summary already consumed the oracle budget,
+    # fall straight through to the deterministic pass-through so we never
+    # evict the resident coder model to load the mini model mid-run.
+    if not _USE_PHI35 or _budget_done():
         _GDD_DISTILL_CACHE[_cache_key] = gdd_text
         return gdd_text
 

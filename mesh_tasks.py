@@ -69,6 +69,17 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
         )
         ctx.task_map[task_obj.task_id] = task_obj
 
+    # -- Reactive summarizer budget (judicious phi3.5 use) -------------------
+    # ONE upfront oracle summary of the most-likely-needed data (plan + GDD +
+    # bridge contract), then deterministic fallbacks everywhere.  The oracle is
+    # re-invoked ONLY on a logic deadlock: an incoherent instruction set
+    # (below) or a task's SOS escalation at strike 2.
+    from _helpers_io import _build_upfront_run_summary, _instructions_coherent
+    _build_upfront_run_summary(ctx)
+    if not _instructions_coherent(ctx):
+        from _helpers_io import _oracle_reconcile_instructions
+        _oracle_reconcile_instructions(ctx)
+
     # -- Invariant: 1 task ↔ 1 anchor -------------------------------------
     # The canonical scaffold has 11 anchors.  The blueprint may legitimately
     # plan MORE tasks; each extra task gets a NEW anchor inserted into the

@@ -155,10 +155,12 @@ def _task_requirements_brief(ctx, tid, task_obj, domain, broken_output) -> str:
     try:
         from ollama_client import PRE_SUMMARIZER_MODEL as _summ_model
         from ollama_client import USE_PHI35_ORACLES as _use_phi35
-        if not _use_phi35:
-            # VRAM guard: skip the phi3.5 oracle (default OFF) and fall back to
+        from ollama_client import oracle_upfront_done as _budget_done
+        if not _use_phi35 or _budget_done():
+            # VRAM guard: skip the phi3.5 oracle (disabled OR the one-time
+            # upfront run summary already consumed the budget) and fall back to
             # a deterministic brief built from the task spec below.
-            print(f"  [Req Oracle] ⚠ phi3.5 oracle disabled — using deterministic brief for {tid}.")
+            print(f"  [Req Oracle] ⚠ oracle skipped — using deterministic brief for {tid}.")
         else:
             _res = call_ollama(
                 _system, _user, "Task Requirements Oracle", _summ_model,

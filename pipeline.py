@@ -252,6 +252,11 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     ctx = _CTX
     ctx.reset_state()
 
+    # Reset the reactive summarizer budget so this run gets ONE fresh upfront
+    # oracle summary rather than reusing a prior run's exhausted flag.
+    from ollama_client import reset_oracle_budget
+    reset_oracle_budget()
+
     # Clear the internal API ledger so this run starts from a blank slate.
     # Without this, signatures from previous runs accumulate and mislead agents.
     from ledger import reset_internal_api_ledger, reset_decision_log
