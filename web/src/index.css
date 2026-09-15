@@ -292,3 +292,30 @@ button:disabled {
   overflow-y: auto;
   color: #c9d1d9;
 }
+
+.logline {
+  margin: 0;
+}
+
+.logline.err {
+  color: var(--red);
+}
+
+.ts {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.tag {
+  color: #79b8ff;
+}
+
+.ok {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.eff {
+  color: var(--green);
+}
+

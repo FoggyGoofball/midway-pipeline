@@ -17,6 +17,7 @@ line into :func:`log_text`, so the dashboard can tail the exact console log
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -39,6 +40,10 @@ except Exception:  # pragma: no cover
 
 _LOG_MAX_LINES = 800
 _LOG_MAX_LINE_CHARS = 2000
+
+# A line already opening with its own [HH:MM:SS] timestamp (many pipeline
+# prints do) should not get a second one prepended.
+_TS_RE = re.compile(r'^\s*\[\d{2}:\d{2}:\d{2}\]')
 
 _lock = threading.Lock()
 
@@ -144,7 +149,12 @@ def _append_line(line: str) -> None:
     # blow out the dashboard; the console still shows the full text.
     if len(line) > _LOG_MAX_LINE_CHARS:
         line = line[:_LOG_MAX_LINE_CHARS] + " …"
-    _log_lines.append(line.rstrip("\r"))
+    line = line.rstrip("\r")
+    # Prepend a real wall-clock timestamp so every dashboard log line is
+    # attributable (telemetry lines otherwise carry none).
+    if not _TS_RE.match(line):
+        line = f"[{datetime.now().strftime('%H:%M:%S')}] {line}"
+    _log_lines.append(line)
 
 
 def get_logs(n: int = 60) -> list:

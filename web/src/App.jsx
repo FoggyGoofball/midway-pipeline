@@ -15,6 +15,59 @@ function fmtTtl(ttl) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
+// A leading wall-clock timestamp, then the rest of the line.
+const TS_RE = /^(\s*\[\d{2}:\d{2}:\d{2}\]\s*)(.*)$/
+// The telemetry print format:
+//   [Telemetry] <persona> (<model>) — TTFT: X.XXs | Speed: X.X tok/s (X TPM) | Effective: X.X tok/s
+const TELE_RE = /^(\s*)\[Telemetry\]\s+(.+?)\s+\((.+?)\)\s+[\u2014\u2013-]\s+TTFT:\s+([\d.]+s)(.*?)\|\s+Speed:\s+([\d.]+ tok\/s)\s+\(([\d.]+ TPM)\)\s+\|\s+Effective:\s+([\d.]+ tok\/s)(.*)$/
+
+function renderTags(text, keyPrefix) {
+  const parts = text.split(/(\[[^\]\n]*\])/g)
+  return parts.map((part, i) => {
+    const key = `${keyPrefix}-${i}`
+    if (/^\[\d{2}:\d{2}:\d{2}\]$/.test(part)) return <span key={key} className="ts">{part}</span>
+    if (/^\[(?:START|END)\]$/.test(part)) return <span key={key} className="ok">{part}</span>
+    if (/^\[[^\]]+\]$/.test(part)) return <span key={key} className="tag">{part}</span>
+    return <span key={key}>{part}</span>
+  })
+}
+
+function renderLogLine(line, i) {
+  let ts = null
+  let rest = line
+  const tm = line.match(TS_RE)
+  if (tm) {
+    ts = <span className="ts">{tm[1]}</span>
+    rest = tm[2]
+  }
+  const tele = rest.match(TELE_RE)
+  if (tele) {
+    return (
+      <div className="logline" key={i}>
+        {ts}
+        {tele[1]}
+        <span className="tag">[Telemetry]</span>{' '}
+        <span className="persona">{tele[2]}</span>{' '}
+        <span className="dim">(</span><span className="model">{tele[3]}</span><span className="dim">)</span>
+        <span className="dim"> {'\u2014'} </span>
+        <span className="dim">TTFT: </span><span className="ttft">{tele[4]}</span>
+        {tele[5].trim() ? <span className="warn">{tele[5]}</span> : null}
+        <span className="dim"> | Speed: </span><span className="tps">{tele[6]}</span>
+        <span className="dim"> ({tele[7]}) | Effective: </span>
+        <span className="eff">{tele[8]}</span>
+        {tele[9].trim() ? <span className="warn">{tele[9]}</span> : null}
+      </div>
+    )
+  }
+  const isErr = /⛔|ERROR|❌|✗/.test(rest)
+  return (
+    <div className={`logline${isErr ? ' err' : ''}`} key={i}>
+      {ts}
+      {renderTags(rest, i)}
+    </div>
+  )
+}
+
 export default function App() {
   const [status, setStatus] = useState(null)
   const [ollama, setOllama] = useState(null)
@@ -235,9 +288,9 @@ export default function App() {
             follow
           </label>
         </div>
-        <pre className="log" ref={logRef} onScroll={onLogScroll}>
-          {logs.join('\n')}
-        </pre>
+        <div className="log" ref={logRef} onScroll={onLogScroll}>
+          {logs.map((line, i) => renderLogLine(line, i))}
+        </div>
       </section>
     </div>
   )
