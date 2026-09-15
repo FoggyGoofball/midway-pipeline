@@ -931,6 +931,49 @@ def _repair_duplicate_underscore_locals(content: str) -> str:
     return "\n".join(_out)
 
 
+def _normalize_pool_name_arguments(content: str) -> str:
+    """Rewrite quoted pool-name literals that equal a declared ``<key>_pool``
+    constant into the bare variable.
+
+    The skeleton injects ``local <key>_pool = "<key>"`` (the pool NAME string)
+    for every pooled entity.  The coder sometimes writes
+    ``PoolAcquire('<key>_pool', ...)`` — a quoted literal of the CONSTANT name,
+    which names a pool that does not exist (the real pool is named ``<key>``).
+    Replacing the quoted constant with the variable makes every pool call
+    resolve to the actual pool name string, converging quoted and unquoted
+    spellings on the single declared constant.
+    """
+    _consts = {
+        m.group(1)
+        for m in re.finditer(r'local\s+(\w+_pool)\s*=\s*"[^"]+"', content)
+    }
+    if not _consts:
+        return content
+
+    _alt = "|".join(sorted(_consts, key=len, reverse=True))
+    _quoted_re = re.compile(r'(["\'])(' + _alt + r')\1')
+    _call_re = re.compile(
+        r'\b(?:PoolAcquire|PoolReturn|PoolFree|PoolTotal|PoolCullBelow|CreatePool)'
+        r'\s*\([^)]*\)'
+    )
+
+    _count = 0
+
+    def _fix(_m):
+        nonlocal _count
+        _call = _m.group(0)
+        _new, _n = _quoted_re.subn(lambda _q: _q.group(2), _call)
+        if _n:
+            _count += _n
+        return _new
+
+    content = _call_re.sub(_fix, content)
+    if _count:
+        print(f"  [Post-Process Fix #14] Normalized {_count} quoted pool-name "
+              f"literal(s) -> variable")
+    return content
+
+
 def _strip_comment_monologues(content: str) -> str:
     """Collapse long runs of prose comment-only lines into a single line.
 
@@ -1022,6 +1065,7 @@ def post_process_lua(content: str) -> str:
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
+    content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
     content = _dedupe_onstep_registrations(content)    # Fix #12 — one OnStep callback only
     # Full-file invariants (#4 OnLoadStatic, #5 SLOT_ID) only apply to a whole
     # Lua module, not to a SEARCH/REPLACE patch fragment.  Applying them to
