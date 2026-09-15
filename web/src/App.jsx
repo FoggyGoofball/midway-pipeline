@@ -165,6 +165,19 @@ export default function App() {
     }
   }
 
+  const restartServer = async () => {
+    const ok = window.confirm(
+      'Restart the pipeline server?\n\nThis briefly interrupts requests, then the server comes back automatically. The React app stays up.'
+    )
+    if (!ok) return
+    setNotice('Restarting server…')
+    try {
+      await fetch('/api/restart', { method: 'POST' }).catch(() => {})
+    } catch {
+      /* server is dying — expected */
+    }
+  }
+
   const running = !!status?.running
   const tel = status?.last_telemetry
   const logs = status?.logs || []
@@ -187,6 +200,13 @@ export default function App() {
             <span className="dot bad" title="Ollama unreachable" />
           )}
           <span>Ollama {ollama?.version || ''}</span>
+          <button
+            className="restart"
+            onClick={restartServer}
+            title="Kill and restart the pipeline server (React app stays up)"
+          >
+            ↻ Restart
+          </button>
         </div>
       </header>
 

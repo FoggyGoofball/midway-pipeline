@@ -314,6 +314,34 @@ class StreamHandler(BaseHTTPRequestHandler):
         _status.request_stop()
         self._serve_json({"stopping": True, "running": _status.is_running()})
 
+    def _handle_restart(self):
+        self._serve_json({"restarting": True})
+        try:
+            self.wfile.flush()
+        except Exception:
+            pass
+        # Spawn a fully-detached launcher that starts a fresh server after this
+        # process exits, then kill ourselves.  The React dev server (separate
+        # process) is untouched.
+        try:
+            import subprocess as _sp
+            import sys as _sys
+            _sp.Popen(
+                [_sys.executable, str(LOCAL_DIR / "_restart_server.py")],
+                cwd=str(LOCAL_DIR),
+                creationflags=0x00000008 | 0x00000200,  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+                close_fds=True,
+            )
+        except Exception as _re:
+            print(f"  [Restart] Failed to spawn launcher: {_re}", flush=True)
+        import threading as _thr
+
+        def _kill():
+            time.sleep(0.6)
+            os._exit(0)
+
+        _thr.Thread(target=_kill, daemon=True).start()
+
     def _serve_stream(self, params: dict):
         prompt = params.get("prompt", [""])[0]
         if not prompt:
@@ -400,6 +428,9 @@ class StreamHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/stop":
             self._handle_stop()
+            return
+        if parsed.path == "/api/restart":
+            self._handle_restart()
             return
         if parsed.path not in ("/v1/chat/completions",):
             self.send_response(404)

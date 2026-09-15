@@ -5,13 +5,20 @@ cd /d "%~dp0"
 set "MIDWAY_PROJECT_ROOT=%~dp0..\midway"
 set "PYTHONUTF8=1"
 
-echo [Midway] Starting services in the background...
+echo [Midway] Starting services...
 
+:: Health monitor - visible (it is the live status display).
 start "Midway Health Monitor" powershell -NoExit -Command "python pipeline_status.py --watch"
-start "Midway Dashboard" /D "%~dp0web" cmd /k "npm run dev"
-start "Midway Stream Server" cmd /k "python pipeline_stream_server.py"
+
+:: Stream server - hidden (no taskbar button); watch it on the dashboard.
+powershell -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath 'python' -ArgumentList 'pipeline_stream_server.py' -WorkingDirectory '%~dp0'"
+
+:: React dev server - hidden.
+powershell -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c','npm run dev' -WorkingDirectory '%~dp0web'"
 
 echo.
-echo [Midway] Health monitor, React dashboard, and stream server
-echo [Midway] are now running in their own windows.
+echo [Midway] Health monitor:  visible window.
+echo [Midway] Stream server:   hidden (no taskbar button).
+echo [Midway] React dev server: hidden (no taskbar button).
+echo [Midway] Dashboard: http://localhost:8765/   (dev server: http://localhost:5173/)
 echo [Midway] This window can be closed.
