@@ -1504,6 +1504,27 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # Consolidated: all three callers now share build_fix_bridge_snippet().
                 _fix_bridge_snippet = build_fix_bridge_snippet(ctx)
 
+                # -- Live-file anchor context --------------------------------
+                # The fix agent must patch the ACCUMULATED file, not its own
+                # stale per-task fragment.  Feed it the live file (staging-aware)
+                # so the SEARCH blocks it emits actually match the on-disk file,
+                # instead of failing to apply every cycle ("none matched").
+                _live_file = ""
+                _fix_tf = getattr(task_obj, 'target_file', '') or ''
+                if _fix_tf and _fix_tf.endswith('.lua'):
+                    try:
+                        from _helpers_io import get_staging_path, is_staging_active
+                        _real = (ctx.project_root / _fix_tf).resolve()
+                        _p = (
+                            get_staging_path(_real, project_root=ctx.project_root)
+                            if is_staging_active() else _real
+                        )
+                        if _p.is_file():
+                            _live_file = _p.read_text(encoding="utf-8", errors="replace")
+                    except Exception:
+                        _live_file = ""
+                _fix_last_good = _live_file or ctx.all_results_dict.get(tid, "")
+
                 agent_fix_input = _prune_fix_context(
                     domain_key=original_agent_key,
                     task_obj=task_obj,
@@ -1512,7 +1533,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     user_prompt=ctx.user_prompt,
                     paged_files_cache=getattr(task_obj, 'paged_files_cache', None),
                     bridge_api_snippet=_fix_bridge_snippet,
-                    last_good_output=ctx.all_results_dict.get(tid, ""),
+                    last_good_output=_fix_last_good,
                 )
 
                 # Prefer live cartridge domain_registry (populated by mount_cartridge)
