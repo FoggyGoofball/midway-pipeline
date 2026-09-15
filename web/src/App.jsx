@@ -81,6 +81,7 @@ export default function App() {
   const refreshStatus = useCallback(async () => {
     try {
       const r = await fetch('/api/status')
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setStatus(await r.json())
       setServerUp(true)
     } catch {
@@ -90,12 +91,28 @@ export default function App() {
   }, [])
 
   const refreshOllama = useCallback(async () => {
+    // Prefer the pipeline server's own probe, but fall back to the always-up
+    // Vite control plane so Ollama status still shows while the pipeline is
+    // stopped (the pipeline normally serves /api/ollama and Vite proxies it).
     try {
       const r = await fetch('/api/ollama')
-      setOllama(await r.json())
+      if (r.ok) {
+        setOllama(await r.json())
+        return
+      }
     } catch {
-      /* server unreachable */
+      /* pipeline server unreachable */
     }
+    try {
+      const r = await fetch('/__control/ollama')
+      if (r.ok) {
+        setOllama(await r.json())
+        return
+      }
+    } catch {
+      /* no control plane either */
+    }
+    setOllama({ host: '', reachable: false, version: null, models: [], error: 'no probe available' })
   }, [])
 
   useEffect(() => {
@@ -170,13 +187,21 @@ export default function App() {
   }
 
   const stopServer = async () => {
-    if (!window.confirm('Stop the pipeline server?\n\nThe React app stays up. Use the Start button (or a start script) to bring it back.')) return
+    if (!window.confirm('Stop the pipeline server?\n\nVite (this control panel) stays up — use the Start button to bring the pipeline back.')) return
     setNotice('Stopping server…')
+    // Ask the pipeline to kill itself, then force-kill anything still on :8765
+    // via the always-up Vite control plane (covers a hung server too).
     try {
       await fetch('/api/kill', { method: 'POST' }).catch(() => {})
     } catch {
       /* server is dying — expected */
     }
+    try {
+      await fetch('/__control/kill', { method: 'POST' }).catch(() => {})
+    } catch {
+      /* no control plane (page served by the pipeline itself) */
+    }
+    setNotice('Server stopping…')
   }
 
   const startServer = async () => {
@@ -185,6 +210,9 @@ export default function App() {
       const r = await fetch('/__control/start', { method: 'POST' })
       if (r.ok) {
         setNotice('Server starting…')
+      } else if (r.status === 409) {
+        setNotice('Server is already running.')
+        refreshStatus()
       } else {
         setNotice('Could not start the server from here. Run a start script.')
       }
@@ -202,8 +230,8 @@ export default function App() {
       <header className="top">
         <div className="title">
           <h1>Midway Pipeline</h1>
-          <span className={`pill ${running ? 'on' : 'off'}`}>
-            {running ? (status?.stop_requested ? '● STOPPING' : '● RUNNING') : '○ IDLE'}
+          <span className={`pill ${serverUp ? (running ? 'on' : 'off') : 'off'}`}>
+            {!serverUp ? '● OFFLINE' : running ? (status?.stop_requested ? '● STOPPING' : '● RUNNING') : '○ IDLE'}
           </span>
         </div>
         <div className="conn">
@@ -224,6 +252,13 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {!serverUp && (
+        <section className="banner">
+          <span className="banner-text">Pipeline server offline — the control panel stays up.</span>
+          <button className="restart go" onClick={startServer}>▶ Start server</button>
+        </section>
+      )}
 
       <section className="card">
         <h2>Command</h2>

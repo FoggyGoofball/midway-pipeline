@@ -112,6 +112,23 @@ body {
   padding: 14px;
 }
 
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.5);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.banner-text {
+  color: var(--red);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .card h2 {
   margin: 0 0 10px;
   font-size: 15px;
