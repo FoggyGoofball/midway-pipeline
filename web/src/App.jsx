@@ -68,6 +68,19 @@ function renderLogLine(line, i) {
   )
 }
 
+// Fetch with a hard timeout so a down/unreachable server can't leave the UI
+// stuck on "Starting…" forever (e.g. the phone's TCP connect hanging on a
+// firewalled LAN host).
+async function fetchWithTimeout(url, options = {}, ms = 12000) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export default function App() {
   const [status, setStatus] = useState(null)
   const [ollama, setOllama] = useState(null)
@@ -177,7 +190,7 @@ export default function App() {
     try {
       for (let attempt = 0; attempt <= delays.length; attempt++) {
         try {
-          const r = await fetch('/api/stop', { method: 'POST' })
+          const r = await fetchWithTimeout('/api/stop', { method: 'POST' }, 8000)
           if (r.ok) {
             setNotice('Stop requested — finishing the current task…')
             refreshStatus()
@@ -205,12 +218,12 @@ export default function App() {
     // Ask the pipeline to kill itself, then force-kill anything still on :8765
     // via the always-up Vite control plane (covers a hung server too).
     try {
-      await fetch('/api/kill', { method: 'POST' }).catch(() => {})
+      await fetchWithTimeout('/api/kill', { method: 'POST' }, 8000).catch(() => {})
     } catch {
       /* server is dying — expected */
     }
     try {
-      await fetch('/__control/kill', { method: 'POST' }).catch(() => {})
+      await fetchWithTimeout('/__control/kill', { method: 'POST' }, 8000).catch(() => {})
     } catch {
       /* no control plane (page served by the pipeline itself) */
     }
@@ -220,7 +233,7 @@ export default function App() {
   const startServer = async () => {
     setNotice('Starting server…')
     try {
-      const r = await fetch('/__control/start', { method: 'POST' })
+      const r = await fetchWithTimeout('/__control/start', { method: 'POST' }, 15000)
       if (r.ok) {
         setNotice('Server starting…')
       } else if (r.status === 409) {
@@ -229,8 +242,10 @@ export default function App() {
       } else {
         setNotice('Could not start the server from here. Run a start script.')
       }
-    } catch {
-      setNotice('Could not reach the control endpoint. Run a start script.')
+    } catch (e) {
+      setNotice(e && e.name === 'AbortError'
+        ? 'Start timed out — is the control panel (Vite) running?'
+        : 'Could not reach the control endpoint. Run a start script.')
     }
   }
 
