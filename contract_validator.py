@@ -172,10 +172,12 @@ def build_lua_contract(
     approved_calls: Set[str] = set()
     bare_name_to_ns: Dict[str, str] = {}          # lowercase bare -> original-case namespace
     engine_namespaces: Set[str] = set()
+    ns_case: Dict[str, str] = {}                  # lowercase ns -> original-case ns
 
     # Collect engine namespaces from the map
     for ns in namespace_map.values():
         engine_namespaces.add(ns.lower())
+        ns_case[ns.lower()] = ns
 
     if extra_engine_namespaces:
         engine_namespaces.update(ns.lower() for ns in extra_engine_namespaces)
@@ -205,6 +207,7 @@ def build_lua_contract(
                 ns_from_key = parts[0]
                 sym = parts[1]
                 engine_namespaces.add(ns_from_key.lower())
+                ns_case[ns_from_key.lower()] = ns_from_key  # preserve original casing
                 _register(sym, ns_from_key)
             elif namespace:
                 # Bare symbol name under a known-namespace section
@@ -227,7 +230,7 @@ def build_lua_contract(
             ns_groups.setdefault(ns, []).append(sym)
 
     approved_names_hint = "; ".join(
-        f"{ns.capitalize() if ns.islower() else ns}: {', '.join(sorted(syms))}"
+        f"{ns_case.get(ns, ns)}: {', '.join(sorted(syms))}"
         for ns, syms in sorted(ns_groups.items())
     )
 
