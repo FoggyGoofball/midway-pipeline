@@ -903,6 +903,34 @@ def _dedupe_onstep_registrations(content: str) -> str:
     return content
 
 
+def _repair_duplicate_underscore_locals(content: str) -> str:
+    """Repair `local _ = a, _ = b, ...` duplicate-declarator syntax errors.
+
+    The coder repeatedly emits this when "consuming all modifiers":
+        local _ = MOD.volume, _ = MOD.friction, _ = MOD.karma, _ = MOD.luck
+    In Lua, `local _ = a, _ = b` is a SYNTAX ERROR (``_`` is declared twice in
+    one statement; the second ``_ = b`` is not a valid declarator).  Rewrite to
+    a valid statement sequence: ``local _ = a`` then bare ``_ = b; _ = c; ...``.
+    """
+    _repaired = 0
+    _out: list[str] = []
+    for _line in content.splitlines():
+        _m = re.match(r'^(\s*)local\s+_\s*=\s*(.+)$', _line)
+        if _m and ', _ = ' in _line:
+            _indent = _m.group(1)
+            _parts = _m.group(2).split(', _ = ')
+            _first = _parts[0].strip()
+            _out.append(f"{_indent}local _ = {_first}")
+            for _rest in _parts[1:]:
+                _out.append(f"{_indent}_ = {_rest.strip()}")
+            _repaired += 1
+        else:
+            _out.append(_line)
+    if _repaired:
+        print(f"  [Post-Process Fix #13] Repaired {_repaired} duplicate-'_' local declaration(s)")
+    return "\n".join(_out)
+
+
 def _strip_comment_monologues(content: str) -> str:
     """Collapse long runs of prose comment-only lines into a single line.
 
@@ -989,6 +1017,7 @@ def post_process_lua(content: str) -> str:
     content = _strip_pipeline_artifacts(content)      # Fix #3 first
     content = _strip_comment_monologues(content)       # Fix #11 — kill prose comment essays
     content = _strip_module_level_mod(content)         # Fix #2
+    content = _repair_duplicate_underscore_locals(content)  # Fix #13 — local _ = a, _ = b syntax error
     content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6

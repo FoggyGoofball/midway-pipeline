@@ -1623,6 +1623,16 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                                 print(f"  [Anchor Fix] 🔀 {tid}: converted full-file "
                                       f"rewrite into a surgical diff patch.")
                         if _fx_applied:
+                            # Deterministically repair the patched file (bare
+                            # calls, duplicate-`_` locals, phantom APIs, nested
+                            # OnStep) BEFORE the luac gate so accumulated syntax
+                            # errors from earlier tasks don't keep failing luac
+                            # and pinning the clean baseline at an old snapshot.
+                            try:
+                                from _post_process_lua import post_process_lua as _fx_ppl
+                                _fx_patched = _fx_ppl(_fx_patched)
+                            except Exception:
+                                pass
                             # luac-gate the patched content.
                             import subprocess as _fx_spx
                             import tempfile as _fx_tf
