@@ -106,7 +106,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
                 effective_tps = telemetry.token_count / total_elapsed if total_elapsed > 0 else 0.0
 
                 # Flag extreme TTFT
-                ttft_flag = " ⚠️ EXTREME" if ttft > 10.0 else ""
+                ttft_flag = " ⚠️ EXTREME" if ttft > 100.0 else ""
                 # Flag low effective TPS (below 2.0 tok/s across total time)
                 low_tps_flag = " 🚨 SLOW" if effective_tps < 2.0 else ""
 
