@@ -513,6 +513,18 @@ def _strip_phantom_api_calls(content: str) -> str:
         print(f"  [Post-Process Fix #8] Rewrote {_edb_count} 'Engine.DestroyBody' "
               f"-> 'MidwayPhysics.DestroyBody'")
 
+    # `MidwayPhysics.GetMass` is a phantom: the bridge contract has SetMass but
+    # NO GetMass getter.  Neutralize it to a constant mass so patterns like
+    # `SetMass(handle, GetMass(handle))` become valid no-ops instead of
+    # `SetMass(handle, false)` (a runtime type error).
+    _content_no_gm, _gm_count = re.subn(
+        r'\bMidwayPhysics\.GetMass\s*\([^()]*\)', '1.0', content
+    )
+    if _gm_count:
+        content = _content_no_gm
+        print(f"  [Post-Process Fix #8] Neutralized {_gm_count} phantom "
+              f"'MidwayPhysics.GetMass' -> 1.0")
+
     # Phase 2: collect all phantom function names found in the content.
     modifications = 0
     _phantom_names_found: set[str] = set()
