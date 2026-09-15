@@ -392,6 +392,55 @@ def _extract_function_body(content: str, function_name: str) -> str | None:
     return "\n".join(lines[fn_start:fn_end + 1])
 
 
+def _window_mono_snippet(content: str, errors_text: str,
+                         context: int = 10, hard_cap: int = 4000) -> str:
+    """Window a full-file snippet down to the region the errors actually flag.
+
+    The monolithic fix cycle previously shipped the entire (up to ~26k-char)
+    file to the coder, which then rewrote the OnLoad/OnLoadStatic/OnUnload
+    wrappers from scratch.  Showing ONLY the flagged lines (plus a small
+    context window) makes a full-file rewrite impossible while still giving
+    the model enough surrounding code to emit a correct SEARCH block.
+
+    Resolution order:
+      1. Explicit line number in the error text (luac/compiler style).
+      2. The broken function named in the errors (body only, no wrappers).
+      3. Head + tail fallback (middle truncated).
+    """
+    if not content or not content.strip():
+        return content
+    lines = content.splitlines()
+    n = len(lines)
+
+    # 1. Explicit line number.
+    _line_matches = re.findall(r'(?:line\s+|:\s*)(\d+)', errors_text or "")
+    for _tok in _line_matches:
+        try:
+            _ln = int(_tok)
+            if 1 <= _ln <= n:
+                _start = max(0, _ln - 1 - context)
+                _end = min(n, _ln - 1 + context + 1)
+                _window = "\n".join(lines[_start:_end])
+                _note = (f"\n...(windowed to ~{context} lines around line {_ln}; "
+                         f"full file is {n} lines)..." )
+                return (_window[:hard_cap] + _note)
+        except (ValueError, IndexError):
+            continue
+
+    # 2. Broken function named in the errors.
+    _fn = _extract_broken_function_name(errors_text or "")
+    if _fn:
+        _body = _extract_function_body(content, _fn)
+        if _body:
+            return _body[:hard_cap]
+
+    # 3. Head + tail fallback.
+    _head = "\n".join(lines[:60])
+    _tail = "\n".join(lines[-40:]) if n > 60 else ""
+    _result = _head + ("\n...[middle truncated]...\n" + _tail if _tail else "")
+    return _result[:hard_cap]
+
+
 def _strip_lifecycle(content: str) -> str:
     """Strip lifecycle invariant sections from Lua source, keeping only
     game-specific logic.  This prevents the fix agent from seeing the

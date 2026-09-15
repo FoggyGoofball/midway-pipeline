@@ -51,6 +51,7 @@ from _review_helpers import (
     _prune_fix_context,
     _extract_broken_function_name,
     _extract_function_body,
+    _window_mono_snippet,
 )  # noqa: F401
 
 
@@ -1276,12 +1277,18 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     "  <<<<<<< SEARCH\n  <exact current lines>\n  =======\n  <corrected lines>\n  >>>>>>> REPLACE\n"
                     f"{_fix_approved_apis}"
                 )
+                # Anchor Context Windowing: only ship the flagged region (plus a
+                # small context window) to the coder, never the full ~26k-char
+                # file.  Without the lifecycle wrappers in view the model cannot
+                # attempt a full-file rewrite.
+                _mono_window = _window_mono_snippet(_mono_snippet, _mono_review_errors)
                 _mono_fix_prompt = (
                     f"## Target File: {_mono_target}\n\n"
                     f"{_fix_context_extra}"
                     f"{_mono_review_errors}"
-                    f"## CURRENT FILE CONTENT (fix only the errors above):\n"
-                    f"```lua\n{_mono_snippet}\n```\n\n"
+                    f"## CURRENT FILE REGION (fix only the errors above; "
+                    f"do NOT redefine lifecycle functions):\n"
+                    f"```lua\n{_mono_window}\n```\n\n"
                     f"---\n"
                     f"Output ONE SEARCH/REPLACE block per region you are fixing. "
                     f"SEARCH must match the current file exactly; REPLACE is the corrected region."
