@@ -23,6 +23,8 @@ import urllib.error
 from typing import Generator, Optional
 from pathlib import Path
 
+from term_color import paint
+
 _active_model = None
 
 
@@ -247,7 +249,7 @@ def _stream_messages_payload(
     """
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
-    print(f"  [{ts}] [RETRY STREAM] [{label}] Resuming with stateful messages array...")
+    print(f"  [{ts}] {paint('[RETRY STREAM]', 'yellow')} [{paint(label, 'blue')}] Resuming with stateful messages array...")
 
     ctx_size = resolve_ctx_size(model)
 
@@ -503,7 +505,7 @@ def call_ollama_streamed(
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*60}")
-    print(f"  [{ts}] [START] [{label}] Calling Ollama ({use_model}) [STREAMING]...")
+    print(f"  [{ts}] {paint('[START]', 'green')} [{paint(label, 'blue')}] Calling Ollama ({paint(use_model, 'magenta')}) [STREAMING]...")
     print(f"{'='*60}")
     sys.stdout.flush()
 
@@ -928,7 +930,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
         _ts = _dt.now().strftime('%H:%M:%S')
         _presumm_input_len = len(user)
         print(f"\n{'='*60}")
-        print(f"  [{_ts}] [START] [Pre-Summarizer ({label})] Calling Ollama ({PRE_SUMMARIZER_MODEL})...")
+        print(f"  [{_ts}] {paint('[START]', 'green')} [{paint(f'Pre-Summarizer ({label})', 'blue')}] Calling Ollama ({paint(PRE_SUMMARIZER_MODEL, 'magenta')})...")
         print(f"  [VRAM Guard] num_ctx={_presumm_ctx}, user={_presumm_input_len} chars")
         print(f"{'='*60}")
         sys.stdout.flush()
@@ -937,7 +939,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
             _summary_tokens.append(_tok)
         user = "".join(_summary_tokens)
         _ts_end = _dt.now().strftime('%H:%M:%S')
-        print(f"  [{_ts_end}] [END] [Pre-Summarizer ({label})] Compressed {_presumm_input_len} → {len(user)} chars.")
+        print(f"  [{_ts_end}] {paint('[END]', 'green')} [{paint(f'Pre-Summarizer ({label})', 'blue')}] Compressed {_presumm_input_len} → {len(user)} chars.")
         sys.stdout.flush()
 
     if "Integration Review" in label or "Review" in label:
@@ -1007,7 +1009,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*60}")
-    print(f"  [{ts}] [START] [{label}] Calling Ollama ({use_model})...")
+    print(f"  [{ts}] {paint('[START]', 'green')} [{paint(label, 'blue')}] Calling Ollama ({paint(use_model, 'magenta')})...")
     print(f"  [VRAM Guard] num_ctx={_e_model_ctx}, user={len(user)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
@@ -1016,7 +1018,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
         full.append(token)
     result = "".join(full)
     ts_end = datetime.now().strftime('%H:%M:%S')
-    print(f"  [{ts_end}] [END] [{label}] Execution complete.")
+    print(f"  [{ts_end}] {paint('[END]', 'green')} [{paint(label, 'blue')}] Execution complete.")
     sys.stdout.flush()
     return result
 
@@ -1120,7 +1122,7 @@ def call_ollama_with_messages(
     from datetime import datetime
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"\n{'='*60}")
-    print(f"  [{ts}] [START] [{label}] Calling Ollama ({use_model}) [stateless]...")
+    print(f"  [{ts}] {paint('[START]', 'green')} [{paint(label, 'blue')}] Calling Ollama ({paint(use_model, 'magenta')}) [stateless]...")
     print(f"  [VRAM Guard] num_ctx={_model_ctx}, user={len(user_text)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
@@ -1129,6 +1131,6 @@ def call_ollama_with_messages(
         full.append(token)
     result = "".join(full)
     ts_end = datetime.now().strftime('%H:%M:%S')
-    print(f"  [{ts_end}] [END] [{label}] Execution complete.")
+    print(f"  [{ts_end}] {paint('[END]', 'green')} [{paint(label, 'blue')}] Execution complete.")
     sys.stdout.flush()
     return result

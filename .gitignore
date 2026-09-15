@@ -48,6 +48,11 @@ pipeline_inventory.json
 ehthumbs.db
 Thumbs.db
 
+# ── 8. Web Dashboard (React/Vite) ────────────────────────────────────────────
+# node_modules is huge; the built bundle lives in web/dist and IS committed
+# so the Python server can serve it without a Node toolchain on the host.
+/web/node_modules/
+
 # ── 8. IDE & Local Tooling ───────────────────────────────────────────────────
 .vscode/
 .idea/

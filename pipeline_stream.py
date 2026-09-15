@@ -21,6 +21,9 @@ import builtins
 from datetime import datetime
 from pathlib import Path
 
+import server_status as _status
+from term_color import paint
+
 PROJECT_ROOT = Path(__file__).parent.resolve()
 
 # -- Internal queue worker ---------------------------------------------------
@@ -35,6 +38,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
 
     # Register progress listener for phase announcements
     def _phase_listener(phase: str, status: str, detail: str = ""):
+        _status.set_phase(phase, status, detail)
         if status == "started":
             msg = f"\n**▶ {phase}:** {detail}\n"
         elif status == "done":
@@ -48,6 +52,8 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
         except Exception:
             pass
     _pipeline.register_progress_listener(_phase_listener)
+    _status.set_running(prompt)
+    _status.bump_run_count()
 
     # -- Shared Telemetry State ----------------------------------------------
     class TelemetryState:
@@ -82,6 +88,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
         telemetry.token_count = 0
         telemetry.model_name = str(model or getattr(_ollama_client, 'MODEL', 'unknown'))
         telemetry.label = str(label)
+        _status.set_current_call(telemetry.model_name, telemetry.label)
 
         try:
             gen = _original_call_streamed(system, user, label, model, params)
@@ -103,6 +110,15 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
                 # Flag low effective TPS (below 2.0 tok/s across total time)
                 low_tps_flag = " 🚨 SLOW" if effective_tps < 2.0 else ""
 
+                _status.set_telemetry({
+                    "model": telemetry.model_name,
+                    "label": telemetry.label,
+                    "ttft": round(ttft, 2),
+                    "tps": round(streaming_tps, 1),
+                    "effective_tps": round(effective_tps, 1),
+                    "tpm": round(tpm, 0),
+                    "tokens": telemetry.token_count,
+                })
                 stat_msg = (
                     f"\n[⚡ **Telemetry:** `{telemetry.model_name}` | TTFT: **{ttft:.2f}s**{ttft_flag} | "
                     f"Speed: **{streaming_tps:.1f} tok/s** ({tpm:.0f} TPM) | "
@@ -110,10 +126,11 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
                 )
                 event_queue.put(("announce", stat_msg))
                 print(
-                    f"  [Telemetry] {telemetry.label} ({telemetry.model_name})  "
-                    f"TTFT: {ttft:.2f}s{ttft_flag} | "
-                    f"Speed: {streaming_tps:.1f} tok/s ({tpm:.0f} TPM) | "
-                    f"Effective: {effective_tps:.1f} tok/s{low_tps_flag}",
+                    f"  {paint('[Telemetry]', 'gray')} {paint(telemetry.label, 'blue')} "
+                    f"({paint(telemetry.model_name, 'magenta')})  "
+                    f"TTFT: {paint(f'{ttft:.2f}s', 'cyan')}{ttft_flag} | "
+                    f"Speed: {paint(f'{streaming_tps:.1f} tok/s', 'yellow')} ({tpm:.0f} TPM) | "
+                    f"Effective: {paint(f'{effective_tps:.1f} tok/s', 'green')}{low_tps_flag}",
                     flush=True,
                 )
 
@@ -138,9 +155,11 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
     except Exception as e:
         # Push error to stream queue
         event_queue.put(("error", str(e)))
+        _status.set_error(str(e))
         import traceback
         event_queue.put(("error", traceback.format_exc()))
     finally:
+        _status.set_idle()
         # Restore monkey-patches safely
         builtins.input = _original_input
         if _original_call_streamed:

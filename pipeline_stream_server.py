@@ -26,6 +26,8 @@ from pathlib import Path
 import hashlib
 import time
 
+import server_status as _status
+
 # Bug S: Set deterministic-server-mode env var BEFORE any pipeline modules are
 # imported.  This ensures the reconciliation gate in _finalize_review.py detects
 # server mode via os.environ["MIDWAY_FORCED_DETERMINISTIC"] even when stdin
@@ -52,6 +54,24 @@ import time
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
 
+WEB_DIST = (Path(__file__).resolve().parent / "web" / "dist").resolve()
+
+MIME_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".ico": "image/x-icon",
+    ".map": "application/json",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".txt": "text/plain; charset=utf-8",
+}
+
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     """HTTP server handling concurrent requests in separate threads."""
     daemon_threads = True
@@ -68,6 +88,55 @@ CORS_HEADERS = {
 def _add_cors_headers(handler):
     for key, value in CORS_HEADERS.items():
         handler.send_header(key, value)
+
+
+class _LogTee:
+    """Mirror every console write into the shared status store so the phone
+    dashboard can tail the exact terminal log (ANSI colours stripped)."""
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def write(self, s):
+        try:
+            self._stream.write(s)
+        except Exception:
+            pass
+        try:
+            _status.log_text(s)
+        except Exception:
+            pass
+        return len(s)
+
+    def flush(self):
+        try:
+            self._stream.flush()
+        except Exception:
+            pass
+
+    def isatty(self):
+        return self._stream.isatty()
+
+    def fileno(self):
+        return self._stream.fileno()
+
+    @property
+    def encoding(self):
+        return getattr(self._stream, "encoding", "utf-8")
+
+    @property
+    def errors(self):
+        return getattr(self._stream, "errors", "replace")
+
+
+def _install_log_tee():
+    if not isinstance(sys.stdout, _LogTee):
+        sys.stdout = _LogTee(sys.stdout)
+    if not isinstance(sys.stderr, _LogTee):
+        sys.stderr = _LogTee(sys.stderr)
+
+
+_install_log_tee()
 
 
 class StreamHandler(BaseHTTPRequestHandler):
@@ -91,13 +160,22 @@ class StreamHandler(BaseHTTPRequestHandler):
             self._serve_stream(params)
         elif parsed.path == "/v1/models":
             self._serve_models()
-        elif parsed.path == "/" or parsed.path == "":
-            self._serve_index()
-        else:
+        elif parsed.path == "/api/status":
+            self._serve_status()
+        elif parsed.path == "/api/logs":
+            self._serve_logs(params)
+        elif parsed.path == "/api/ollama":
+            self._serve_ollama()
+        elif parsed.path.startswith("/api/"):
             self.send_response(404)
             _add_cors_headers(self)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b"Not Found")
+            self.wfile.write(b'{"error":"unknown api endpoint"}')
+        elif parsed.path == "/" or parsed.path == "":
+            self._serve_static("/")
+        else:
+            self._serve_static(parsed.path)
 
     def _serve_health(self):
         self.send_response(200)
@@ -133,6 +211,104 @@ class StreamHandler(BaseHTTPRequestHandler):
 <h1>Midway Pipeline Stream</h1>
 <p>Use: <code>curl http://localhost:8765/stream?prompt=YOUR_PROMPT</code></p>
 </body></html>""")
+
+    # -- Dashboard / control-plane endpoints ----------------------------
+
+    def _serve_json(self, obj):
+        self.send_response(200)
+        _add_cors_headers(self)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(obj).encode("utf-8"))
+
+    def _serve_status(self):
+        self._serve_json(_status.snapshot())
+
+    def _serve_logs(self, params: dict):
+        try:
+            n = int(params.get("n", ["100"])[0])
+        except Exception:
+            n = 100
+        n = max(1, min(n, 800))
+        self._serve_json({"lines": _status.get_logs(n)})
+
+    def _serve_ollama(self):
+        self._serve_json(_status.probe_ollama())
+
+    def _serve_static(self, path: str):
+        root = WEB_DIST
+        rel = path.lstrip("/")
+        if rel in ("", "index.html"):
+            rel = "index.html"
+        candidate = (root / rel).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            self.send_response(403)
+            _add_cors_headers(self)
+            self.end_headers()
+            return
+        if not candidate.is_file():
+            candidate = root / "index.html"
+        if not candidate.is_file():
+            self.send_response(404)
+            _add_cors_headers(self)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"Web UI not built. Run: cd web && npm install && npm run build")
+            return
+        ext = candidate.suffix.lower()
+        ctype = MIME_TYPES.get(ext, "application/octet-stream")
+        self.send_response(200)
+        _add_cors_headers(self)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(candidate.stat().st_size))
+        self.end_headers()
+        with open(candidate, "rb") as f:
+            self.wfile.write(f.read())
+
+    def _handle_run(self):
+        content_length = int(self.headers.get("Content-Length", 0) or 0)
+        prompt = ""
+        try:
+            if content_length:
+                req = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                prompt = (req.get("prompt") or "").strip()
+        except Exception:
+            prompt = ""
+        if not prompt:
+            self.send_response(400)
+            _add_cors_headers(self)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"missing prompt"}')
+            return
+        if _status.is_running():
+            self.send_response(409)
+            _add_cors_headers(self)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "A run is already active", "running": True}).encode("utf-8"))
+            return
+
+        # Reserve the slot immediately so concurrent requests are rejected.
+        _status.set_running(prompt)
+
+        def _consume():
+            try:
+                for _ in stream_pipeline_generator(prompt, None, None):
+                    pass
+            except Exception as e:
+                _status.set_error(str(e))
+
+        import threading
+        threading.Thread(target=_consume, daemon=True).start()
+
+        self.send_response(202)
+        _add_cors_headers(self)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"accepted": True, "prompt": prompt}).encode("utf-8"))
 
     def _serve_stream(self, params: dict):
         prompt = params.get("prompt", [""])[0]
@@ -215,6 +391,9 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/run":
+            self._handle_run()
+            return
         if parsed.path not in ("/v1/chat/completions",):
             self.send_response(404)
             _add_cors_headers(self)
