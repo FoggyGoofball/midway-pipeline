@@ -1554,6 +1554,23 @@ def execute_task(task, user_prompt: str, director_output: str,
                                         _apply_target.write_text(_file_content, encoding="utf-8")
                             except Exception as _post_e:
                                 print(f"  [Anchor Verifier] ⚠ Post-patch check error: {_post_e}")
+                        # -- Lua syntax repair before the luac snapshot ---------
+                        # Repair trivial syntax errors (bare `MOD.x` statements,
+                        # duplicate-'_' locals) so a task's raw output advances
+                        # the baseline instead of pinning it at the last-clean
+                        # state and cascading into review-fix SEARCH mismatches.
+                        try:
+                            from _post_process_lua import repair_lua_syntax as _repair_lua_syntax
+                            _repaired_content = _repair_lua_syntax(_file_content)
+                            if _repaired_content != _file_content:
+                                _file_content = _repaired_content
+                                try:
+                                    from _helpers_io import atomic_write_text as _staging_repair
+                                    _staging_repair(_apply_target, _file_content)
+                                except Exception:
+                                    _apply_target.write_text(_file_content, encoding="utf-8")
+                        except Exception as _repair_e:
+                            print(f"  [Lua Syntax Repair] ⚠ skipped: {_repair_e}")
                         # -- Incremental luac-clean snapshot: update the revert baseline
                         # after every successful patch so revert-on-regression restores
                         # the last-good ACCUMULATED file, not the empty skeleton.

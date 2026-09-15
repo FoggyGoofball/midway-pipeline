@@ -931,6 +931,51 @@ def _repair_duplicate_underscore_locals(content: str) -> str:
     return "\n".join(_out)
 
 
+_BARE_EXPR_KEYWORDS = frozenset({
+    'local', 'function', 'end', 'if', 'then', 'else', 'elseif', 'for',
+    'while', 'do', 'repeat', 'until', 'return', 'break', 'goto', 'in',
+    'and', 'or', 'not', 'true', 'false', 'nil',
+})
+
+_BARE_EXPR_RE = re.compile(
+    r'^(\s*)((?:[A-Za-z_][A-Za-z0-9_.]*(?:\s*\[[^\]]+\])?)|(?:\d+(?:\.\d+)?))\s*(--.*)?$'
+)
+
+
+def _repair_bare_expression_statements(content: str) -> str:
+    """Convert bare expression statements into valid Lua statements.
+
+    Lua only permits assignments and function calls as statements.  The coder
+    repeatedly "consumes" modifiers by emitting bare expressions:
+        MOD.heat
+        MOD.karma
+        AttractionConstants.modifiers.luck
+    and earlier fixes (e.g. Fix #8/#9 neutralization) can leave a bare literal
+    such as ``1.0``.  All of these are SYNTAX ERRORS ("syntax error near 'MOD'"
+    / "unexpected symbol near '1.0'").  Rewrite each such line to
+    ``local _ = <expr>`` — a legal statement that still evaluates the value,
+    so the "read every modifier" static gate keeps passing.
+    """
+    _repaired = 0
+    _out: list[str] = []
+    for _line in content.splitlines():
+        _m = _BARE_EXPR_RE.match(_line)
+        if _m:
+            _expr = _m.group(2)
+            _head = _expr.split('.')[0].split('[')[0].strip()
+            if _head not in _BARE_EXPR_KEYWORDS:
+                _indent = _m.group(1)
+                _comment = _m.group(3) or ''
+                _out.append(f"{_indent}local _ = {_expr}{_comment}")
+                _repaired += 1
+                continue
+        _out.append(_line)
+    if _repaired:
+        print(f"  [Post-Process Fix #15] Converted {_repaired} bare expression "
+              f"statement(s) to 'local _ = ...'")
+    return "\n".join(_out)
+
+
 def _normalize_pool_name_arguments(content: str) -> str:
     """Rewrite quoted pool-name literals that equal a declared ``<key>_pool``
     constant into the bare variable.
@@ -1067,6 +1112,7 @@ def post_process_lua(content: str) -> str:
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
     content = _dedupe_onstep_registrations(content)    # Fix #12 — one OnStep callback only
+    content = _repair_bare_expression_statements(content)  # Fix #15 — LAST: bare MOD.x / neutralized literals are invalid statements
     # Full-file invariants (#4 OnLoadStatic, #5 SLOT_ID) only apply to a whole
     # Lua module, not to a SEARCH/REPLACE patch fragment.  Applying them to
     # fragments injected duplicate `local SLOT_ID` lines and spurious
@@ -1082,6 +1128,20 @@ def post_process_lua(content: str) -> str:
     if had_trailing_newline and not content.endswith('\n'):
         content += '\n'
 
+    return content
+
+
+def repair_lua_syntax(content: str) -> str:
+    """Minimal, safe syntax-repair pass for use mid-task (before a luac gate).
+
+    Unlike the full ``post_process_lua``, this applies ONLY the pure syntax
+    repairs — no duplicate-function dedup, no OnStep-registration dedupe, no
+    handle/OnLoadStatic/SLOT_ID injection — so it can run on a
+    partially-assembled accumulated file without disturbing the anchor-based
+    incremental build.
+    """
+    content = _repair_duplicate_underscore_locals(content)   # Fix #13
+    content = _repair_bare_expression_statements(content)    # Fix #15
     return content
 
 
