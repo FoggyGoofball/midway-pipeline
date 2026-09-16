@@ -504,6 +504,129 @@ def _ask_more_review_cycles(ctx: PipelineContext) -> bool:
     return _ans in ("y", "yes")
 
 
+def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
+    """Last-resort whole-file LLM rewrite, gated by luac + RuntimeSim.
+
+    The per-task fix cycle edits fragments and cannot repair a file-level
+    structural defect (a lost OnStep wrapper, a stray `end`, a truncated
+    call). This pass sends the ENTIRE accumulated file to the coder with an
+    explicit "make it luac-clean and contract-conformant" mandate, validates
+    the result with luac and the RuntimeSim analyzer, and only commits when
+    both pass. Returns True on success.
+    """
+    import subprocess as _sp
+    import tempfile as _tmp_mod
+    import os as _os_mod
+
+    _real = ctx.project_root / target_rel
+    _src = ""
+    if _real.is_file():
+        _src = _real.read_text(encoding="utf-8", errors="replace")
+    if not _src.strip():
+        try:
+            from _helpers_io import get_staging_path, is_staging_active
+            if is_staging_active():
+                _st = get_staging_path(_real, project_root=ctx.project_root)
+                if _st and _st.is_file():
+                    _src = _st.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if not _src.strip():
+        return False
+
+    _errors = (getattr(ctx, "pre_flight_errors", "") or "")[:3000]
+    _bridge = build_fix_bridge_snippet(ctx) or ""
+
+    _sys = (
+        "You are a Lua syntax-repair specialist for a custom C++17 game engine "
+        "(Lua 5.4 via sol2, Jolt physics). Your ONLY job is to make the given "
+        "file load cleanly and call only the approved MidwayPhysics APIs."
+    )
+    _user = (
+        f"## Target File: {target_rel}\n\n"
+        f"## Known errors (fix ALL of these)\n{_errors}\n\n"
+        f"{_bridge}\n\n"
+        f"## CURRENT FILE (complete)\n"
+        f"```lua\n{_src}\n```\n\n"
+        f"Rewrite the ENTIRE file so that:\n"
+        f"1. It is luac-clean: every function/if/do/repeat block is balanced; "
+        f"no stray or missing 'end'; no truncated calls.\n"
+        f"2. Every MidwayPhysics call uses the EXACT argument count from the contract above.\n"
+        f"3. The lifecycle is preserved: OnLoadStatic() calls SpawnSharedBooth(); "
+        f"OnLoad() spawns bodies and registers MidwayPhysics.OnStep(function(dt) ... end); "
+        f"OnUnload() exists.\n"
+        f"4. No Roblox/Unity APIs, no C++ engine internals, no TODO scaffolds.\n"
+        f"Output ONLY one ```lua fenced block with the complete corrected file. "
+        f"No prose before or after.\n"
+    )
+
+    _out = call_ollama(_sys, _user, f"Whole-File Surgery ({target_rel})",
+                       _EXECUTION_MODEL, params={"num_predict": 4096},
+                       skip_pre_summarizer=True)
+    if _is_fatal_ollama(_out):
+        print("  [Surgery] ⚠ Ollama error during surgery — aborting rewrite.")
+        return False
+
+    _m = re.search(r'```(?:lua|luau)?\s*\n(.*?)```', _out, re.DOTALL | re.IGNORECASE)
+    if not _m:
+        print("  [Surgery] ⚠ no fenced Lua block in surgery output — aborting.")
+        return False
+    _fixed = _m.group(1).strip("\n")
+    if len(_fixed) < 200:
+        print(f"  [Surgery] ⚠ rewrite too short ({len(_fixed)} chars) — rejecting.")
+        return False
+
+    # Gate 1: luac must accept the rewrite.
+    _fd, _tmp = _tmp_mod.mkstemp(suffix=".lua")
+    try:
+        with _os_mod.fdopen(_fd, "w", encoding="utf-8") as _fh:
+            _fh.write(_fixed)
+        _r = _sp.run(["luac", "-p", _tmp], capture_output=True, text=True, timeout=30)
+    finally:
+        try:
+            _os_mod.unlink(_tmp)
+        except Exception:
+            pass
+    if _r.returncode != 0:
+        print(f"  [Surgery] ⚠ luac rejected rewrite: {_r.stderr.strip()[:160]}")
+        return False
+
+    # Gate 2: RuntimeSim arity / phantom-API analysis must pass.
+    try:
+        from runtime_sim import _analyse_lua_text as _sim_analyse
+        _sim_errs = _sim_analyse("task_surgery", _fixed)
+        if _sim_errs:
+            print(f"  [Surgery] ⚠ RuntimeSim rejected rewrite "
+                  f"({len(_sim_errs)} issue(s)): {_sim_errs[0][:160]}")
+            return False
+    except Exception as _se:
+        print(f"  [Surgery] ⚠ RuntimeSim check skipped: {_se}")
+
+    # Commit to the real path AND (when active) staging, so the review loop's
+    # per-cycle luac check (which reads the real path) sees the fix.
+    try:
+        _real.parent.mkdir(parents=True, exist_ok=True)
+        _real.write_text(_fixed, encoding="utf-8")
+    except Exception as _we:
+        print(f"  [Surgery] ⚠ failed to write real path: {_we}")
+        return False
+    try:
+        from _helpers_io import get_staging_path, is_staging_active
+        if is_staging_active():
+            _st = get_staging_path(_real, project_root=ctx.project_root)
+            if _st is not None:
+                _st.parent.mkdir(parents=True, exist_ok=True)
+                _st.write_text(_fixed, encoding="utf-8")
+    except Exception:
+        pass
+
+    _snap = getattr(ctx, "_last_luac_clean_anchor", None)
+    if _snap is not None:
+        _snap[target_rel] = _fixed
+    print(f"  [Surgery] ✅ committed luac-clean rewrite of {target_rel} ({len(_fixed)} chars).")
+    return True
+
+
 def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
     """Phase 6: Integration review, domain-aware fix cycle, insanity
     detection, reconciliation gate, and pre-flight check integration."""
@@ -576,6 +699,28 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 continue
             count = ctx.retry_counts.setdefault(tid, 0)
             if count >= _CB_MAX:
+                # -- Last-resort whole-file surgery (luac + RuntimeSim gated) --
+                # Before tripping, try ONE full-file LLM rewrite of the failing
+                # task's accumulated file. The per-task fix cycle operates on
+                # fragments and cannot repair a file-level structural defect
+                # (e.g. a lost OnStep wrapper or a stray `end`). On success the
+                # breaker resets and the loop retries with a clean file.
+                _surg_tried = getattr(ctx, "_surgery_attempted", None)
+                if _surg_tried is None:
+                    _surg_tried = set()
+                    ctx._surgery_attempted = _surg_tried
+                _surg_t = ctx.task_map.get(tid)
+                _surg_tf = str(getattr(_surg_t, "target_file", "") or "").replace("\\", "/")
+                if _surg_tf.endswith(".lua") and _surg_tf not in _surg_tried:
+                    _surg_tried.add(_surg_tf)
+                    try:
+                        if _whole_file_surgery(ctx, _surg_tf):
+                            print(f"  [Surgery] ✅ whole-file rewrite fixed {_surg_tf} — "
+                                  f"resetting circuit breaker for {tid}.")
+                            ctx.retry_counts[tid] = 0
+                            continue
+                    except Exception as _surg_e:
+                        print(f"  [Surgery] ⚠ raised: {_surg_e}")
                 print(
                     f"\n{'='*70}\n"
                     f"  ⛔ [CIRCUIT BREAKER TRIPPED] Task {tid} has failed {count} times.\n"
