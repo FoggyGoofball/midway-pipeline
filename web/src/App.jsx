@@ -93,6 +93,18 @@ export default function App() {
   const [fullLogs, setFullLogs] = useState([])
   const logRef = useRef(null)
 
+  // The built app is also served by the Python pipeline server on :8765, but
+  // the start/kill control endpoints only live on the always-up Vite dev
+  // server (:5173). If we're on :8765 and :5173 is reachable, switch there so
+  // Start/Stop keeps working after the pipeline server is stopped.
+  useEffect(() => {
+    if (window.location.port !== '8765') return
+    const ctrl = `${window.location.protocol}//${window.location.hostname}:5173/`
+    fetchWithTimeout(`${ctrl}__control/ollama`, {}, 4000)
+      .then((r) => { if (r.ok) window.location.replace(ctrl) })
+      .catch(() => {})
+  }, [])
+
   const refreshStatus = useCallback(async () => {
     try {
       const r = await fetch('/api/status')

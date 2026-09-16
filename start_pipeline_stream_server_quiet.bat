@@ -33,5 +33,6 @@ echo.
 echo [Midway] Health monitor:  visible window.
 echo [Midway] Stream server:   hidden (no taskbar button).
 echo [Midway] React dev server: hidden (no taskbar button).
-echo [Midway] Dashboard: http://localhost:8765/   (dev server: http://localhost:5173/)
+echo [Midway] Phone control panel: http://localhost:5173/  (from the phone use your PC's LAN IP, port 5173)
+echo [Midway] Read-only monitor:   http://localhost:8765/  (auto-redirects to the control panel)
 echo [Midway] This window can be closed.
