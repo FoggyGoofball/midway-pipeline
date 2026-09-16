@@ -142,6 +142,22 @@ def _rebuild_task_from_tasks_list(ctx: PipelineContext, tid: str):
     return None
 
 
+def _effective_lua_blob(ctx) -> str:
+    """Join the authoritative on-disk (staging-aware) Lua files into one blob.
+
+    Reviewers, the tribunal, and coverage checks must judge the SHIPPED file,
+    not the in-memory task fragments (which may be raw SEARCH/REPLACE or may
+    have failed to land).  Reuses runtime_sim._effective_lua_files for the
+    staging-aware resolution.
+    """
+    try:
+        from runtime_sim import _effective_lua_files
+        _files = _effective_lua_files(ctx) or {}
+        return "\n".join(str(_c) for _c in _files.values())
+    except Exception:
+        return ""
+
+
 def _coverage_gaps(ctx: PipelineContext) -> list[str]:
     """Deterministically compute which planned tasks/features are NOT yet
     evidenced in the generated code.
@@ -170,31 +186,10 @@ def _coverage_gaps(ctx: PipelineContext) -> list[str]:
     _out_lower = _all_output.lower()
     _out_tokens = {m.group(0).lower() for m in _API_TOKEN_RE.finditer(_all_output)}
 
-    # Build the on-disk merged blob so API coverage is judged on what actually
-    # shipped, not on in-memory task outputs that may have failed to land
-    # (e.g. "SEARCH block not found").  Falls back to in-memory outputs when
-    # no .lua artifact is present on disk.
-    _proj_root = getattr(ctx, 'project_root', None)
-    _owned_files: set = set()
-    _mono = getattr(ctx, '_monolithic_lua_target', None)
-    if _mono and str(_mono).endswith('.lua'):
-        _owned_files.add(str(_mono))
-    for _t in getattr(ctx, 'task_map', {}).values():
-        _tf = getattr(_t, 'target_file', '')
-        if _tf and _tf.endswith('.lua'):
-            _owned_files.add(_tf)
-    _disk_blob = ""
-    for _rel in sorted(_owned_files):
-        _merged = ctx.all_results_dict.get("merged:" + _rel)
-        if _merged:
-            _disk_blob += str(_merged) + "\n"
-            continue
-        _abs = _proj_root / _rel if _proj_root else None
-        if _abs and _abs.is_file():
-            try:
-                _disk_blob += _abs.read_text(encoding="utf-8", errors="replace") + "\n"
-            except Exception:
-                pass
+    # Judge API coverage on the SHIPPED file (staging-aware), not in-memory
+    # task outputs that may have failed to land (e.g. "SEARCH block not found").
+    # Falls back to in-memory outputs when no .lua artifact is present on disk.
+    _disk_blob = _effective_lua_blob(ctx)
     _coverage_corpus = _disk_blob if _disk_blob.strip() else _all_output
     _coverage_tokens = {
         m.group(0).lower() for m in _API_TOKEN_RE.finditer(_coverage_corpus)
@@ -243,26 +238,7 @@ def _coverage_gaps(ctx: PipelineContext) -> list[str]:
             if _sn:
                 _ledger_names.append((str(_sn), getattr(_sv, 'owner_task', '') or ''))
         if _ledger_names:
-            _owned_files: set = set()
-            _mono = getattr(ctx, '_monolithic_lua_target', None)
-            if _mono and str(_mono).endswith('.lua'):
-                _owned_files.add(str(_mono))
-            for _t in getattr(ctx, 'task_map', {}).values():
-                _tf = getattr(_t, 'target_file', '')
-                if _tf and _tf.endswith('.lua'):
-                    _owned_files.add(_tf)
-            _ledger_blob = ""
-            for _rel in sorted(_owned_files):
-                _merged = ctx.all_results_dict.get("merged:" + _rel)
-                if _merged:
-                    _ledger_blob += str(_merged) + "\n"
-                    continue
-                _abs = ctx.project_root / _rel
-                if _abs.is_file():
-                    try:
-                        _ledger_blob += _abs.read_text(encoding="utf-8", errors="replace") + "\n"
-                    except Exception:
-                        pass
+            _ledger_blob = _effective_lua_blob(ctx)
             if _ledger_blob.strip():
                 for _ln, _owner in _ledger_names:
                     _uses = len(re.findall(r'\b' + re.escape(_ln) + r'\b', _ledger_blob))
@@ -338,9 +314,12 @@ def _deterministic_verdict(ctx: PipelineContext) -> tuple[str, str]:
     # 4. Mandatory economy/modifier content for attraction scopes (FM4).
     _rev_scope = getattr(ctx, '_scope_mode', '')
     if _rev_scope in ("NEW_ATTRACTION", "MODIFY_ATTRACTION"):
-        _all_lua = " ".join(
-            str(v) for v in (ctx.all_results_dict or {}).values()
-        ).lower()
+        # Judge against the SHIPPED file, not in-memory fragments.
+        _all_lua = _effective_lua_blob(ctx).lower()
+        if not _all_lua:
+            _all_lua = " ".join(
+                str(v) for v in (ctx.all_results_dict or {}).values()
+            ).lower()
         if not any(kw in _all_lua for kw in (
             "attractionconstants.modifiers", "engine_mod_", ".modifiers",
         )):
@@ -390,9 +369,12 @@ def _run_tribunal_appeal(ctx: PipelineContext) -> str:
     except Exception:
         return ""
 
-    _final_code = "\n\n".join(
-        str(v) for v in (ctx.all_results_dict or {}).values()
-    )
+    # Blind-review the SHIPPED file, not in-memory fragments.
+    _final_code = _effective_lua_blob(ctx)
+    if not _final_code.strip():
+        _final_code = "\n\n".join(
+            str(v) for v in (ctx.all_results_dict or {}).values()
+        )
     _open_pf = (ctx.pre_flight_errors or "").strip()
     _rt_lines = [f"  {e}" for e in (getattr(ctx, 'runtime_errors', None) or [])]
     _issues_block = "\n".join(
