@@ -653,23 +653,31 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
     relevant = []
     prompt_lower = prompt.lower()
     persona_lower = persona.lower()
-    keyword_map = {
-        "plinko":       ["attractions/plinko/"],
-        "crumbling":    ["attractions/crumblingfacade/"],
-        "coin cascade": ["attractions/coin_cascade/"],
+    # Engine-source keywords (C++/PHYS personas only). These files describe
+    # engine internals — class names and method signatures — that a Lua scripter
+    # cannot call and should never see. They are pure hallucination surface.
+    _CPP_KEYWORD_MAP = {
         "physics":      ["src/PhysicsManager.cpp", "src/PhysicsManager.h",
                          "src/MidwayPhysics.cpp", "src/MidwayPhysics.h"],
         "engine":       ["src/Engine.cpp", "src/Engine.h"],
-        "attraction":   ["src/AttractionManager.cpp", "src/AttractionManager.h",
-                         "attractions/_shared/"],
-        "economy":      ["src/EconomyManager.cpp", "src/EconomyManager.h",
-                         "economy_state.json"],
-        "modifier":     ["src/ModifierState.h", "modifier_state.json"],
-        "lua":          ["attractions/", "init.lua"],
-        "shader":       ["assets/shaders/"],
+        "attraction":   ["src/AttractionManager.cpp", "src/AttractionManager.h"],
+        "economy":      ["src/EconomyManager.cpp", "src/EconomyManager.h"],
+        "modifier":     ["src/ModifierState.h"],
         "render":       ["src/DebugRenderer.cpp", "src/DebugRenderer.h"],
         "model":        ["src/ModelManager.cpp", "src/ModelManager.h"],
         "dev console":  ["src/DevConsole.cpp", "src/DevConsole.h"],
+    }
+    # Persona-agnostic keywords: Lua scripts, shared data, docs, GDD, shaders.
+    # Safe for every agent regardless of domain.
+    _AGNOSTIC_KEYWORD_MAP = {
+        "plinko":       ["attractions/plinko/"],
+        "crumbling":    ["attractions/crumblingfacade/"],
+        "coin cascade": ["attractions/coin_cascade/"],
+        "attraction":   ["attractions/_shared/"],
+        "economy":      ["economy_state.json"],
+        "modifier":     ["modifier_state.json"],
+        "lua":          ["attractions/", "init.lua"],
+        "shader":       ["assets/shaders/"],
         "dialog":       ["resources/dialog.json"],
         "gdd":          ["GDD/"],
         "opengl":       ["docs/opengl_sdl_api.md"],
@@ -692,13 +700,23 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
         "offload_store/",
         "pipeline_output_",
     }
+    # Persona gate: C++ engine source is hallucination surface for non-C++
+    # agents (a Lua scripter cannot call class methods or C++ signatures).
+    _cpp_persona = any(k in persona_lower for k in ("c++", "cpp", "phys", "engine", "render", "model", "console"))
     candidate_paths = set()
-    for keyword, paths in keyword_map.items():
+    for keyword, paths in _AGNOSTIC_KEYWORD_MAP.items():
         if keyword in prompt_lower:
             for p in paths:
                 # Don't include pipeline-specific paths
                 if not any(p.startswith(prefix) for prefix in _PIPELINE_EXCLUDED_PREFIXES):
                     candidate_paths.add(p)
+    if _cpp_persona:
+        for keyword, paths in _CPP_KEYWORD_MAP.items():
+            if keyword in prompt_lower:
+                for p in paths:
+                    # Don't include pipeline-specific paths
+                    if not any(p.startswith(prefix) for prefix in _PIPELINE_EXCLUDED_PREFIXES):
+                        candidate_paths.add(p)
     for key, rule_path in rule_map.items():
         if key in persona_lower:
             candidate_paths.add(rule_path)
@@ -713,10 +731,10 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
     if any(k in persona_lower for k in ("observ", "log", "audit")):
         candidate_paths.add("docs/rules_logging.md")
     if not candidate_paths:
-        candidate_paths = {
-            "src/Engine.h", "src/AttractionManager.h",
-            "docs/rules_cpp.md", "docs/rules_lua.md",
-        }
+        if _cpp_persona:
+            candidate_paths = {"src/Engine.h", "src/AttractionManager.h", "docs/rules_cpp.md"}
+        else:
+            candidate_paths = {"docs/rules_lua.md"}
         # Only add the bridge contract in the fallback if this is a code-execution persona
         if any(k in persona_lower for k in ("lua", "c++", "phys", "physics", "coder", "scripter")):
             candidate_paths.add("docs/engine_lua_bridge_contract.md")
@@ -758,6 +776,17 @@ def find_relevant_files(prompt: str, persona: str, project_root: Path = None) ->
                     except Exception:
                         pass
             print(f"  Read {count} files from {rel_path}")
+    # Dedup: a directory walk (attractions/) can re-discover files already
+    # yielded by a narrower candidate (attractions/_shared/), producing the
+    # same stub twice in one task context. Keep first occurrence by rel path.
+    _deduped: list = []
+    _seen_paths: set = set()
+    for _rel, _content in relevant:
+        if _rel in _seen_paths:
+            continue
+        _seen_paths.add(_rel)
+        _deduped.append((_rel, _content))
+    relevant = _deduped
     return relevant
 
 
