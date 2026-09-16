@@ -42,6 +42,42 @@ from ollama_client import unload_model
 from token_budget import TokenBudget
 
 
+def _domain_family(domain: str) -> str:
+    """Coarse language family for a domain key ('lua', 'cpp', or the key itself)."""
+    _d = resolve_agent_name(domain).lower()
+    if _d == "lua":
+        return "lua"
+    if any(_k in _d for _k in ("c++", "cpp", "phys", "physics")):
+        return "cpp"
+    return _d
+
+
+def _enforce_domain_file_invariant(t: Dict[str, Any]) -> str:
+    """Enforce the domain↔file-extension structural invariant.
+
+    A task targeting a .lua file MUST be a Lua task; a task targeting
+    .cpp/.h MUST be C++/PHYS. A task whose spec calls MidwayPhysics.* Lua
+    APIs is Lua regardless of its declared label. This kills the
+    C++-agent-edits-lua-file cascade that deadlocked the review loop when
+    task_2 was re-tagged [C++] yet targeted strongman.lua.
+    """
+    _tf = str(t.get("target_file") or "").strip()
+    _spec = " ".join(str(_x) for _x in (t.get("title"), t.get("spec")) if _x)
+    _domain = str(t.get("domain") or "").strip()
+
+    if _tf.lower().endswith(".lua"):
+        return "Lua"
+    if _tf.lower().endswith((".cpp", ".h", ".hpp", ".cc", ".cxx")):
+        if _domain_family(_domain) != "cpp":
+            return "C++"
+        return _domain
+    # No target file: infer from the spec — MidwayPhysics.<Method>( is a
+    # Lua-side call only (C++ uses MidwayPhysics::Method).
+    if re.search(r'\bMidwayPhysics\.[A-Z]\w*\s*\(', _spec):
+        return "Lua"
+    return _domain
+
+
 def run_tasks(ctx: PipelineContext) -> PipelineContext:
     """Phase 4: Build DAG from tasks, sort into waves, process wave-by-wave.
 
@@ -56,9 +92,17 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
         f"\n## Phase 4: Mesh Execution ({len(ctx.tasks_list)} tasks)\n"
     )
 
-    # Build task map
+    # Build task map — with the domain↔file-extension invariant applied first,
+    # so a director/enricher re-tag (task_2 Lua→C++) can never leave a C++
+    # agent editing a .lua file.
     ctx.task_map = {}
     for t in ctx.tasks_list:
+        _inv_domain = _enforce_domain_file_invariant(t)
+        if _inv_domain != t.get("domain"):
+            print(f"  [Domain Invariant] ⚠ Re-tagged task_{t.get('id')} from "
+                  f"'{t.get('domain')}' to '{_inv_domain}' "
+                  f"(target_file='{t.get('target_file')}').")
+            t["domain"] = _inv_domain
         task_obj = Task(
             agent=t["domain"],
             spec=t["title"],

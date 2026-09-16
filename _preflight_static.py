@@ -15,6 +15,84 @@ from models import PipelineContext
 from midway_api_signatures import SPAWN_ARITY as _SPAWN_SIGS
 
 
+def _balanced_spawn_args(text: str, start_pos: int) -> str:
+    """Extract the argument string between balanced parentheses, starting at
+    the open-paren at start_pos. The outer parens are NOT included.
+    """
+    _depth = 0
+    _result = []
+    for _ch in text[start_pos:]:
+        if _ch == '(':
+            _depth += 1
+            if _depth == 1:
+                continue
+        elif _ch == ')':
+            _depth -= 1
+            if _depth == 0:
+                break
+        if _depth >= 1:
+            _result.append(_ch)
+    return "".join(_result).strip()
+
+
+def _fix_spawn_arities_in_text(text: str):
+    """Deterministically truncate over-arg MidwayPhysics.SpawnXxx calls down
+    to the minimum arg count. Returns (fixed_text, n_fixed). Only shrinks
+    over-arg calls; never pads under-arg calls or rewrites unknown functions.
+    """
+    if not text:
+        return text, 0
+    _fixed = text
+    _count = 0
+    for _m in re.finditer(r'MidwayPhysics\.(Spawn\w+)\s*\(', text, re.IGNORECASE):
+        _fn = _m.group(1)
+        _sig = _SPAWN_SIGS.get(_fn)
+        if not _sig:
+            continue
+        _min_exp, _max_exp = _sig
+        _args = _balanced_spawn_args(text, _m.start() + len(_m.group(0)) - 1)
+        if not _args:
+            continue
+        _depth = 0
+        _commas = 0
+        for _ch in _args:
+            if _ch in '({[':
+                _depth += 1
+            elif _ch in ')}]':
+                _depth -= 1
+            elif _ch == ',' and _depth == 0:
+                _commas += 1
+        _actual = _commas + 1
+        if _min_exp <= _actual <= _max_exp:
+            continue
+        if _actual < _min_exp:
+            continue  # under-arg — leave for the LLM fix loop
+        _depth = 0
+        _tokens = []
+        _cur = ""
+        for _ch in _args:
+            if _ch in '({[':
+                _depth += 1
+            elif _ch in ')}]':
+                _depth -= 1
+            elif _ch == ',' and _depth == 0:
+                _tokens.append(_cur.strip())
+                _cur = ""
+                continue
+            _cur += _ch
+        if _cur.strip():
+            _tokens.append(_cur.strip())
+        _valid = _tokens[:_min_exp]
+        if not _valid:
+            continue
+        _bad_call = _m.group(0) + _args + ")"
+        _good_call = f"MidwayPhysics.{_fn}({', '.join(_valid)})"
+        if _bad_call in _fixed:
+            _fixed = _fixed.replace(_bad_call, _good_call, 1)
+            _count += 1
+    return _fixed, _count
+
+
 def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
     """Deterministic, compiler-free checks for patterns that are always wrong.
 
@@ -31,6 +109,39 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
     if _reported is None:
         _reported = set()
         ctx._static_guard_reported = _reported
+
+    # -- Fix G2: deterministic arity repair on the ACCUMULATED file ----------
+    # Fix G patches the per-task fragment, but RuntimeSim checks the merged
+    # on-disk file, so an over-arg Spawn call in the accumulated file survived
+    # every cycle and deadlocked the review loop (task_8 / SpawnStaticBox 7→6).
+    # Repair the file first so the guards and RuntimeSim both see clean arities.
+    for _t in (ctx.task_map or {}).values():
+        _tfa = getattr(_t, 'target_file', '') or ''
+        if not _tfa.endswith('.lua'):
+            continue
+        _tfp = (ctx.project_root / _tfa).resolve()
+        try:
+            from _helpers_io import get_staging_path, is_staging_active
+            if is_staging_active():
+                _tfp = get_staging_path(_tfp, project_root=ctx.project_root)
+        except Exception:
+            pass
+        if not _tfp.is_file():
+            continue
+        _tf_text = _tfp.read_text(encoding="utf-8", errors="replace")
+        _tf_fixed, _tf_n = _fix_spawn_arities_in_text(_tf_text)
+        if _tf_n:
+            _tfp.write_text(_tf_fixed, encoding="utf-8")
+            print(f"  [Fix G2] ✅ auto-patched {_tf_n} spawn arity issue(s) in {_tfa}")
+            # Mirror the repaired file into the real target so the review-loop
+            # luac check (which reads the real path) also sees the fix.
+            try:
+                _tfp_real = (ctx.project_root / _tfa).resolve()
+                if _tfp_real != _tfp:
+                    _tfp_real.parent.mkdir(parents=True, exist_ok=True)
+                    _tfp_real.write_text(_tf_fixed, encoding="utf-8")
+            except Exception:
+                pass
 
     _GUARDS = [
         # Lua: require('nlohmann.json')  nlohmann is a C++ library.
@@ -378,6 +489,18 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
         for (guard_domain, pattern, label, explanation) in _GUARDS:
             if guard_domain and domain and domain != guard_domain:
                 continue
+            # File-type scoping: the declared task domain can disagree with its
+            # target file (the task_2 Lua→C++ re-tag bug). The target file's
+            # language is authoritative — C++-only guards must never run on Lua
+            # content, or the F18b `::` rule fires on valid `MidwayPhysics.X()`.
+            if guard_domain and task_obj is not None:
+                _g_tf = str(getattr(task_obj, 'target_file', '') or '').lower()
+                _g_is_lua = _g_tf.endswith('.lua') or bool(re.search(r'\bMidwayPhysics\.[A-Z]\w*\s*\(', content))
+                _g_is_cpp = _g_tf.endswith(('.cpp', '.h', '.hpp', '.cc', '.cxx'))
+                if guard_domain == "C++" and _g_is_lua:
+                    continue
+                if guard_domain == "Lua" and _g_is_cpp:
+                    continue
             # When task_obj is absent (e.g. merged file or monolithic), infer domain from
             # the task_id extension so C++-only guards don't fire on Lua files.
             if guard_domain and domain is None:

@@ -576,6 +576,16 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
         print(f"  [Surgery] ⚠ rewrite too short ({len(_fixed)} chars) — rejecting.")
         return False
 
+    # Deterministic arity repair BEFORE the gates, so a one-token over-arg
+    # slip (SpawnStaticBox 7 vs 6) does not reject an otherwise-good rewrite.
+    try:
+        from _preflight_static import _fix_spawn_arities_in_text as _arity_fix
+        _fixed, _arity_n = _arity_fix(_fixed)
+        if _arity_n:
+            print(f"  [Surgery] ✅ deterministic arity repair: {_arity_n} call(s).")
+    except Exception as _afe:
+        print(f"  [Surgery] ⚠ arity repair skipped: {_afe}")
+
     # Gate 1: luac must accept the rewrite.
     _fd, _tmp = _tmp_mod.mkstemp(suffix=".lua")
     try:
