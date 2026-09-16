@@ -436,7 +436,7 @@ def _structured_review(review_input: str) -> tuple[str, str]:
     'model runner has unexpectedly stopped' (500) while the native /api/chat
     path on the same model works reliably.
     """
-    from structured_schemas import ReviewVerdict, Verdict
+    from structured_schemas import ReviewVerdict, Verdict, ollama_format, mark_schema_rejected
     from pipeline import REASONING_MODEL
     from ollama_client import is_fatal_ollama_error as _is_fatal
 
@@ -445,14 +445,26 @@ def _structured_review(review_input: str) -> tuple[str, str]:
     _clean_input = re.split(r"\nOUTPUT FORMAT \(MANDATORY", review_input, maxsplit=1)[0]
 
     print("  [Review-Fix] Structured review: extracting verdict (native JSON mode)...", flush=True)
+    _fmt = ollama_format("review_verdict", REASONING_MODEL)
     out = call_ollama(
         _STRUCTURED_REVIEW_SYSTEM,
         _clean_input,
         "Integration Review (structured JSON)",
         REASONING_MODEL,
-        params={"format": "json", "num_predict": 1024},
+        params={"format": _fmt, "num_predict": 1024},
         skip_pre_summarizer=True,
     )
+    if _is_fatal(out) and _fmt != "json":
+        mark_schema_rejected("review_verdict", REASONING_MODEL)
+        print("  [Review-Fix] schema-constrained call failed; retrying plain JSON mode...", flush=True)
+        out = call_ollama(
+            _STRUCTURED_REVIEW_SYSTEM,
+            _clean_input,
+            "Integration Review (structured JSON fallback)",
+            REASONING_MODEL,
+            params={"format": "json", "num_predict": 1024},
+            skip_pre_summarizer=True,
+        )
     if _is_fatal(out):
         raise RuntimeError(f"Ollama error during structured review: {out[:200]}")
 

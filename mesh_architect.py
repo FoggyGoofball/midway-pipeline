@@ -317,16 +317,32 @@ def _try_structured_architect(prompt: str) -> Optional[AttractionDesign]:
     try:
         from pipeline import REASONING_MODEL, call_ollama
         from ollama_client import is_fatal_ollama_error
+        from structured_schemas import ollama_format, mark_schema_rejected
 
         print("  [Architect] Extracting structured design (single-turn, native JSON)...")
+        _fmt = ollama_format("attraction_design", REASONING_MODEL)
         out = call_ollama(
             ARCHITECT_STRUCTURED_SYSTEM,
             prompt,
             "Architect Design Pass (structured JSON)",
             REASONING_MODEL,
-            params={"format": "json", "num_predict": 2048},
+            params={"format": _fmt, "num_predict": 2048},
             skip_pre_summarizer=True,
         )
+        if is_fatal_ollama_error(out) and _fmt != "json":
+            # Ollama can reject a complex schema (grammar compile failure).
+            # Retry once in plain JSON mode and remember the rejection so the
+            # schema is not retried on every run.
+            mark_schema_rejected("attraction_design", REASONING_MODEL)
+            print("  [Architect] schema-constrained call failed; retrying plain JSON mode...")
+            out = call_ollama(
+                ARCHITECT_STRUCTURED_SYSTEM,
+                prompt,
+                "Architect Design Pass (structured JSON fallback)",
+                REASONING_MODEL,
+                params={"format": "json", "num_predict": 2048},
+                skip_pre_summarizer=True,
+            )
         if is_fatal_ollama_error(out):
             raise RuntimeError(f"Ollama error during architect extraction: {out[:200]}")
 

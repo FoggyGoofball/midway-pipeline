@@ -315,6 +315,52 @@ def get_schema(name: str) -> type[BaseModel]:
     return SCHEMA_REGISTRY[name]
 
 
+_SCHEMA_FORMAT_CACHE: dict = {}
+
+
+def _sanitize_ollama_schema(node):
+    """Recursively strip JSON-schema features Ollama's grammar engine does not
+    support (regex ``pattern``, string ``format``), leaving everything else
+    intact. The Python-side Pydantic validation still enforces the stripped
+    constraints, so this only loosens the sampler grammar, never the correctness
+    gate.
+    """
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            if k in ("pattern", "format"):
+                continue
+            out[k] = _sanitize_ollama_schema(v)
+        return out
+    if isinstance(node, list):
+        return [_sanitize_ollama_schema(x) for x in node]
+    return node
+
+
+def ollama_format(name: str, model: str = "") -> str:
+    """Return the Ollama ``format`` value for a registered schema.
+
+    Returns a JSON-schema string (Ollama structured outputs) when it can be
+    built, else the literal ``"json"``. Once a schema has been observed to fail
+    on a given model, that is cached so later calls skip straight to plain JSON
+    mode instead of paying a permanent double-generation.
+    """
+    import json as _json
+    _key = f"{name}:{model}"
+    if _SCHEMA_FORMAT_CACHE.get(_key) == "rejected":
+        return "json"
+    try:
+        schema = get_schema(name).model_json_schema()
+        return _json.dumps(_sanitize_ollama_schema(schema))
+    except Exception:
+        return "json"
+
+
+def mark_schema_rejected(name: str, model: str = "") -> None:
+    """Record that a schema was rejected by a model's grammar engine."""
+    _SCHEMA_FORMAT_CACHE[f"{name}:{model}"] = "rejected"
+
+
 if __name__ == "__main__":
     # Smoke test: schema round-trip + JSON-schema emission.
     sample = {
