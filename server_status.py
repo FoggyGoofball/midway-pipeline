@@ -20,6 +20,7 @@ import json
 import os
 import re
 import threading
+import queue
 import time
 import urllib.error
 import urllib.request
@@ -62,10 +63,16 @@ _state = {
     "last_error": None,        # str
     "run_count": 0,
     "stop_requested": False,
+    "awaiting_input": False,
+    "input_prompt": "",
 }
 
 _log_lines: Deque[str] = deque(maxlen=_LOG_MAX_LINES)
 _log_pending: str = ""
+
+# Response channel for interactive input() prompts: the pipeline worker thread
+# blocks on get() while the dashboard submits the user's answer via /api/input.
+_input_response_queue: "queue.Queue[str]" = queue.Queue()
 
 
 # -- On-disk run log ---------------------------------------------------------
@@ -113,6 +120,8 @@ def set_running(prompt: str = "") -> None:
         _state["last_error"] = None
         _state["stop_requested"] = False
         _state["current_task"] = ""
+        _state["awaiting_input"] = False
+        _state["input_prompt"] = ""
 
 
 def set_idle() -> None:
@@ -177,6 +186,58 @@ def stop_requested() -> bool:
     """True once the user has asked the active run to stop."""
     with _lock:
         return bool(_state["stop_requested"])
+
+
+def set_awaiting_input(prompt: str = "") -> None:
+    """Mark the run as blocked on interactive input, exposing the prompt to the
+    dashboard so the user can answer from the phone instead of the terminal."""
+    with _lock:
+        _state["awaiting_input"] = True
+        _state["input_prompt"] = prompt or ""
+    # Drain any stale response left from a previous prompt.
+    try:
+        while True:
+            _input_response_queue.get_nowait()
+    except queue.Empty:
+        pass
+
+
+def clear_awaiting_input() -> None:
+    with _lock:
+        _state["awaiting_input"] = False
+        _state["input_prompt"] = ""
+
+
+def is_awaiting_input() -> bool:
+    with _lock:
+        return bool(_state["awaiting_input"])
+
+
+def get_input_prompt() -> str:
+    with _lock:
+        return _state["input_prompt"]
+
+
+def submit_input_response(text: str) -> bool:
+    """Deliver a dashboard response to the blocking input() call.
+
+    Returns True if the pipeline was actually awaiting input (so a late or
+    duplicate submission can be surfaced as such)."""
+    with _lock:
+        was_awaiting = bool(_state["awaiting_input"])
+        _state["awaiting_input"] = False
+        _state["input_prompt"] = ""
+    if was_awaiting:
+        _input_response_queue.put(text or "")
+    return was_awaiting
+
+
+def wait_for_input_response(timeout: Optional[float] = None) -> Optional[str]:
+    """Block until the dashboard submits a response (or timeout, returning None)."""
+    try:
+        return _input_response_queue.get(timeout=timeout)
+    except queue.Empty:
+        return None
 
 
 def bump_run_count() -> None:
@@ -346,6 +407,8 @@ def snapshot(log_lines: int = 60) -> dict:
             "last_error": _state["last_error"],
             "run_count": _state["run_count"],
             "stop_requested": _state["stop_requested"],
+            "awaiting_input": _state["awaiting_input"],
+            "input_prompt": _state["input_prompt"],
             "logs": _tail,
             "server_time": datetime.now().isoformat(),
         }

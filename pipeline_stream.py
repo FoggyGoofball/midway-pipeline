@@ -68,10 +68,10 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
     # -- Intercept Interactive Prompts (Y/N visibility in Continue) ----------
     _original_input = builtins.input
     def _stream_aware_input(prompt_text=""):
-        # Push announcement to the stream so the VS Code user sees the prompt
+        # Push announcement to the stream so the dashboard user sees the prompt.
         msg = (
-            f"\n\n⚠️ **TERMINAL INPUT REQUIRED:** {prompt_text}\n"
-            f"*(Please switch to the terminal window running the Midway server to type your response)*\n\n"
+            f"\n\n⚠️ **INPUT REQUIRED:** {prompt_text}\n"
+            f"*(Answer from the phone dashboard — the command box becomes the input box.)*\n\n"
         )
         event_queue.put(("announce", msg))
         # Nudge the phone: a gate is blocking on interactive input.  This only
@@ -87,7 +87,13 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
                 )
         except Exception:
             pass
-        return _original_input(prompt_text)
+        # Route the response through the dashboard (the stream server has no
+        # usable stdin). Blocks until /api/input delivers the user's answer.
+        _status.set_awaiting_input(prompt_text or "")
+        try:
+            return _status.wait_for_input_response() or ""
+        finally:
+            _status.clear_awaiting_input()
     
     builtins.input = _stream_aware_input
 

@@ -325,6 +325,17 @@ class StreamHandler(BaseHTTPRequestHandler):
         _status.request_stop()
         self._serve_json({"stopping": True, "running": _status.is_running()})
 
+    def _handle_input(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length)
+        try:
+            req = json.loads(body.decode("utf-8"))
+            text = str(req.get("response", "") or "")
+        except Exception:
+            text = ""
+        accepted = _status.submit_input_response(text)
+        self._serve_json({"accepted": accepted, "awaiting": _status.is_awaiting_input()})
+
     def _handle_kill(self):
         # Kill this server WITHOUT auto-restarting (the start/stop toggle).
         self._serve_json({"stopping": True})
@@ -454,6 +465,9 @@ class StreamHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/stop":
             self._handle_stop()
+            return
+        if parsed.path == "/api/input":
+            self._handle_input()
             return
         if parsed.path == "/api/kill":
             self._handle_kill()

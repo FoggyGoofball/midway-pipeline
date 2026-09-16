@@ -188,24 +188,60 @@ export default function App() {
     setFollow(nearBottom)
   }
 
+  const downloadLog = async () => {
+    try {
+      const r = await fetch('/api/logfile')
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const j = await r.json()
+      const text = (j.lines || []).join('\n')
+      const blob = new Blob([text], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'pipeline_run.log'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setNotice('Log downloaded.')
+    } catch (e) {
+      setNotice('Could not download the log: ' + (e && e.message ? e.message : e))
+    }
+  }
+
   const run = async () => {
     if (!prompt.trim() || busy) return
     setBusy(true)
     setNotice('')
     try {
-      const r = await fetch('/api/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim() }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (r.status === 409) {
-        setNotice('A run is already active.')
-      } else if (r.ok) {
-        setNotice('Run started.')
-        refreshStatus()
+      if (awaiting) {
+        const r = await fetch('/api/input', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ response: prompt.trim() }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (r.ok && j.accepted) {
+          setNotice('Response sent.')
+          setPrompt('')
+        } else {
+          setNotice('No gate was awaiting a response.')
+        }
       } else {
-        setNotice(j.error || `HTTP ${r.status}`)
+        const r = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: prompt.trim() }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (r.status === 409) {
+          setNotice('A run is already active.')
+        } else if (r.ok) {
+          setNotice('Run started.')
+          refreshStatus()
+        } else {
+          setNotice(j.error || `HTTP ${r.status}`)
+        }
       }
     } catch {
       setNotice('Could not reach the pipeline server.')
@@ -286,6 +322,7 @@ export default function App() {
   }
 
   const running = !!status?.running
+  const awaiting = !!status?.awaiting_input
   const tel = status?.last_telemetry
   const logs = fullLog ? fullLogs : (status?.logs || [])
 
@@ -324,21 +361,27 @@ export default function App() {
         </section>
       )}
 
+      {awaiting && (
+        <section className="banner">
+          <span className="banner-text">Awaiting your response: {status?.input_prompt || 'a gate needs input'}</span>
+        </section>
+      )}
+
       <section className="card">
         <h2>Command</h2>
         <textarea
           rows={3}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="e.g. refer to the GDD and build the strongman striker"
+          placeholder={awaiting ? (status?.input_prompt || 'Type your response…') : 'e.g. refer to the GDD and build the strongman striker'}
         />
         <div className="row">
           <button
-            onClick={running ? stop : run}
-            disabled={busy || (running && status?.stop_requested)}
-            className={running && !status?.stop_requested ? 'stop' : ''}
+            onClick={awaiting ? run : (running ? stop : run)}
+            disabled={busy || (!awaiting && running && status?.stop_requested)}
+            className={!awaiting && running && !status?.stop_requested ? 'stop' : ''}
           >
-            {busy ? '…' : running ? (status?.stop_requested ? 'Stopping…' : 'Stop pipeline') : 'Run pipeline'}
+            {busy ? '…' : awaiting ? 'Send response' : (running ? (status?.stop_requested ? 'Stopping…' : 'Stop pipeline') : 'Run pipeline')}
           </button>
           {notice && <span className="notice">{notice}</span>}
         </div>
@@ -461,6 +504,7 @@ export default function App() {
               <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
               follow
             </label>
+            <button className="restart" onClick={downloadLog} title="Download the full run log">⬇ Log</button>
           </div>
         </div>
         <div className="log" ref={logRef} onScroll={onLogScroll}>
