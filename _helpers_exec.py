@@ -487,6 +487,29 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
         })
     return blocks
 
+def _replace_impl_text(replace_text: str) -> str:
+    """Strip re-inserted anchor marker lines (and any other
+    ``-- [TASK_.._INSERT_HOOK]`` comment lines the model echoed) from a REPLACE
+    block, leaving only the task's implementation."""
+    _out_lines = []
+    for _ln in replace_text.splitlines():
+        _s = _ln.strip()
+        if _s.startswith("--") and "_INSERT_HOOK]" in _s:
+            continue
+        _out_lines.append(_ln)
+    return "\n".join(_out_lines)
+
+
+def _block_has_real_code(replace_text: str) -> bool:
+    """True when a REPLACE block contains at least one non-comment, non-blank
+    line besides the re-inserted anchor marker.  Used to reject empty blocks
+    where the model re-emitted only the marker and/or comments."""
+    for _ln in _replace_impl_text(replace_text).splitlines():
+        _s = _ln.strip()
+        if _s and not _s.startswith("--"):
+            return True
+    return False
+
 def _extract_lua_fence(output: str) -> str:
     """Extract the largest fenced Lua code block from a model's output.
 
@@ -1487,6 +1510,67 @@ def execute_task(task, user_prompt: str, director_output: str,
                                   f"- proceeding with original (will likely fail)")
                     except Exception as _guard_e:
                         print(f"  [Anchor Guard] ⚠ Re-prompt failed: {_guard_e}")
+
+            # -- Empty-block guard --------------------------------------------
+            # The model can target the CORRECT anchor but fill it with nothing
+            # (just re-emit the marker line and/or comments), which applies as
+            # a no-op patch and leaves the anchor empty.  Re-prompt once with an
+            # explicit "write real code" mandate before letting Phase 6 catch
+            # the unfilled anchor deterministically.
+            if _anchor_marker_guard and _blocks:
+                _empty_seen = any(
+                    not _block_has_real_code(_b.get("replace", "")) for _b in _blocks
+                )
+                if _empty_seen:
+                    _fix_prompt = (
+                        f"## Your Task\n{getattr(task, 'spec', user_prompt)}\n\n"
+                        f"## Correction Required\n"
+                        f"Your REPLACE block contained NO actual code - only the "
+                        f"anchor marker line and/or comments. You MUST write the "
+                        f"real implementation for this task.\n\n"
+                        f"The EXACT line you SEARCH for is:\n\n"
+                        f"  `{_anchor_marker_guard}`\n\n"
+                        f"REPLACE it with:\n"
+                        f"  1. your actual implementation code (real Lua, not comments), then\n"
+                        f"  2. the SAME marker line re-emitted at the end.\n\n"
+                        f"Do NOT output placeholder text, TODO comments, or empty stubs.\n"
+                        f"Output ONLY a valid SEARCH/REPLACE block:\n"
+                        f"<<<<<<< SEARCH\n"
+                        f"    {_anchor_marker_guard}\n"
+                        f"=======\n"
+                        f"    <your REAL implementation code>\n"
+                        f"    {_anchor_marker_guard}\n"
+                        f">>>>>>> REPLACE"
+                    )
+                    try:
+                        _fix_msgs = [
+                            {"role": "system", "content": (
+                                "You are a precise SEARCH/REPLACE fixer. "
+                                "Given a task and the correct anchor marker, output ONLY "
+                                "a valid SEARCH/REPLACE block that fills the anchor with "
+                                "real implementation code."
+                            )},
+                            {"role": "user", "content": _fix_prompt},
+                        ]
+                        _guard_model = getattr(task, 'agent_model', preferred_model)
+                        _guard_output = call_ollama_with_messages(
+                            _fix_msgs, f"Empty Block Fix ({task.task_id})", _guard_model
+                        )
+                        if _guard_output and len(_guard_output.strip()) > 50:
+                            output = _guard_output
+                            _blocks = _extract_search_replace_blocks(output)
+                            _empty_seen = any(
+                                not _block_has_real_code(_b.get("replace", ""))
+                                for _b in _blocks
+                            )
+                            if not _empty_seen:
+                                print(f"  [Empty Block Guard] Re-prompt produced real code for {task.task_id}")
+                            else:
+                                print(f"  [Empty Block Guard] Re-prompt still empty for {task.task_id}")
+                        else:
+                            print(f"  [Empty Block Guard] Re-prompt returned empty output for {task.task_id}")
+                    except Exception as _guard_e:
+                        print(f"  [Empty Block Guard] Re-prompt failed: {_guard_e}")
 
             if _blocks:
                 # Apply each SEARCH/REPLACE block in sequence to the file

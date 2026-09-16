@@ -170,6 +170,36 @@ def _coverage_gaps(ctx: PipelineContext) -> list[str]:
     _out_lower = _all_output.lower()
     _out_tokens = {m.group(0).lower() for m in _API_TOKEN_RE.finditer(_all_output)}
 
+    # Build the on-disk merged blob so API coverage is judged on what actually
+    # shipped, not on in-memory task outputs that may have failed to land
+    # (e.g. "SEARCH block not found").  Falls back to in-memory outputs when
+    # no .lua artifact is present on disk.
+    _proj_root = getattr(ctx, 'project_root', None)
+    _owned_files: set = set()
+    _mono = getattr(ctx, '_monolithic_lua_target', None)
+    if _mono and str(_mono).endswith('.lua'):
+        _owned_files.add(str(_mono))
+    for _t in getattr(ctx, 'task_map', {}).values():
+        _tf = getattr(_t, 'target_file', '')
+        if _tf and _tf.endswith('.lua'):
+            _owned_files.add(_tf)
+    _disk_blob = ""
+    for _rel in sorted(_owned_files):
+        _merged = ctx.all_results_dict.get("merged:" + _rel)
+        if _merged:
+            _disk_blob += str(_merged) + "\n"
+            continue
+        _abs = _proj_root / _rel if _proj_root else None
+        if _abs and _abs.is_file():
+            try:
+                _disk_blob += _abs.read_text(encoding="utf-8", errors="replace") + "\n"
+            except Exception:
+                pass
+    _coverage_corpus = _disk_blob if _disk_blob.strip() else _all_output
+    _coverage_tokens = {
+        m.group(0).lower() for m in _API_TOKEN_RE.finditer(_coverage_corpus)
+    }
+
     gaps: list[str] = []
 
     # 1. Task-level API coverage.
@@ -241,6 +271,29 @@ def _coverage_gaps(ctx: PipelineContext) -> list[str]:
                             f"[state] `{_ln}` declared but never used"
                             + (f" (task {_owner})" if _owner else "")
                         )
+
+    # 4. Marker-clearance - each canonical anchor names the concrete APIs it
+    #    must introduce (CreatePool, AwardTickets, ...).  If those APIs are
+    #    absent from the SHIPPED file, the anchor was never actually filled,
+    #    regardless of what the in-memory task output claimed.
+    try:
+        from _anchors import CANONICAL_ANCHORS as _CANONICAL_MARKERS
+    except Exception:
+        _CANONICAL_MARKERS = []
+    for _b_m, _loc_m, _marker_m in _CANONICAL_MARKERS:
+        _num_m = re.search(r"TASK_(\d+)_INSERT_HOOK", _marker_m)
+        _num_m_str = _num_m.group(1) if _num_m else ""
+        _anchor_tokens = {m.group(0).lower() for m in _API_TOKEN_RE.finditer(_marker_m)}
+        if not _anchor_tokens:
+            continue
+        if not (_anchor_tokens & _coverage_tokens):
+            gaps.append(
+                f"Anchor TASK_{_num_m_str} - required APIs never written "
+                f"({_marker_m.strip()[:70]})"
+            )
+
+    # Deduplicate (signal 1 and signal 4 can both name the same task).
+    gaps = list(dict.fromkeys(gaps))
 
     ctx.coverage_gaps = gaps
     return gaps
