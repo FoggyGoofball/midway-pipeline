@@ -747,6 +747,53 @@ def _anchor_splice_fallback(
 
 # -- Task Execution ----------------------------------------------------------
 
+def _splice_body_at_anchor(
+    file_content: str,
+    body: str,
+    anchor_marker: str,
+    target_path: str = "",
+) -> str:
+    """Insert a task's body-only implementation at its anchor marker.
+
+    Replaces the anchor marker line with ``body + newline + marker`` so the
+    implementation lands at the anchor and the marker survives for the next
+    task in the chain.  Returns the file unchanged when the anchor is absent,
+    the body is empty/comment-only, or the body looks like a full-file rewrite
+    (lifecycle definitions / SLOT_ID / SpawnSharedBooth).
+    """
+    _body = (body or "").strip("\n").rstrip()
+    if not _body:
+        return file_content
+    if anchor_marker not in file_content:
+        print(f"  [Body Splice] anchor '{anchor_marker[:60]}' not found in "
+              f"{target_path} - cannot splice body")
+        return file_content
+    # Full-file signal: the model ignored the body-only mandate and emitted the
+    # whole skeleton.  Let the anchor-splice fallback (which extracts between
+    # markers) handle it instead of injecting the entire file into one anchor.
+    _full_file_re = re.compile(
+        r'(?m)^\s*(?:local\s+)?function\s+(OnLoadStatic|OnLoad|OnStep|OnUnload)\s*\(',
+    )
+    if _full_file_re.search(_body) or re.search(r'\b(?:SLOT_ID|SpawnSharedBooth)\b', _body):
+        print(f"  [Body Splice] body looks like a full file for {target_path} - "
+              f"deferring to anchor-splice fallback")
+        return file_content
+    # Reject comment-only bodies - they leave the anchor empty.
+    _has_code = any(
+        ln.strip() and not ln.strip().startswith("--")
+        for ln in _body.splitlines()
+    )
+    if not _has_code:
+        print(f"  [Body Splice] body is comment-only for {target_path} - "
+              f"refusing empty splice")
+        return file_content
+    _replacement = _body + "\n" + anchor_marker
+    _merged = file_content.replace(anchor_marker, _replacement, 1)
+    if _merged != file_content:
+        print(f"  [Body Splice] spliced {len(_body)} chars into {target_path} at anchor")
+    return _merged
+
+
 # Declarative order of the SHARED (byte-identical) context blocks.  These must
 # stay in this order and must NEVER contain task-specific content, or Ollama's
 # KV-cache prefix is broken and every task re-prefills the whole prompt.
@@ -1121,9 +1168,9 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"\n\n## ⚡ CURRENT ON-DISK STATE: {task.target_file}\n"
                             f"Relevant region around your anchor marker:\n"
                             f"```\n{_anchor_context}\n```{_context_note}"
-                            f"## ANCHOR PATCH MODE (MANDATORY)\n"
+                            f"## ANCHOR FILL MODE (MANDATORY)\n"
                             f"Your marker line: `{_anchor_marker}`\n"
-                            f"(The `NN |` / `NN >` prefixes above are line-number hints ONLY - never copy them into your SEARCH block.)\n"
+                            f"(The `NN |` / `NN >` prefixes above are line-number hints ONLY - never copy them into your code.)\n"
                             f"The orchestrator wraps your code in the correct lifecycle function; "
                             f"you only fill this anchor.\n"
                             f"- Do NOT redefine `function OnLoadStatic/OnLoad/OnStep/OnUnload`.\n"
@@ -1138,16 +1185,20 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"- Comments must be ONE short line max. NEVER write essays/chain-of-thought "
                             f"inside comments. If a requirement seems contradictory, implement the "
                             f"most literal reading and do NOT argue in comments.\n"
-                            f"- SEARCH is exactly the one anchor line; REPLACE is your "
-                            f"implementation (a few lines) + the anchor re-inserted at the end.\n"
                             f"{_design_state_contract}"
-                            f"Output EXACTLY ONE block:\n"
-                            f"<<<<<<< SEARCH\n"
-                            f"    {_anchor_marker}\n"
-                            f"=======\n"
-                            f"    <your implementation for this task>\n"
-                            f"    {_anchor_marker}\n"
-                            f">>>>>>> REPLACE\n"
+                            f"\n## OUTPUT FORMAT (MANDATORY)\n"
+                            f"Output ONLY your implementation code for THIS task - a few lines of "
+                            f"plain Lua - inside ONE ```lua fenced block.\n"
+                            f"- Do NOT repeat the anchor marker line.\n"
+                            f"- Do NOT wrap your code in `function ... end` or SEARCH/REPLACE.\n"
+                            f"- Do NOT add prose outside the fence.\n"
+                            f"\n## EXAMPLE (a DIFFERENT task - do NOT copy, just match the shape):\n"
+                            f"```lua\n"
+                            f"local streak = Engine.GetStreak()\n"
+                            f"if streak >= 3 then\n"
+                            f"    Engine.AwardTickets(100 * streak, \"bell_strike\")\n"
+                            f"end\n"
+                            f"```\n"
                         )
 
                     else:
@@ -1812,6 +1863,31 @@ def execute_task(task, user_prompt: str, director_output: str,
                 _current_file_content = _apply_target.read_text(encoding="utf-8", errors="replace") if _apply_target.is_file() else ""
                 _original_output_for_retry = output
 
+                # -- Body-only splice (primary path) -------------------------
+                # The anchor prompt now asks for a plain ```lua body instead of
+                # SEARCH/REPLACE.  Try the body splice FIRST; only fall through
+                # to the SEARCH/REPLACE retry loop when no usable body is found.
+                _body_spliced = False
+                if _anchor_marker_splice and _current_file_content:
+                    _body_first = _extract_lua_fence(output)
+                    if _body_first:
+                        _merged_body = _splice_body_at_anchor(
+                            _current_file_content, _body_first,
+                            _anchor_marker_splice, task.target_file,
+                        )
+                        if _merged_body != _current_file_content:
+                            try:
+                                from _helpers_io import atomic_write_text as _staging_write
+                                _staging_write(_apply_target, _merged_body)
+                            except Exception:
+                                _apply_target.write_text(_merged_body, encoding="utf-8")
+                            print(f"  [Body Splice] spliced {len(_body_first)} chars into "
+                                  f"{task.target_file}")
+                            output = _merged_body
+                            _current_file_content = _merged_body
+                            _retry_count = _MAX_SPLICE_RETRIES
+                            _body_spliced = True
+
                 while _retry_count < _MAX_SPLICE_RETRIES and _current_file_content and _anchor_marker_splice:
                     _retry_count += 1
                     print(f"  [Anchor Splice] 🔄 Retry {_retry_count}/{_MAX_SPLICE_RETRIES}: "
@@ -1921,7 +1997,7 @@ def execute_task(task, user_prompt: str, director_output: str,
                         print(f"  [Anchor Splice] ⚠ Retry {_retry_count} error: {_splice_e}")
 
                 # -- If all retries exhausted, use deterministic anchor splice fallback --
-                if _retry_count >= _MAX_SPLICE_RETRIES or not _anchor_marker_splice:
+                if not _body_spliced and (_retry_count >= _MAX_SPLICE_RETRIES or not _anchor_marker_splice):
                     _file_content_for_fallback = _current_file_content
                     if _file_content_for_fallback and _anchor_marker_splice:
                         # Use original output (before retries polluted it)
