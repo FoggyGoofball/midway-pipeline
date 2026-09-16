@@ -525,7 +525,21 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
         for _rtid, _rtask in ctx.task_map.items():
             _tf = getattr(_rtask, "target_file", None) or getattr(_rtask, "output_file", None)
             if _tf:
-                _lua_file_to_tid[str(_tf).replace("\\", "/")] = _rtid
+                # Normalize the same way _lf_rel is computed below: strip,
+                # backslash->slash, and drop any leading "./" so a Director-emitted
+                # "./attractions/x/x.lua" or "/attractions/x/x.lua" still matches.
+                _tf_norm = str(_tf).strip().replace("\\", "/").lstrip("./")
+                if _tf_norm:
+                    _lua_file_to_tid[_tf_norm] = _rtid
+                    # Register under the bare filename too, so a luac hit that
+                    # only resolves to lf.name (root-level or odd layouts) still
+                    # attributes to a task instead of returning 'unknown'.
+                    _tf_bare = _tf_norm.split("/")[-1]
+                    if _tf_bare and _tf_bare not in _lua_file_to_tid:
+                        _lua_file_to_tid[_tf_bare] = _rtid
+    print(f"  [luac] Ownership map built: {len(_lua_file_to_tid)} key(s) "
+          f"for {len(ctx.task_map or {})} task(s) - "
+          f"keys={sorted(_lua_file_to_tid)[:8]}")
     for _rkey in ctx.all_results_dict:
         if _rkey.startswith("merged:"):
             _rrel = _rkey[len("merged:"):]
@@ -572,6 +586,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 _lf_rel = lf.name
             _owning_tid = (
                 _lua_file_to_tid.get(_lf_rel)
+                or _lua_file_to_tid.get(_lf_rel.lstrip("./"))
                 or _lua_file_to_tid.get(lf.name)
             )
 
