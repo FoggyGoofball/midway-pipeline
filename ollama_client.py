@@ -312,6 +312,10 @@ def _stream_messages_payload(
                             token = obj.get("message", {}).get("content", "")
                             if not token:
                                 continue
+                            # -- User Stop: abort in-flight generation ------
+                            if _user_stop_requested():
+                                print(f"\n  [Stop] \u23f9 User requested stop - aborting stream for '{label}'.")
+                                return
                             print(token, end="")
                             import sys as _sys
                             _sys.stdout.flush()
@@ -395,6 +399,21 @@ def reset_vram_overrun_abort() -> None:
     global _vram_overrun_abort, _vram_abort_diagnostics
     _vram_overrun_abort = False
     _vram_abort_diagnostics = ""
+
+
+def _user_stop_requested() -> bool:
+    """True when the dashboard has requested a stop of the active run.
+
+    Checked inside the token stream so a stop aborts the in-flight generation
+    within a token instead of waiting for the current model call to finish
+    (which on the Steam Deck can take minutes). Lazily imports server_status to
+    avoid a module-import cycle.
+    """
+    try:
+        import server_status
+        return bool(server_status.stop_requested())
+    except Exception:
+        return False
 
 
 # -- Paging Stateful Cache Bridge (Directive A)
@@ -656,6 +675,12 @@ def call_ollama_streamed(
                                 token = obj.get("message", {}).get("content", "")
                                 if not token:
                                     continue
+
+                                # -- User Stop: abort in-flight generation --
+                                if _user_stop_requested():
+                                    print(f"\n  [Stop] \u23f9 User requested stop - aborting stream for '{cycle_label}'.")
+                                    sys.stdout.flush()
+                                    return
 
                                 # -- Directive D: Live Paging Detection -----
                                 # Feed the token to the paging controller.
