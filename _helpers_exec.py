@@ -295,6 +295,22 @@ def _normalize_for_fuzzy_match(text: str) -> str:
     return "\n".join(stripped)
 
 
+_LINE_NUMBER_GUTTER_RE = re.compile(r'^\s*\d+\s*[|>]\s?')
+
+
+def _strip_line_number_gutter(text: str) -> str:
+    """Strip copied line-number gutters ('37 |', '40 >', '12|') from the start
+    of every line. These are display artifacts from code viewers that small
+    coders paste into SEARCH/REPLACE blocks; they never exist on disk, and
+    when the REPLACE side leaks them, luac fails with 'unexpected symbol near
+    N'. Applied to both SEARCH and REPLACE so a copied listing cannot poison
+    the target file.
+    """
+    if not text:
+        return text
+    return "".join(_LINE_NUMBER_GUTTER_RE.sub('', ln) for ln in text.splitlines(keepends=True))
+
+
 def _fuzzy_apply_patch(file_content: str, search_text: str, replace_text: str) -> str:
     """Apply a SEARCH/REPLACE patch with fuzzy matching fallback.
 
@@ -455,6 +471,13 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
         if "<VRAM_STUB" in _search or "<VRAM_STUB" in _replace:
             print("  [PatchParser] Skipping block containing <VRAM_STUB> placeholder.", flush=True)
             continue
+        # De-gutter: strip copied line-number prefixes from BOTH sides before
+        # the block is stored. The fuzzy matcher already tolerates them for
+        # matching, but the REPLACE side is written verbatim, so a copied
+        # line-number listing leaks the gutter into the file ("unexpected
+        # symbol near '37'"). Strip at the source.
+        _search = _strip_line_number_gutter(_search)
+        _replace = _strip_line_number_gutter(_replace)
         # Skip degenerate blocks (nothing left on either side).
         if not _search.strip() and not _replace.strip():
             continue
@@ -1633,8 +1656,35 @@ def execute_task(task, user_prompt: str, director_output: str,
                                     print(f"  [Snapshot] ⚠ pipeline._CTX is None — baseline NOT "
                                           f"updated")
                             else:
+                                # Revert the on-disk file to the last-clean snapshot
+                                # immediately. Leaving the broken content in place lets
+                                # every later task build on a corrupt file, which is why
+                                # the run only fails at Phase 6 preflight with an
+                                # ownership mismatch (error owned by one task, breaker
+                                # tripped by another).
                                 print(f"  [Snapshot] ⚠ post-patch file not luac-clean for "
-                                      f"{task.target_file} — baseline retained at last-clean state")
+                                      f"{task.target_file} — REVERTING to last-clean baseline")
+                                _revert_content = None
+                                try:
+                                    from pipeline import _CTX as _snap_ctx_r
+                                    if _snap_ctx_r is not None:
+                                        _snap_map_r = getattr(_snap_ctx_r, '_last_luac_clean_anchor', None)
+                                        if _snap_map_r:
+                                            _revert_content = _snap_map_r.get(task.target_file.replace("\\", "/"))
+                                except Exception:
+                                    _revert_content = None
+                                if _revert_content is not None:
+                                    _file_content = _revert_content
+                                    try:
+                                        from _helpers_io import atomic_write_text as _staging_write
+                                        _staging_write(_apply_target, _file_content)
+                                    except Exception:
+                                        _apply_target.write_text(_file_content, encoding="utf-8")
+                                    print(f"  [Snapshot] ✅ reverted {task.target_file} to last-clean baseline "
+                                          f"({len(_revert_content)} chars)")
+                                else:
+                                    print(f"  [Snapshot] ⚠ no last-clean baseline to revert to — "
+                                          f"leaving {task.target_file} as-is")
                             try:
                                 _os_luac_snap.unlink(_tmp_luac.name)
                             except Exception:
