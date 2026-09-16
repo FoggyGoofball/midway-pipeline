@@ -794,6 +794,29 @@ def _splice_body_at_anchor(
     return _merged
 
 
+def _anchor_context_region(file_content: str, anchor_marker: str, before: int = 3, after: int = 2) -> str:
+    """Return a short numbered snippet of the region around *anchor_marker*.
+
+    Used by the anchor-guard / empty-block / splice-retry re-prompts so the
+    model can see the actual indentation and surrounding lines it must patch
+    instead of guessing (which surfaces as "I do not have the actual file
+    content" prose).
+    """
+    _lines = file_content.splitlines()
+    for _li, _line in enumerate(_lines):
+        if anchor_marker in _line:
+            _start = max(0, _li - before)
+            _end = min(len(_lines), _li + after + 1)
+            _out = []
+            for _si in range(_start, _end):
+                _prefix = f"{_si+1:4d} | " if _si != _li else f"{_si+1:4d} > "
+                _out.append(_prefix + _lines[_si])
+            return "\n".join(_out)
+    _head = "\n".join(f"    {_l}" for _l in _lines[:3])
+    _tail = "\n".join(f"    {_l}" for _l in _lines[-3:])
+    return f"File starts:\n{_head}\n[... {len(_lines)} lines ...]\nFile ends:\n{_tail}"
+
+
 # Declarative order of the SHARED (byte-identical) context blocks.  These must
 # stay in this order and must NEVER contain task-specific content, or Ollama's
 # KV-cache prefix is broken and every task re-prefills the whole prompt.
@@ -1518,8 +1541,20 @@ def execute_task(task, user_prompt: str, director_output: str,
                               f"but found '{_search_g[:80]}'. Re-prompting...")
                         break
                 if not _blocks_have_correct_anchor:
+                    _guard_file_content = ""
+                    try:
+                        if _apply_target.is_file():
+                            _guard_file_content = _apply_target.read_text(encoding="utf-8", errors="replace")
+                    except Exception:
+                        _guard_file_content = ""
+                    _guard_region = (
+                        _anchor_context_region(_guard_file_content, _anchor_marker_guard)
+                        if _guard_file_content else ""
+                    )
                     _fix_prompt = (
                         f"## Your Task\n{getattr(task, 'spec', user_prompt)}\n\n"
+                        f"## CURRENT FILE REGION (this IS the source you are fixing)\n"
+                        f"```\n{_guard_region}\n```\n\n"
                         f"## Correction Required\n"
                         f"Your previous output targeted the WRONG anchor marker in the file.\n"
                         f"The EXACT line you must SEARCH for (and then REPLACE) is:\n\n"
@@ -1573,8 +1608,20 @@ def execute_task(task, user_prompt: str, director_output: str,
                     not _block_has_real_code(_b.get("replace", "")) for _b in _blocks
                 )
                 if _empty_seen:
+                    _empty_file_content = ""
+                    try:
+                        if _apply_target.is_file():
+                            _empty_file_content = _apply_target.read_text(encoding="utf-8", errors="replace")
+                    except Exception:
+                        _empty_file_content = ""
+                    _empty_region = (
+                        _anchor_context_region(_empty_file_content, _anchor_marker_guard)
+                        if _empty_file_content else ""
+                    )
                     _fix_prompt = (
                         f"## Your Task\n{getattr(task, 'spec', user_prompt)}\n\n"
+                        f"## CURRENT FILE REGION (this IS the source you are fixing)\n"
+                        f"```\n{_empty_region}\n```\n\n"
                         f"## Correction Required\n"
                         f"Your REPLACE block contained NO actual code - only the "
                         f"anchor marker line and/or comments. You MUST write the "
@@ -1895,8 +1942,14 @@ def execute_task(task, user_prompt: str, director_output: str,
                           f"re-prompting for SEARCH/REPLACE format...")
 
                     # Build a targeted re-prompt asking for SEARCH/REPLACE only
+                    _splice_region = (
+                        _anchor_context_region(_current_file_content, _anchor_marker_splice)
+                        if _current_file_content and _anchor_marker_splice else ""
+                    )
                     _splice_retry_prompt = (
                         f"## Your Task\n{getattr(task, 'spec', user_prompt)}\n\n"
+                        f"## CURRENT FILE REGION (this IS the source you are fixing)\n"
+                        f"```\n{_splice_region}\n```\n\n"
                         f"## FORMAT ERROR\n"
                         f"Your previous output contained the full file content instead of "
                         f"a focused SEARCH/REPLACE block. This is NOT acceptable.\n\n"
