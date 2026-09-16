@@ -21,7 +21,7 @@ OLLAMA_HOST: str = "http://192.168.0.16:11434"
 # time-to-first-token past 130 s.  Default to OFF (deterministic fallbacks) so
 # the pipeline stops swapping; set MIDWAY_PHI35_ORACLES=1 to re-enable the
 # model-generated summaries/briefs.
-USE_PHI35_ORACLES: bool = os.environ.get("MIDWAY_PHI35_ORACLES", "1") == "1"
+USE_PHI35_ORACLES: bool = os.environ.get("MIDWAY_PHI35_ORACLES", "0") == "1"
 
 # -- Model Names
 CODER_MODEL: str = "qwen3.5:9b"  # best SEARCH/REPLACE instruction-follower at this size (6.1GB)
