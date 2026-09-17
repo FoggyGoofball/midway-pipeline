@@ -1087,6 +1087,59 @@ def _strip_comment_monologues(content: str) -> str:
     return "\n".join(result)
 
 
+def _strip_engine_redefinitions(content: str) -> str:
+    """Strip catastrophic engine-global redefinitions (Fix #16).
+
+    The coder sometimes REASSIGNS engine API globals, e.g.:
+
+        Engine.AwardTickets = function(count) ... end,
+
+    This overwrites the engine's own economy/input/physics functions and breaks
+    every other attraction in the slot.  It is ALWAYS wrong.  We strip the
+    whole assignment: for ``= function(...) ... end`` we remove through the
+    matching ``end`` (and any trailing comma); for other assignments we remove
+    the single line.
+    """
+    _ENGINE_NS_RE = re.compile(
+        r'^\s*(?:Engine|MidwayPhysics|MidwayInput)\.(\w+)\s*=\s*(.*)$'
+    )
+    _lines = content.splitlines()
+    _out = []
+    _i = 0
+    _removed = 0
+    while _i < len(_lines):
+        _m = _ENGINE_NS_RE.match(_lines[_i])
+        if not _m:
+            _out.append(_lines[_i])
+            _i += 1
+            continue
+        _rhs = _m.group(2).strip()
+        if _rhs.startswith("function"):
+            # Remove the whole function definition: track function/end depth.
+            _depth = 0
+            _j = _i
+            while _j < len(_lines):
+                _l = _lines[_j]
+                _depth += len(re.findall(r'\bfunction\b', _l))
+                _depth -= len(re.findall(r'\bend\b', _l))
+                _j += 1
+                if _depth <= 0:
+                    break
+            _removed += (_j - _i)
+            _i = _j
+            # Swallow a trailing comma left on the following line, if any.
+            if _i < len(_lines) and _lines[_i].strip() == ",":
+                _i += 1
+                _removed += 1
+        else:
+            # Non-function assignment to an engine global - strip the line.
+            _removed += 1
+            _i += 1
+    if _removed:
+        print(f"  [Post-Process Fix #16] Stripped {_removed} engine-global redefinition line(s)")
+    return "\n".join(_out)
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1128,6 +1181,42 @@ def post_process_lua(content: str) -> str:
     if had_trailing_newline and not content.endswith('\n'):
         content += '\n'
 
+    return content
+
+
+def post_process_surgery(content: str) -> str:
+    """Deterministic repair of a whole-file surgery output.
+
+    Runs the full fix pipeline EXCEPT:
+      - `_strip_pipeline_artifacts` (marker->TODO laundering would hide raw
+        `-- [TASK_N_INSERT_HOOK]` markers from the marker-clearance gate), and
+      - the lifecycle invariant injections (OnLoadStatic/SLOT_ID/handles),
+        which the surgery already preserves and re-injecting could duplicate.
+    """
+    had_trailing_newline = content.endswith('\n')
+    # Balance blocks first so a stray/missing `end` from the surgery splice is
+    # repaired before the other structural fixes run.
+    try:
+        from _lua_balancer import balance_lua_blocks
+        _bal, _actions = balance_lua_blocks(content)
+        if _actions and _bal != content:
+            content = _bal
+            print(f"  [Surgery Post-Process] balanced {len(_actions)} block issue(s).")
+    except Exception:
+        pass
+    content = _strip_comment_monologues(content)          # Fix #11
+    content = _strip_module_level_mod(content)            # Fix #2
+    content = _repair_duplicate_underscore_locals(content)  # Fix #13
+    content = _sanitize_modifier_keys(content)            # Fix #9
+    content = _strip_duplicate_functions(content)         # Fix #1 - duplicate lifecycle
+    content = _strip_engine_redefinitions(content)        # Fix #16
+    content = _add_midwayphysics_prefix(content)          # Fix #6
+    content = _strip_phantom_api_calls(content)           # Fix #8
+    content = _normalize_pool_name_arguments(content)     # Fix #14
+    content = _dedupe_onstep_registrations(content)       # Fix #12
+    content = _repair_bare_expression_statements(content) # Fix #15 - LAST
+    if had_trailing_newline and not content.endswith('\n'):
+        content += '\n'
     return content
 
 

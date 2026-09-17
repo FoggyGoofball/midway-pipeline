@@ -640,21 +640,13 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
     # (NOT full post_process_lua) to avoid marker->TODO laundering and
     # re-injecting lifecycle invariants the surgery already preserves.
     try:
-        from _post_process_lua import (
-            _add_midwayphysics_prefix,
-            _strip_phantom_api_calls,
-            _normalize_pool_name_arguments,
-            _repair_bare_expression_statements,
-        )
+        from _post_process_lua import post_process_surgery as _pp_surgery
         _pp_before = _fixed
-        _fixed = _add_midwayphysics_prefix(_fixed)
-        _fixed = _strip_phantom_api_calls(_fixed)
-        _fixed = _normalize_pool_name_arguments(_fixed)
-        _fixed = _repair_bare_expression_statements(_fixed)
+        _fixed = _pp_surgery(_fixed)
         if _fixed != _pp_before:
-            print("  [Surgery] deterministic prefix/phantom repair applied.")
+            print("  [Surgery] deterministic post-surgery repair applied.")
     except Exception as _ppe:
-        print(f"  [Surgery] prefix/phantom repair skipped: {_ppe}")
+        print(f"  [Surgery] post-surgery repair skipped: {_ppe}")
 
     # Gate 1: luac must accept the rewrite.
     _fd, _tmp = _tmp_mod.mkstemp(suffix=".lua")
