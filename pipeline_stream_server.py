@@ -37,9 +37,37 @@ os.environ["MIDWAY_FORCED_DETERMINISTIC"] = "1"
 # Ensure luac (Lua 5.4 compiler) is on PATH even when the server was launched
 # from a hidden / NoProfile shell that dropped the per-user PATH entry.  All
 # the deterministic luac gates call bare subprocess.run(["luac", ...]).
-_LUA_BIN = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Lua", "bin")
-if _LUA_BIN and _LUA_BIN not in os.environ.get("PATH", ""):
-    os.environ["PATH"] = _LUA_BIN + os.pathsep + os.environ.get("PATH", "")
+import shutil as _shutil
+
+
+def _ensure_luac_on_path() -> str:
+    _found = _shutil.which("luac")
+    if _found:
+        return _found
+    _candidates = [
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Lua", "bin"),
+        os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "Local", "Programs", "Lua", "bin"),
+        r"C:\Users\Admin\AppData\Local\Programs\Lua\bin",
+        r"C:\Program Files\Lua\bin",
+    ]
+    for _c in _candidates:
+        _p = os.path.join(_c, "luac.exe")
+        if _p and os.path.isfile(_p):
+            os.environ["PATH"] = _c + os.pathsep + os.environ.get("PATH", "")
+            return _p
+    return ""
+
+
+_LUAC_RESOLVED = _ensure_luac_on_path()
+try:
+    with open("luac_resolution.log", "a", encoding="utf-8") as _f:
+        _f.write(
+            f"LOCALAPPDATA={os.environ.get('LOCALAPPDATA')!r} "
+            f"USERPROFILE={os.environ.get('USERPROFILE')!r} "
+            f"which={_shutil.which('luac')!r} resolved={_LUAC_RESOLVED!r}\n"
+        )
+except Exception:
+    pass
 
 # Enforce local directory import precedence
 LOCAL_DIR = Path(__file__).resolve().parent
