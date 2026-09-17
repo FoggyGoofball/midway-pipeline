@@ -1039,6 +1039,81 @@ def _normalize_pool_name_arguments(content: str) -> str:
     return content
 
 
+def _dedupe_spawn_shared_booth(content: str) -> str:
+    """Collapse consecutive duplicate ``SpawnSharedBooth()`` calls (Fix #17).
+
+    The skeleton's OnLoadStatic already calls SpawnSharedBooth() exactly once.
+    The coder repeatedly prepends its own call, producing two consecutive
+    identical calls that spawn TWO shared booths (a real runtime bug).  Collapse
+    any run of consecutive identical ``SpawnSharedBooth()`` statements to one.
+    Blank and comment-only lines do not break a run.
+    """
+    lines = content.splitlines()
+    out: list[str] = []
+    removed = 0
+    prev_sb = False
+    for line in lines:
+        stripped = re.sub(r'--.*$', '', line).strip()
+        if not stripped:
+            out.append(line)  # blank / comment-only line: keep, don't break run
+            continue
+        is_sb = bool(re.match(r'^SpawnSharedBooth\s*\(\s*\)$', stripped))
+        if is_sb and prev_sb:
+            removed += 1
+            continue
+        out.append(line)
+        prev_sb = is_sb
+    if removed:
+        print(f"  [Post-Process Fix #17] Collapsed {removed} duplicate SpawnSharedBooth() call(s)")
+    return "\n".join(out)
+
+
+def _align_createpool_names(content: str) -> str:
+    """Align CreatePool literal names with declared ``<key>_pool`` constants (Fix #18).
+
+    The skeleton declares ``local <key>_pool = "<value>"`` for every pooled
+    entity in the design.  The coder sometimes writes ``CreatePool("Puck", ...)``
+    with a literal DIFFERENT from the declared value (``"puck_pool"``), so
+    PoolAcquire — which uses the declared constant — targets a pool that was
+    never created.  Rewrite each CreatePool literal whose normalized form
+    matches a declared value's base name (value minus a trailing ``_pool``) to
+    that declared value, converging creation and acquisition on one pool name.
+    """
+    _decl: dict[str, str] = {
+        m.group(2): m.group(1)
+        for m in re.finditer(r'\blocal\s+(\w+_pool)\s*=\s*"([^"]+)"', content)
+    }
+    if not _decl:
+        return content
+
+    def _norm(s: str) -> str:
+        return re.sub(r'[^a-z0-9]', '', s.lower())
+
+    # base name of each declared value (e.g. "puck_pool" -> "puck")
+    _bases = {
+        _val: _norm(re.sub(r'_pool$', '', _val, flags=re.IGNORECASE))
+        for _val in _decl
+    }
+
+    _pat = re.compile(r'(\bCreatePool\s*\(\s*)"([^"]+)"(\s*,)')
+    _count = 0
+
+    def _fix(m):
+        nonlocal _count
+        _lit = _norm(m.group(2))
+        for _val, _base in _bases.items():
+            if _lit == _base or (len(_lit) >= 3 and _base.startswith(_lit)):
+                _count += 1
+                return f'{m.group(1)}"{_val}"{m.group(3)}'
+        return m.group(0)
+
+    content = _pat.sub(_fix, content)
+    if _count:
+        print(f"  [Post-Process Fix #18] Aligned {_count} CreatePool literal "
+              f"name(s) to declared pool constants")
+    return content
+
+
 def _strip_comment_monologues(content: str) -> str:
     """Collapse long runs of prose comment-only lines into a single line.
 
@@ -1183,7 +1258,9 @@ def post_process_lua(content: str) -> str:
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
+    content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
+    content = _align_createpool_names(content)         # Fix #18 — CreatePool literal -> declared pool constant
     content = _dedupe_onstep_registrations(content)    # Fix #12 — one OnStep callback only
     content = _repair_bare_expression_statements(content)  # Fix #15 — LAST: bare MOD.x / neutralized literals are invalid statements
     # Full-file invariants (#4 OnLoadStatic, #5 SLOT_ID) only apply to a whole
@@ -1232,7 +1309,9 @@ def post_process_surgery(content: str) -> str:
     content = _strip_engine_redefinitions(content)        # Fix #16
     content = _add_midwayphysics_prefix(content)          # Fix #6
     content = _strip_phantom_api_calls(content)           # Fix #8
+    content = _dedupe_spawn_shared_booth(content)         # Fix #17
     content = _normalize_pool_name_arguments(content)     # Fix #14
+    content = _align_createpool_names(content)            # Fix #18
     content = _dedupe_onstep_registrations(content)       # Fix #12
     content = _repair_bare_expression_statements(content) # Fix #15 - LAST
     if had_trailing_newline and not content.endswith('\n'):
