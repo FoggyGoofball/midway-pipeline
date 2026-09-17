@@ -525,6 +525,26 @@ def _strip_phantom_api_calls(content: str) -> str:
         print(f"  [Post-Process Fix #8] Neutralized {_gm_count} phantom "
               f"'MidwayPhysics.GetMass' -> 1.0")
 
+    # `Obj:Namespace.Method(...)` (GMod/Unity-style colon call with a dotted
+    # method) is INVALID Lua 5.4 syntax - "function arguments expected near
+    # '.'".  The coder mixes Garry's Mod colon syntax with the MidwayPhysics
+    # namespace.  Comment out the whole statement so luac passes; the coverage
+    # gate then flags the missing functionality if it matters.
+    _colon_out: list[str] = []
+    _colon_count = 0
+    for _ln in content.splitlines():
+        if re.search(
+            r'\b[A-Za-z_]\w*\s*:\s*(?:MidwayPhysics|Engine|MidwayInput|Physics)\.[A-Za-z_]\w*\s*\(',
+            _ln,
+        ):
+            _colon_out.append('-- [PHANTOM COLON-CALL] ' + _ln.lstrip())
+            _colon_count += 1
+        else:
+            _colon_out.append(_ln)
+    if _colon_count:
+        content = "\n".join(_colon_out)
+        print(f"  [Post-Process Fix #8] Commented out {_colon_count} phantom colon-call line(s)")
+
     # Phase 2: collect all phantom function names found in the content.
     modifications = 0
     _phantom_names_found: set[str] = set()
