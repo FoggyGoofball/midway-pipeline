@@ -205,7 +205,7 @@ def _coverage_gaps(ctx: PipelineContext) -> list[str]:
         _task_tokens = {m.group(0).lower() for m in _API_TOKEN_RE.finditer(_title)}
         if not _task_tokens:
             continue  # structural task — skeleton satisfies it
-        if not (_task_tokens & _out_tokens):
+        if not (_task_tokens & _coverage_tokens):
             gaps.append(f"Task {_t.get('id')} — {_title[:90]}")
 
     # 2. Design checklist coverage (secondary).
@@ -551,6 +551,79 @@ def _ask_more_review_cycles(ctx: PipelineContext) -> bool:
     return _ans in ("y", "yes")
 
 
+def _gap_filler_surgery(ctx: PipelineContext, target_rel: str) -> bool:
+    """Try deterministic repair of the accumulated file BEFORE any LLM rewrite.
+
+    The whole-file LLM surgery is what corrupts the file (it re-emits the
+    skeleton and mis-splices fragments into orphaned blocks).  Before falling
+    back to it, run the deterministic ``post_process_surgery`` + luac.  This
+    fixes duplicate lifecycle functions, engine-global redefinitions, bare
+    calls, phantom APIs, and block imbalance with NO model in the loop.
+    Returns True when the deterministic repair is luac-clean and committed.
+    """
+    import subprocess as _sp
+    import tempfile as _tmp_mod
+    import os as _os_mod
+
+    _real = ctx.project_root / target_rel
+    _src = ""
+    if _real.is_file():
+        _src = _real.read_text(encoding="utf-8", errors="replace")
+    if not _src.strip():
+        try:
+            from _helpers_io import get_staging_path, is_staging_active
+            if is_staging_active():
+                _st = get_staging_path(_real, project_root=ctx.project_root)
+                if _st and _st.is_file():
+                    _src = _st.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if not _src.strip():
+        return False
+
+    try:
+        from _post_process_lua import post_process_surgery as _pp_surg
+        _fixed = _pp_surg(_src)
+    except Exception:
+        return False
+
+    _fd, _tf = _tmp_mod.mkstemp(suffix=".lua")
+    try:
+        with _os_mod.fdopen(_fd, "w", encoding="utf-8") as _fh:
+            _fh.write(_fixed)
+        _r = _sp.run(["luac", "-p", _tf], capture_output=True, text=True, timeout=30)
+    finally:
+        try:
+            _os_mod.unlink(_tf)
+        except Exception:
+            pass
+    if _r.returncode != 0:
+        print(f"  [Gap Fill] deterministic repair still not luac-clean "
+              f"({_r.stderr.strip()[:120]}) - deferring to LLM surgery.")
+        return False
+
+    try:
+        _real.parent.mkdir(parents=True, exist_ok=True)
+        _real.write_text(_fixed, encoding="utf-8")
+    except Exception:
+        return False
+    try:
+        from _helpers_io import get_staging_path, is_staging_active
+        if is_staging_active():
+            _st = get_staging_path(_real, project_root=ctx.project_root)
+            if _st is not None:
+                _st.parent.mkdir(parents=True, exist_ok=True)
+                _st.write_text(_fixed, encoding="utf-8")
+    except Exception:
+        pass
+    _snap = getattr(ctx, "_last_luac_clean_anchor", None)
+    if _snap is not None:
+        _snap[target_rel] = _fixed
+    print(f"  [Gap Fill] deterministic repair committed {target_rel} "
+          f"({len(_fixed)} chars) - no LLM rewrite needed.")
+    return True
+
+
 def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
     """Last-resort whole-file LLM rewrite, gated by luac + RuntimeSim.
 
@@ -786,7 +859,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 if _surg_tf.endswith(".lua") and _surg_tf not in _surg_tried:
                     _surg_tried.add(_surg_tf)
                     try:
-                        if _whole_file_surgery(ctx, _surg_tf):
+                        if _gap_filler_surgery(ctx, _surg_tf) or _whole_file_surgery(ctx, _surg_tf):
                             print(f"  [Surgery] ✅ whole-file rewrite fixed {_surg_tf} — "
                                   f"resetting circuit breaker for {tid}.")
                             ctx.retry_counts[tid] = 0
@@ -1200,9 +1273,11 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # and Engine.AwardTickets  catch it programmatically before the gate closes.
                 _rev_scope = getattr(ctx, '_scope_mode', '')
                 if _rev_scope in ("NEW_ATTRACTION", "MODIFY_ATTRACTION"):
-                    _all_lua = " ".join(
-                        v for v in (ctx.all_results_dict or {}).values()
-                    ).lower()
+                    _all_lua = _effective_lua_blob(ctx).lower()
+                    if not _all_lua:
+                        _all_lua = " ".join(
+                            v for v in (ctx.all_results_dict or {}).values()
+                        ).lower()
                     _missing_economy: list[str] = []
                     if not any(kw in _all_lua for kw in (
                         "attractionconstants.modifiers", "engine_mod_", ".modifiers",
