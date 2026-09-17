@@ -1488,6 +1488,64 @@ def _neutralize_method_calls(content: str) -> str:
     return content
 
 
+def _strip_phantom_engine_calls(content: str) -> str:
+    """Neutralize unknown Engine.* calls (Fix #22).
+
+    The Economy ``Engine.*`` namespace exposes exactly five calls: AwardTickets,
+    AwardTokens, GetTickets, GetTokens, GetStreak.  The coder repeatedly
+    hallucinates modifier SETTERS (Engine.AffixHeat, Engine.SetGlobalLuck,
+    Engine.ModifyManipulation, ...) when told to "consume all modifiers" — these
+    are phantom and trip the final PhantomAPIGate.  Comment out whole-statement
+    phantom Engine calls and replace expression-context ones with ``false``,
+    the same strategy Fix #8 uses for MidwayPhysics.* phantoms.
+    """
+    _known = {"awardtickets", "awardtokens", "gettickets", "gettokens", "getstreak"}
+    try:
+        from midway_api_signatures import ECONOMY_ARITY
+        _known |= {k.lower() for k in ECONOMY_ARITY}
+    except Exception:
+        pass
+
+    _phantom_names: set[str] = set()
+    for _m in re.finditer(r'\bEngine\.(\w+)\s*\(', content):
+        _fn = _m.group(1)
+        if _fn.lower() not in _known:
+            _phantom_names.add(_fn)
+
+    if not _phantom_names:
+        return content
+
+    _commented = 0
+    _replaced = 0
+    for _pn in sorted(_phantom_names, key=len, reverse=True):
+        # 1. Comment out whole-statement calls (a bare `false` is invalid Lua).
+        _line_pat = re.compile(
+            r'^(\s*)Engine\.' + re.escape(_pn) + r'\s*\([^\n]*$',
+            re.MULTILINE,
+        )
+        _new_content, _count = _line_pat.subn(
+            r'\1-- [phantom removed: Engine.' + _pn + ']', content
+        )
+        if _count:
+            _commented += _count
+            content = _new_content
+
+        # 2. Replace remaining expression-context calls with `false`.
+        _expr_pat = re.compile(
+            r'Engine\.' + re.escape(_pn) + r'\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)'
+        )
+        _new_content, _count = _expr_pat.subn('false', content)
+        if _count:
+            _replaced += _count
+            content = _new_content
+
+    if _commented or _replaced:
+        print(f"  [Post-Process Fix #22] Neutralized phantom Engine API(s): "
+              f"{_commented} statement(s) commented, {_replaced} expression(s) -> false "
+              f"({', '.join(sorted(_phantom_names))})")
+    return content
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1512,6 +1570,7 @@ def post_process_lua(content: str) -> str:
     content = _add_midwayphysics_prefix(content)       # Fix #6
     content = _neutralize_method_calls(content)        # Fix #21 — handle.Method -> MidwayPhysics.Method(handle)
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
+    content = _strip_phantom_engine_calls(content)     # Fix #22 — neutralize phantom Engine.* setters
     content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
     content = _align_createpool_names(content)         # Fix #18 — CreatePool literal -> declared pool constant
@@ -1566,6 +1625,7 @@ def post_process_surgery(content: str) -> str:
     content = _add_midwayphysics_prefix(content)          # Fix #6
     content = _neutralize_method_calls(content)           # Fix #21
     content = _strip_phantom_api_calls(content)           # Fix #8
+    content = _strip_phantom_engine_calls(content)        # Fix #22
     content = _dedupe_spawn_shared_booth(content)         # Fix #17
     content = _normalize_pool_name_arguments(content)     # Fix #14
     content = _align_createpool_names(content)            # Fix #18

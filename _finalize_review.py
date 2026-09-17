@@ -426,6 +426,224 @@ def _run_tribunal_appeal(ctx: PipelineContext) -> str:
     return ""
 
 
+def _coder_defend_or_revise(ctx, objections, target_path, target_rel, current_code, coder_model):
+    """Ask the coder to answer the tribunal's objections with surgical patches.
+
+    Returns the revised file content, or None when the coder produced nothing
+    usable (no blocks, no matches, or a syntax-breaking revision).  Reuses the
+    same SEARCH/REPLACE extractor + fuzzy applier as the anchor fix loop, and
+    the same luac-clean guard so a bad revision can never persist.
+    """
+    _sys = (
+        "You are the CODER agent responding to the Tribunal's objections. "
+        "Fix ONLY the defects listed. Output ONLY SEARCH/REPLACE blocks:\n"
+        "  <<<<<<< SEARCH\n  <exact current lines>\n  =======\n  <corrected lines>\n  >>>>>>> REPLACE\n"
+        "SEARCH must match the current file EXACTLY. One block per defect. "
+        "Do NOT output the whole file, prose, or commentary."
+    )
+    _user = (
+        "## Tribunal Objections\n" + (objections or "")[:3000]
+        + "\n\n## Current File\n```\n" + (current_code or "")[:8000]
+        + "\n```\n\nFix the listed defects with SEARCH/REPLACE blocks now."
+    )
+    try:
+        from pipeline import CODER_MODEL as _CM
+        _model = coder_model or _CM
+    except Exception:
+        _model = coder_model or "qwen3.5:9b"
+    try:
+        _out = call_ollama(
+            _sys, _user, "Tribunal Debate — Coder Response", _model,
+            params={"num_predict": 1536}, skip_pre_summarizer=True,
+        )
+    except Exception as _e:
+        print(f"  [Tribunal Debate] ⚠ coder call failed: {_e}")
+        return None
+    if _is_fatal_ollama(_out):
+        return None
+
+    from _helpers_exec import _extract_search_replace_blocks as _extract, _fuzzy_apply_patch as _apply
+
+    _blocks = _extract(_out or "")
+    if not _blocks:
+        print("  [Tribunal Debate] ⚠ coder emitted no SEARCH/REPLACE blocks.")
+        return None
+
+    _patched = current_code
+    _applied = 0
+    for _b in _blocks:
+        _new = _apply(_patched, _b.get("search", ""), _b.get("replace", ""))
+        if _new != _patched:
+            _patched = _new
+            _applied += 1
+    if not _applied:
+        print("  [Tribunal Debate] ⚠ none of the coder's SEARCH blocks matched.")
+        return None
+
+    # Syntax guard: only accept the revision if it stays luac-clean.
+    try:
+        import subprocess as _sp, tempfile as _tf, os as _os
+        _exe = _get_luac_exe()
+        if _exe:
+            _fd, _tmp = _tf.mkstemp(suffix=".lua")
+            try:
+                with _os.fdopen(_fd, "w", encoding="utf-8") as _fh:
+                    _fh.write(_patched)
+                _r = _sp.run([_exe, "-p", _tmp], capture_output=True, text=True, timeout=30)
+                if _r.returncode != 0:
+                    print(f"  [Tribunal Debate] ⚠ coder revision broke syntax — discarding "
+                          f"({_r.stderr.strip()[:120]})")
+                    return None
+            finally:
+                try:
+                    _os.unlink(_tmp)
+                except Exception:
+                    pass
+    except Exception:
+        pass  # luac unavailable — accept the revision
+
+    # Write back to disk so the deterministic re-check and later gates see it.
+    if target_path is not None:
+        try:
+            target_path.write_text(_patched, encoding="utf-8")
+            try:
+                from _helpers_io import is_staging_active
+                if is_staging_active():
+                    _real = (ctx.project_root / target_rel).resolve()
+                    _real.parent.mkdir(parents=True, exist_ok=True)
+                    _real.write_text(_patched, encoding="utf-8")
+            except Exception:
+                pass
+        except Exception as _we:
+            print(f"  [Tribunal Debate] ⚠ write-back failed: {_we}")
+
+    # Sync the in-memory merged view so _effective_lua_blob sees the revision.
+    try:
+        _mkey = "merged:" + (target_rel or "")
+        if _mkey in ctx.all_results_dict:
+            ctx.all_results_dict[_mkey] = _patched
+    except Exception:
+        pass
+
+    print(f"  [Tribunal Debate] ✅ Coder applied {_applied} surgical patch(es).")
+    return _patched
+
+
+def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str:
+    """Bounded appellate debate: the TRIBUNAL argues with the coder until consensus.
+
+    Each round:
+      1. The tribunal reviews the SHIPPED file + open issues and renders
+         [MERGE] or [REJECT:...:<objections>].
+      2. On REJECT the objections go to the coder, which answers with surgical
+         SEARCH/REPLACE patches (applied via _fuzzy_apply_patch).
+      3. The deterministic verdict re-runs; a clean PASS ends the debate.
+
+    The deterministic gates (luac + phantom + coverage) are the ground truth: a
+    tribunal MERGE cannot override a still-failing deterministic verdict, and a
+    syntax-breaking coder revision is discarded.  Returns "PASS"/"FAIL", or ""
+    when the debate could not run at all (callers fall back to the single-shot
+    appeal).
+    """
+    try:
+        from pipeline import REASONING_MODEL as _RM
+    except Exception:
+        return ""
+
+    # Resolve the shipped .lua target path so coder SEARCH blocks match disk.
+    _target_rel = getattr(ctx, '_mono_target', '') or getattr(ctx, '_monolithic_lua_target', '') or ''
+    if not _target_rel:
+        for _t in (ctx.task_map or {}).values():
+            _tf = str(getattr(_t, 'target_file', '') or '')
+            if _tf.endswith('.lua'):
+                _target_rel = _tf.replace("\\", "/")
+                break
+    _target_path = None
+    if _target_rel:
+        try:
+            from _helpers_io import get_staging_path, is_staging_active
+            _p = (ctx.project_root / _target_rel).resolve()
+            if is_staging_active():
+                _p = get_staging_path(_p, project_root=ctx.project_root)
+            if _p.is_file():
+                _target_path = _p
+        except Exception:
+            pass
+
+    _tribunal_system = (
+        "You are the TRIBUNAL AGENT — a neutral appellate arbiter who ARGUES WITH THE CODER "
+        "until the implementation is correct. You do NOT write code yourself.\n"
+        "Each turn, review the implementation against the open violations and render:\n"
+        "- [MERGE:Tribunal:<justification>] — the implementation is now acceptable.\n"
+        "- [REJECT:Tribunal:<justification>] — followed by a numbered OBJECTIONS list of the "
+        "specific, concrete defects the coder must still fix.\n"
+        "Be surgical: object only to issues that are visibly present and would break or "
+        "incomplete the implementation. Never invent missing APIs or rules."
+    )
+
+    for _round in range(1, max_rounds + 1):
+        print(f"\n  [Tribunal Debate] Round {_round}/{max_rounds}")
+
+        _final_code = _effective_lua_blob(ctx)
+        if not _final_code.strip():
+            _final_code = "\n\n".join(str(v) for v in (ctx.all_results_dict or {}).values())
+
+        _issues_block = (
+            (ctx.pre_flight_errors or "").strip()
+            + "\n"
+            + "\n".join(f"  {e}" for e in (getattr(ctx, 'runtime_errors', None) or []))
+        ).strip() or "(no open violations recorded)"
+
+        _trib_prompt = (
+            "## Open Violations (must be satisfied)\n" + _issues_block
+            + "\n\n## Implementation Under Review\n```\n" + _final_code[:8000]
+            + "\n```\n\nRender your verdict now: [MERGE] or [REJECT] + a numbered OBJECTIONS list."
+        )
+
+        try:
+            _trib_out = call_ollama(
+                _tribunal_system, _trib_prompt, f"Tribunal Debate R{_round}", _RM,
+                params={"num_predict": 768}, skip_pre_summarizer=True,
+            )
+        except Exception as _te:
+            print(f"  [Tribunal Debate] ⚠ tribunal call failed: {_te}")
+            return ""
+        if _is_fatal_ollama(_trib_out):
+            print("  [Tribunal Debate] ⚠ tribunal unreachable.")
+            return ""
+
+        _trib_preview = (_trib_out or "").strip()
+        print(f"  [Tribunal Debate] Tribunal ({len(_trib_preview)} chars): {_trib_preview[:240]!r}")
+
+        _is_merge = bool(re.search(r"\[MERGE[:\]]", _trib_out, re.IGNORECASE)
+                         or re.search(r"\bMERGE\b", _trib_out))
+        _is_reject = bool(re.search(r"\[REJECT[:\]]", _trib_out, re.IGNORECASE)
+                          or re.search(r"\bREJECT\b", _trib_out))
+
+        if _is_merge and not _is_reject:
+            _dv, _ = _deterministic_verdict(ctx)
+            if _dv == "PASS":
+                return "PASS"
+            print("  [Tribunal Debate] Tribunal MERGE'd but deterministic verdict still FAILs — continuing.")
+        elif _is_reject:
+            _revised = _coder_defend_or_revise(ctx, _trib_out, _target_path, _target_rel, _final_code, _RM)
+            if _revised:
+                _dv, _ = _deterministic_verdict(ctx)
+                if _dv == "PASS":
+                    print("  [Tribunal Debate] ✅ Consensus reached (deterministic PASS).")
+                    return "PASS"
+                print("  [Tribunal Debate] Coder revised; deterministic verdict still FAILs — next round.")
+            else:
+                print("  [Tribunal Debate] ⚠ coder produced no usable revision — stopping debate.")
+                break
+        else:
+            print("  [Tribunal Debate] ⚠ no parseable verdict — stopping debate.")
+            break
+
+    _dv, _ = _deterministic_verdict(ctx)
+    return _dv
+
+
 # ----------------------------------------------------------------------
 #  Structured Integration Review (Standard #1 — replaces regex fragility)
 # ----------------------------------------------------------------------
@@ -2271,9 +2489,13 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             ctx.user_declined_review = True
 
         # Escalate to the appellate court (TRIBUNAL) for a binding verdict.
+        # First run the bounded tribunal↔coder debate (argue until consensus);
+        # fall back to the single-shot appeal when the debate cannot run.
         # Fall back to the legacy auto-approve / interactive logic below only
         # when the tribunal is unreachable or renders no parseable verdict.
-        _tribunal_verdict = _run_tribunal_appeal(ctx)
+        _tribunal_verdict = _run_tribunal_coder_debate(ctx)
+        if _tribunal_verdict == "":
+            _tribunal_verdict = _run_tribunal_appeal(ctx)
         if _tribunal_verdict in ("PASS", "FAIL"):
             ctx.review_verdict = _tribunal_verdict
             ctx.output_parts.append(
