@@ -770,6 +770,59 @@ def _anchor_context_region(file_content: str, anchor_marker: str, before: int = 
     return f"File starts:\n{_head}\n[... {len(_lines)} lines ...]\nFile ends:\n{_tail}"
 
 
+def _build_design_state_contract(ctx) -> str:
+    """Build the SHARED STATE CONTRACT (byte-identical across anchor tasks),
+    memoized on ctx._shared_block_cache so it is prefilled ONCE via the
+    KV-cache shared prefix instead of re-prefilled in every task's tail."""
+    _cache = getattr(ctx, '_shared_block_cache', None)
+    if _cache is None:
+        _cache = {}
+        ctx._shared_block_cache = _cache
+    _key = "design_state_contract"
+    if _key in _cache:
+        return _cache[_key]
+    _design_obj = getattr(ctx, 'attraction_design', None)
+    _design_handles = getattr(_design_obj, 'handles', None) if _design_obj else None
+    _handle_names = [getattr(_h, 'name', '') for _h in (_design_handles or [])]
+    _handle_names = [str(n).strip() for n in _handle_names if n and str(n).strip()]
+    _state_vars = getattr(_design_obj, 'module_state_variables', None) if _design_obj else None
+    _pool_keys = [str(k).strip() for k in (getattr(_design_obj, 'pool_requirements', None) or {})]
+    _pool_keys = [k for k in _pool_keys if k]
+    _contract = ""
+    if _handle_names or _state_vars or _pool_keys:
+        _contract_lines = [
+            "## SHARED STATE CONTRACT (MANDATORY)",
+            "The module-level variables below are ALREADY declared at the file root",
+            "by the deterministic skeleton builder. Reference them by exact name.",
+            "Do NOT re-declare them with `local` inside OnLoad/OnStep/OnUnload.",
+            "Do NOT invent new handle names (no malletHandles, bellHandle, etc.).",
+        ]
+        for _n in _handle_names:
+            _contract_lines.append(f"- `{_n}`  (handle: already `local {_n} = nil` at module root)")
+        for _sv in (_state_vars or []):
+            _sv_name = _sv.get('name') if isinstance(_sv, dict) else getattr(_sv, 'name', '')
+            _sv_name = str(_sv_name or '').strip()
+            if _sv_name:
+                _sv_type = _sv.get('lua_type', 'number') if isinstance(_sv, dict) else getattr(_sv, 'lua_type', 'number')
+                _contract_lines.append(f"- `{_sv_name}`  ({_sv_type}: already declared at module root)")
+        if _pool_keys:
+            _contract_lines.append(
+                "POOLED ENTITY CONVENTION: each pooled entity has a POOL NAME string "
+                "constant (`<name>_pool`, already declared at module root) and an ACTIVE "
+                "instance HANDLE (`<name>`, nil until acquired). Never treat the pool name "
+                "and the active handle as the same variable."
+            )
+            for _pk in _pool_keys:
+                _contract_lines.append(
+                    f"  - pool name = `{_pk}_pool` (string); active handle = `{_pk}` (nil until acquired). "
+                    f"Acquire: `{_pk} = MidwayPhysics.PoolAcquire({_pk}_pool, x, y, z)`. "
+                    f"Return: `MidwayPhysics.PoolReturn({_pk}_pool, {_pk})`."
+                )
+        _contract = "\n".join(_contract_lines)
+    _cache[_key] = _contract
+    return _contract
+
+
 # Declarative order of the SHARED (byte-identical) context blocks.  These must
 # stay in this order and must NEVER contain task-specific content, or Ollama's
 # KV-cache prefix is broken and every task re-prefills the whole prompt.
@@ -975,6 +1028,19 @@ def execute_task(task, user_prompt: str, director_output: str,
     except Exception:
         pass
 
+    # Shared handle contract (byte-identical across anchor tasks) -> KV-cached
+    # in the shared prefix instead of the per-task tail.  The Architect design
+    # is fixed per run, so this never changes between tasks.
+    if _anchor_mode:
+        try:
+            from pipeline import _CTX as _contract_ctx
+            if _contract_ctx is not None:
+                _contract_block = _build_design_state_contract(_contract_ctx)
+                if _contract_block:
+                    _shared_parts.append(_contract_block)
+        except Exception:
+            pass
+
     # Auto-Inject Referenced Files
     refs_block = get_referenced_files_cache()
     if refs_block:
@@ -1094,52 +1160,9 @@ def execute_task(task, user_prompt: str, director_output: str,
                                 f"The orchestrator will re-inject it before patch application. "
                                 f"Full file is {len(_live_content)} chars / {len(_file_lines)} lines.\n"
                             )
-                        # -- Shared handle contract: pin the exact handle names from
-                        # the Architect design so tasks don't each invent their own
-                        # (malletHandles vs mallet_kinematic vs bellHandle).
-                        _design_state_contract = ""
-                        try:
-                            _design_obj = getattr(_stage_ctx, 'attraction_design', None)
-                            _design_handles = getattr(_design_obj, 'handles', None) if _design_obj else None
-                            _handle_names = [getattr(_h, 'name', '') for _h in (_design_handles or [])]
-                            _handle_names = [str(n).strip() for n in _handle_names if n and str(n).strip()]
-                            _state_vars = getattr(_design_obj, 'module_state_variables', None) if _design_obj else None
-                            _pool_keys = [str(k).strip() for k in (getattr(_design_obj, 'pool_requirements', None) or {})]
-                            _pool_keys = [k for k in _pool_keys if k]
-                        except Exception:
-                            _handle_names = []
-                            _state_vars = []
-                            _pool_keys = []
-                        if _handle_names or _state_vars or _pool_keys:
-                            _contract_lines = [
-                                "\n## SHARED STATE CONTRACT (MANDATORY)",
-                                "The module-level variables below are ALREADY declared at the file root",
-                                "by the deterministic skeleton builder. Reference them by exact name.",
-                                "Do NOT re-declare them with `local` inside OnLoad/OnStep/OnUnload.",
-                                "Do NOT invent new handle names (no malletHandles, bellHandle, etc.).",
-                            ]
-                            for _n in _handle_names:
-                                _contract_lines.append(f"- `{_n}`  (handle: already `local {_n} = nil` at module root)")
-                            for _sv in (_state_vars or []):
-                                _sv_name = _sv.get('name') if isinstance(_sv, dict) else getattr(_sv, 'name', '')
-                                _sv_name = str(_sv_name or '').strip()
-                                if _sv_name:
-                                    _sv_type = _sv.get('lua_type', 'number') if isinstance(_sv, dict) else getattr(_sv, 'lua_type', 'number')
-                                    _contract_lines.append(f"- `{_sv_name}`  ({_sv_type}: already declared at module root)")
-                            if _pool_keys:
-                                _contract_lines.append(
-                                    "\nPOOLED ENTITY CONVENTION: each pooled entity has a POOL NAME string "
-                                    "constant (`<name>_pool`, already declared at module root) and an ACTIVE "
-                                    "instance HANDLE (`<name>`, nil until acquired). Never treat the pool name "
-                                    "and the active handle as the same variable."
-                                )
-                                for _pk in _pool_keys:
-                                    _contract_lines.append(
-                                        f"  - pool name = `{_pk}_pool` (string); active handle = `{_pk}` (nil until acquired). "
-                                        f"Acquire: `{_pk} = MidwayPhysics.PoolAcquire({_pk}_pool, x, y, z)`. "
-                                        f"Return: `MidwayPhysics.PoolReturn({_pk}_pool, {_pk})`."
-                                    )
-                            _design_state_contract = "\n" + "\n".join(_contract_lines)
+                        # Shared handle contract is injected in the KV-cached
+                        # shared prefix via _build_design_state_contract, so the
+                        # per-task staging block stays lean.
                         _stage_block = (
                             f"\n\n## ⚡ CURRENT ON-DISK STATE: {task.target_file}\n"
                             f"Relevant region around your anchor marker:\n"
@@ -1163,7 +1186,6 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"most literal reading and do NOT argue in comments.\n"
                             f"- SEARCH is exactly the one anchor line; REPLACE is your "
                             f"implementation (a few lines) + the anchor re-inserted at the end.\n"
-                            f"{_design_state_contract}"
                             f"Output EXACTLY ONE block:\n"
                             f"<<<<<<< SEARCH\n"
                             f"    {_anchor_marker}\n"
