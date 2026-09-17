@@ -1235,6 +1235,190 @@ def _strip_engine_redefinitions(content: str) -> str:
     return "\n".join(_out)
 
 
+# ==============================================================================
+#  Shared Lua symbol-table analysis (used by Fix #19/#20 and preflight C20)
+# ==============================================================================
+# One pass builds three identifier sets from Lua source:
+#   declared — every `local NAME`, function name, parameter, and for-loop var
+#   assigned — every bare statement LHS `NAME =` / `NAME, OTHER =`
+#   read     — every identifier referenced outside a declaration, definition,
+#              field access, method call, string literal, or comment
+# Keywords, Lua stdlib, engine globals, and lifecycle hooks are excluded.
+
+_LUA_SYMBOL_KEYWORDS = frozenset({
+    'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function',
+    'goto', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return',
+    'then', 'true', 'until', 'while',
+})
+
+_LUA_SYMBOL_STDLIB = frozenset({
+    'math', 'table', 'string', 'os', 'io', 'coroutine', 'debug', 'package',
+    'utf8', 'pairs', 'ipairs', 'print', 'type', 'tostring', 'tonumber',
+    'select', 'next', 'rawget', 'rawset', 'setmetatable', 'getmetatable',
+    'require', 'pcall', 'xpcall', 'error', 'assert', 'unpack',
+    'collectgarbage', 'tick', '_G', '_VERSION', 'self',
+})
+
+_LUA_SYMBOL_ENGINE = frozenset({
+    'Engine', 'MidwayPhysics', 'MidwayInput', 'AttractionConstants',
+    'SpawnSharedBooth', 'BOOTH_SLOT_ID', 'SLOT_ID', 'CONST', 'MOD',
+    'OnLoadStatic', 'OnLoad', 'OnStep', 'OnUnload', 'OnCollision',
+    'OnSensorEnter', 'OnSensorExit', 'OnInput', 'OnFrameUpdate',
+    'GRAVITY', 'PHYSICS_SCALE',
+})
+
+_LUA_SYMBOL_EXCLUDE = _LUA_SYMBOL_KEYWORDS | _LUA_SYMBOL_STDLIB | _LUA_SYMBOL_ENGINE
+
+_HANDLE_CALL_PAT = re.compile(
+    r'(?:MidwayPhysics\.\w+|IsSensorTriggered|DestroyBody|PoolReturn|PoolAcquire|'
+    r'PoolFree|PoolTotal|PoolCullBelow|IsActive|GetPosition|GetVelocity|GetMass|'
+    r'SetMass|SetFriction|SetRestitution|SetLinearDamping|SetAngularDamping|'
+    r'SetLinearVelocity|SetAngularVelocity|ApplyImpulse|ApplyAngularImpulse|'
+    r'MoveKinematic)\s*\(\s*([a-zA-Z_]\w*)'
+)
+
+
+def _mask_lua_strings(s: str) -> str:
+    """Blank out quoted string literals so identifiers inside them are ignored."""
+    return re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', '""', s)
+
+
+def _handle_identifiers(content: str) -> set[str]:
+    """Identifiers used as the first arg of a physics/body call (i.e. handles)."""
+    return {m.group(1) for m in _HANDLE_CALL_PAT.finditer(content)}
+
+
+def _lua_symbol_table(content: str):
+    """Return (declared, assigned, read) identifier sets for Lua content."""
+    declared: set[str] = set()
+    assigned: set[str] = set()
+    read: set[str] = set()
+
+    _decl_re = re.compile(r'\blocal\s+([A-Za-z_]\w*)\b')
+    _fn_def_re = re.compile(r'\bfunction\s+([A-Za-z_]\w*)\b')
+    _param_re = re.compile(
+        r'\bfunction\s+[A-Za-z_]\w*\s*\(([^)]*)\)|'
+        r'\bfunction\s*\(([^)]*)\)'
+    )
+    _for_re = re.compile(
+        r'\bfor\s+([A-Za-z_]\w*)\s*(?:,\s*([A-Za-z_]\w*))?\s*(?:=|in)'
+    )
+    _assign_re = re.compile(
+        r'(?m)(?:^|[;\n])\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*=(?!=)'
+    )
+
+    for line in content.splitlines():
+        code = _mask_lua_strings(re.sub(r'--.*$', '', line))
+        for m in _decl_re.finditer(code):
+            declared.add(m.group(1))
+        for m in _fn_def_re.finditer(code):
+            declared.add(m.group(1))
+        for m in _param_re.finditer(code):
+            for grp in m.groups():
+                if grp:
+                    for p in grp.split(','):
+                        p = p.strip()
+                        if re.match(r'^[A-Za-z_]\w*$', p):
+                            declared.add(p)
+        for m in _for_re.finditer(code):
+            declared.add(m.group(1))
+            if m.group(2):
+                declared.add(m.group(2))
+        for m in _assign_re.finditer(code):
+            for tok in m.group(1).split(','):
+                tok = tok.strip()
+                if re.match(r'^[A-Za-z_]\w*$', tok) and tok not in _LUA_SYMBOL_EXCLUDE:
+                    assigned.add(tok)
+
+    _read_re = re.compile(r'(?<![\w.:])([A-Za-z_]\w*)\b(?!\s*[(=])')
+    for line in content.splitlines():
+        code = _mask_lua_strings(re.sub(r'--.*$', '', line))
+        for m in _read_re.finditer(code):
+            name = m.group(1)
+            if name not in _LUA_SYMBOL_EXCLUDE:
+                read.add(name)
+
+    return declared, assigned, read
+
+
+def _auto_declare_read_before_write(content: str) -> str:
+    """Declare read-before-write scalars (Fix #19).
+
+    A scalar READ but never declared or assigned is a nil-in-arithmetic runtime
+    crash (e.g. `local tickets = score * streak` with `score` never set).  Declare
+    each such scalar at module root deterministically:
+      - numeric reads (adjacent to an arithmetic/comparison operator) -> `= 0`
+      - everything else -> `= nil` with a TODO so a reviewer can pick the default
+    Physics handles are excluded — Fix #10 owns those (nil is the correct default).
+    """
+    declared, assigned, read = _lua_symbol_table(content)
+    handles = _handle_identifiers(content)
+
+    rw_names = sorted(
+        (n for n in read if n not in declared and n not in assigned and n not in handles),
+        key=len,
+        reverse=True,
+    )
+    if not rw_names:
+        return content
+
+    decl_lines: list[str] = []
+    for name in rw_names:
+        _is_numeric = bool(re.search(
+            r'[+\-*/%^<>~]\s*' + re.escape(name) + r'\b|\b'
+            + re.escape(name) + r'\s*[+\-*/%^<>~]',
+            content,
+        ))
+        if _is_numeric:
+            decl_lines.append(f"local {name} = 0  -- auto-declared read-before-write scalar")
+        else:
+            decl_lines.append(f"local {name} = nil  -- TODO: verify default (read before write)")
+
+    block = "\n".join(decl_lines)
+
+    slot_m = re.search(r'^local\s+SLOT_ID\s*=.*$', content, re.MULTILINE)
+    if slot_m:
+        content = content[:slot_m.end()] + "\n" + block + "\n" + content[slot_m.end():]
+    else:
+        content = block + "\n\n" + content
+
+    print(f"  [Post-Process Fix #19] Auto-declared {len(rw_names)} read-before-write scalar(s): "
+          f"{', '.join(rw_names)}")
+    return content
+
+
+def _localize_bare_assignments(content: str) -> str:
+    """Prefix `local` onto bare assignments of undeclared names (Fix #20).
+
+    `score = 0` with no `local` creates a REAL Lua `_G` global shared by every
+    attraction in the slot — a cross-attraction corruption bug.  Rewrite the
+    first bare assignment of each undeclared name to `local NAME =`, turning a
+    leaked global into a proper local.  Names already declared (a `local NAME`
+    anywhere) are left untouched; subsequent reassignments are fine.
+    """
+    declared, assigned, _read = _lua_symbol_table(content)
+    leak_names = sorted(
+        (n for n in assigned if n not in declared),
+        key=len,
+        reverse=True,
+    )
+    if not leak_names:
+        return content
+
+    _count = 0
+    for name in leak_names:
+        pat = re.compile(
+            r'(?m)^([ \t]*)' + re.escape(name) + r'(\s*=(?!=))'
+        )
+        content, n = pat.subn(r'\1local ' + name + r'\2', content, count=1)
+        _count += n
+
+    if _count:
+        print(f"  [Post-Process Fix #20] Localized {_count} leaked global assignment(s): "
+              f"{', '.join(leak_names)}")
+    return content
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1261,6 +1445,8 @@ def post_process_lua(content: str) -> str:
     content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
     content = _align_createpool_names(content)         # Fix #18 — CreatePool literal -> declared pool constant
+    content = _localize_bare_assignments(content)      # Fix #20 — prefix `local` onto leaked globals
+    content = _auto_declare_read_before_write(content) # Fix #19 — declare read-before-write scalars
     content = _dedupe_onstep_registrations(content)    # Fix #12 — one OnStep callback only
     content = _repair_bare_expression_statements(content)  # Fix #15 — LAST: bare MOD.x / neutralized literals are invalid statements
     # Full-file invariants (#4 OnLoadStatic, #5 SLOT_ID) only apply to a whole
@@ -1312,6 +1498,8 @@ def post_process_surgery(content: str) -> str:
     content = _dedupe_spawn_shared_booth(content)         # Fix #17
     content = _normalize_pool_name_arguments(content)     # Fix #14
     content = _align_createpool_names(content)            # Fix #18
+    content = _localize_bare_assignments(content)         # Fix #20
+    content = _auto_declare_read_before_write(content)    # Fix #19
     content = _dedupe_onstep_registrations(content)       # Fix #12
     content = _repair_bare_expression_statements(content) # Fix #15 - LAST
     if had_trailing_newline and not content.endswith('\n'):

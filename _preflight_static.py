@@ -1088,3 +1088,55 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                     )
                     print(f"  [Static Guard] ❌ Task {tid} [Lua]: `{_pre_name}` re-declared "
                           f"(module-level state already exists)")
+
+        # ── C20: Scalar read-before-write + global-leak (symbol-table guards) ──
+        # One scope-aware symbol pass over the ACCUMULATED file catches two
+        # classes of variable-state bugs that deterministic post-processing can
+        # only partially repair (non-numeric defaults are ambiguous):
+        #   - read-before-write scalars (nil-in-arithmetic runtime crash)
+        #   - bare assignments that leak a _G global shared by every attraction
+        # Both dedupe once per target file (11 tasks share one .lua file).
+        if domain == "Lua":
+            try:
+                from _post_process_lua import _lua_symbol_table, _handle_identifiers
+                _sym_src = _file_content if (_file_content and _file_content.strip()) else content
+                _sym_declared, _sym_assigned, _sym_read = _lua_symbol_table(_sym_src)
+                _sym_target = str(getattr(task_obj, 'target_file', None) or tid)
+
+                _leak = sorted(n for n in _sym_assigned if n not in _sym_declared)
+                if _leak:
+                    _lk = ("lua:global_leak", _sym_target)
+                    if _lk not in _reported:
+                        _reported.add(_lk)
+                        ctx.pre_flight_errors += (
+                            f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
+                            f"**Rule:** assignment without `local` leaks a global: {', '.join(_leak)}\n"
+                            f"**Why this is always wrong:** A bare `name = ...` creates a _G global "
+                            f"shared by EVERY attraction in the slot, corrupting other rides.\n"
+                            f"**How to fix:** prefix the assignment with `local` (or declare it at "
+                            f"module root if it is meant to persist across frames).\n"
+                            f"Fix this before the reviewer sees the code.\n"
+                        )
+                        print(f"  [Static Guard] ❌ Task {tid} [Lua]: global leak(s): {', '.join(_leak)}")
+
+                _handles = _handle_identifiers(_sym_src)
+                _rw = sorted(
+                    n for n in _sym_read
+                    if n not in _sym_declared and n not in _sym_assigned and n not in _handles
+                )
+                if _rw:
+                    _rk = ("lua:read_before_write", _sym_target)
+                    if _rk not in _reported:
+                        _reported.add(_rk)
+                        ctx.pre_flight_errors += (
+                            f"\n## Static Pattern Violation — Task {tid} [Lua]\n"
+                            f"**Rule:** variable read before it is declared or assigned: {', '.join(_rw)}\n"
+                            f"**Why this is always wrong:** Reading an undeclared scalar yields nil; "
+                            f"using it in arithmetic crashes at runtime.\n"
+                            f"**How to fix:** declare each at module root with the correct default "
+                            f"(0 for counters/scores, false for flags, \"\" for strings).\n"
+                            f"Fix this before the reviewer sees the code.\n"
+                        )
+                        print(f"  [Static Guard] ❌ Task {tid} [Lua]: read-before-write: {', '.join(_rw)}")
+            except Exception as _sym_err:
+                print(f"  [Static Guard] ⚠ symbol-table guard error: {_sym_err}")
