@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from models import PipelineContext
-from midway_api_signatures import SPAWN_ARITY as _SPAWN_SIGS
+from midway_api_signatures import SPAWN_ARITY as _SPAWN_SIGS, BODY_ARITY as _BODY_SIGS
 
 
 def _balanced_spawn_args(text: str, start_pos: int) -> str:
@@ -35,18 +35,26 @@ def _balanced_spawn_args(text: str, start_pos: int) -> str:
     return "".join(_result).strip()
 
 
+# Combined arity map: Spawn* + body/pool APIs, so ONE deterministic pass can
+# repair over-arg calls across the whole MidwayPhysics surface.  The tribunal's
+# first precise verdict flagged CreatePool called with 10 args, which a
+# Spawn-only pass could never catch.
+_ARITY_SIGS = {**_SPAWN_SIGS, **_BODY_SIGS}
+
+
 def _fix_spawn_arities_in_text(text: str):
-    """Deterministically truncate over-arg MidwayPhysics.SpawnXxx calls down
-    to the minimum arg count. Returns (fixed_text, n_fixed). Only shrinks
-    over-arg calls; never pads under-arg calls or rewrites unknown functions.
+    """Deterministically truncate over-arg MidwayPhysics.* calls down to the
+    minimum arg count. Returns (fixed_text, n_fixed). Only shrinks over-arg
+    calls; never pads under-arg calls or rewrites unknown functions. Covers
+    Spawn* plus body/pool APIs (CreatePool, PoolAcquire, MoveKinematic, ...).
     """
     if not text:
         return text, 0
     _fixed = text
     _count = 0
-    for _m in re.finditer(r'MidwayPhysics\.(Spawn\w+)\s*\(', text, re.IGNORECASE):
+    for _m in re.finditer(r'MidwayPhysics\.(\w+)\s*\(', text, re.IGNORECASE):
         _fn = _m.group(1)
-        _sig = _SPAWN_SIGS.get(_fn)
+        _sig = _ARITY_SIGS.get(_fn)
         if not _sig:
             continue
         _min_exp, _max_exp = _sig

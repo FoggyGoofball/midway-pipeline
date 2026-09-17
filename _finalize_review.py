@@ -633,6 +633,29 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
     except Exception as _afe:
         print(f"  [Surgery] ⚠ arity repair skipped: {_afe}")
 
+    # Deterministic repair of bare/phantom pool calls BEFORE the gates, so a
+    # surgery that emits `PoolAcquire(...)` without the MidwayPhysics. prefix
+    # (or a phantom API) is fixed deterministically instead of bouncing the
+    # RuntimeSim gate or committing broken code.  Uses the targeted fixes
+    # (NOT full post_process_lua) to avoid marker->TODO laundering and
+    # re-injecting lifecycle invariants the surgery already preserves.
+    try:
+        from _post_process_lua import (
+            _add_midwayphysics_prefix,
+            _strip_phantom_api_calls,
+            _normalize_pool_name_arguments,
+            _repair_bare_expression_statements,
+        )
+        _pp_before = _fixed
+        _fixed = _add_midwayphysics_prefix(_fixed)
+        _fixed = _strip_phantom_api_calls(_fixed)
+        _fixed = _normalize_pool_name_arguments(_fixed)
+        _fixed = _repair_bare_expression_statements(_fixed)
+        if _fixed != _pp_before:
+            print("  [Surgery] deterministic prefix/phantom repair applied.")
+    except Exception as _ppe:
+        print(f"  [Surgery] prefix/phantom repair skipped: {_ppe}")
+
     # Gate 1: luac must accept the rewrite.
     _fd, _tmp = _tmp_mod.mkstemp(suffix=".lua")
     try:
