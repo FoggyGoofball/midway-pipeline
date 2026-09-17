@@ -1322,6 +1322,7 @@ def _lua_symbol_table(content: str):
         r'(?m)(?:^|[;\n])\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*=(?!=)'
     )
 
+    _brace_depth = 0
     for line in content.splitlines():
         code = _mask_lua_strings(re.sub(r'--.*$', '', line))
         for m in _decl_re.finditer(code):
@@ -1342,11 +1343,19 @@ def _lua_symbol_table(content: str):
             declared.add(m.group(1))
             if m.group(2):
                 declared.add(m.group(2))
-        for m in _assign_re.finditer(code):
-            for tok in m.group(1).split(','):
-                tok = tok.strip()
-                if re.match(r'^[A-Za-z_]\w*$', tok) and tok not in _LUA_SYMBOL_EXCLUDE:
-                    assigned.add(tok)
+        # Bare assignments are only tracked OUTSIDE table constructors — a
+        # `key = value` pair inside `{ ... }` is not a global assignment.
+        if _brace_depth == 0:
+            for m in _assign_re.finditer(code):
+                for tok in m.group(1).split(','):
+                    tok = tok.strip()
+                    if re.match(r'^[A-Za-z_]\w*$', tok) and tok not in _LUA_SYMBOL_EXCLUDE:
+                        assigned.add(tok)
+        # Update brace depth AFTER processing this line, so a `{` that opens a
+        # multi-line table on THIS line does not suppress this line's own
+        # assignment (`x = { a = 1 }` still records `x`).
+        _brace_depth += code.count('{') - code.count('}')
+        _brace_depth = max(0, _brace_depth)
 
     _read_re = re.compile(r'(?<![\w.:])([A-Za-z_]\w*)\b(?!\s*[(=])')
     for line in content.splitlines():
@@ -1546,6 +1555,39 @@ def _strip_phantom_engine_calls(content: str) -> str:
     return content
 
 
+def _strip_local_in_tables(content: str) -> str:
+    """Strip ``local`` inside table constructors (Fix #23).
+
+    ``{ local radius = 0.25, ... }`` is invalid Lua — a table constructor holds
+    only ``key = value`` pairs or bare list values, never ``local`` declarations.
+    Rewrite ``{ local X =`` -> ``{ X =`` and ``, local X =`` -> ``, X =``.  Always
+    safe: ``local`` directly inside ``{}`` can never be legal.
+    """
+    _pat = re.compile(r'([{,]\s*)local\s+([A-Za-z_]\w*)\s*(?==)')
+    content, n = _pat.subn(r'\1\2', content)
+    if n:
+        print(f"  [Post-Process Fix #23] Stripped {n} invalid `local` declaration(s) "
+              f"inside table constructor(s)")
+    return content
+
+
+def _strip_broken_local_declarations(content: str) -> str:
+    """Neutralize truncated ``local`` declarations with a dangling ``)`` (Fix #24).
+
+    The coder repeatedly emits a broken "consume all modifiers" fragment — a bare
+    ``local _)`` (or ``local _, _)``) with a phantom closing paren and no ``=`` —
+    which is a syntax error.  Comment out the whole line; it is never valid.
+    """
+    _pat = re.compile(
+        r'^(\s*)local\s+(?!function)([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*\)\s*(?:--.*)?$',
+        re.MULTILINE,
+    )
+    content, n = _pat.subn(r'\1-- [broken local declaration removed]', content)
+    if n:
+        print(f"  [Post-Process Fix #24] Commented out {n} broken `local` declaration line(s)")
+    return content
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1565,6 +1607,8 @@ def post_process_lua(content: str) -> str:
     content = _strip_comment_monologues(content)       # Fix #11 — kill prose comment essays
     content = _strip_module_level_mod(content)         # Fix #2
     content = _repair_duplicate_underscore_locals(content)  # Fix #13 — local _ = a, _ = b syntax error
+    content = _strip_local_in_tables(content)               # Fix #23 — `local` inside table constructor
+    content = _strip_broken_local_declarations(content)     # Fix #24 — truncated `local _)` fragment
     content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
@@ -1619,6 +1663,8 @@ def post_process_surgery(content: str) -> str:
     content = _strip_comment_monologues(content)          # Fix #11
     content = _strip_module_level_mod(content)            # Fix #2
     content = _repair_duplicate_underscore_locals(content)  # Fix #13
+    content = _strip_local_in_tables(content)               # Fix #23
+    content = _strip_broken_local_declarations(content)     # Fix #24
     content = _sanitize_modifier_keys(content)            # Fix #9
     content = _strip_duplicate_functions(content)         # Fix #1 - duplicate lifecycle
     content = _strip_engine_redefinitions(content)        # Fix #16
@@ -1648,6 +1694,8 @@ def repair_lua_syntax(content: str) -> str:
     incremental build.
     """
     content = _repair_duplicate_underscore_locals(content)   # Fix #13
+    content = _strip_local_in_tables(content)                # Fix #23 — `local` inside table constructor
+    content = _strip_broken_local_declarations(content)      # Fix #24 — truncated `local _)` fragment
     content = _repair_bare_expression_statements(content)    # Fix #15
     return content
 
