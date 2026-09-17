@@ -309,23 +309,19 @@ def build_domain_registry(
                 "Every attraction script MUST include both of the following or it will be\n"
                 "rejected by the Phantom API Gate before final approval.\n\n"
                 "1. MODIFIER CONSUMPTION — read AttractionConstants.modifiers inside OnStep each\n"
-                "   frame and apply the values to gameplay variables. You MUST consume ALL nine:\n"
+                "   frame and USE the values in real gameplay computations. Read the modifiers\n"
+                "   that affect YOUR mechanics (typically 2-3; you are NOT required to touch all\n"
+                "   nine):\n"
                 "     local MOD = AttractionConstants.modifiers\n"
-                "     -- Core Physical (S4.1)\n"
-                "     MOD.mass          -- scale projectile/object mass\n"
-                "     MOD.volume        -- scale booth/gameplay volume\n"
-                "     MOD.friction      -- scale surface friction\n"
-                "     -- Meta-Navigational (S4.2)\n"
-                "     MOD.karma         -- RNG tilt / hidden luck direction\n"
-                "     MOD.luck          -- procedural generation bias\n"
-                "     MOD.persuasion    -- NPC/target difficulty bias\n"
-                "     MOD.heat          -- overall difficulty multiplier\n"
-                "     -- Tactile (S4.3)\n"
-                "     MOD.sleight_of_hand  -- TILT mechanic sensitivity\n"
-                "     MOD.nerve            -- timing window width\n"
-                "   If a modifier has no meaningful effect in your attraction, still read it and\n"
-                "   store it in a local variable with a comment — the pipeline gate requires a\n"
-                "   reference, even if the value is currently unused.\n\n"
+                "     local difficulty = 1.0 + MOD.heat * 0.2          -- heat used in a computation\n"
+                "     MidwayPhysics.SetFriction(puck, 0.5 * difficulty)\n"
+                "     local tilt = MOD.sleight_of_hand                  -- sleight used in a computation\n"
+                "     bell_offset = bell_offset + tilt * 0.1\n"
+                "   Available keys: mass, volume, friction, karma, luck, persuasion, heat,\n"
+                "   sleight_of_hand, nerve.\n"
+                "   FORBIDDEN: bare `MOD.x` reference lines, and a single\n"
+                "   `local _, _, _, _, _, _, _, _, _ = MOD.mass, MOD.volume, ...` statement to\n"
+                "   \"consume\" every modifier. USE each value in an actual computation instead.\n\n"
                 "2. ECONOMY HOOKS — call Engine.AwardTickets or Engine.AwardTokens (or both) at\n"
                 "   every win/score event. NEVER skip this even for a demo or placeholder:\n"
                 "     Engine.AwardTickets(amount, 'WIN')    -- primary currency on win\n"
@@ -764,6 +760,8 @@ def build_domain_rules() -> Dict[str, Dict[str, Any]]:
             ],
             "object_pools": [
                 "CreatePool(unique_name_N, hotN, coldN, paramsTable). Pool name: {attraction}_{type}_{slotID}.",
+                "Example: MidwayPhysics.CreatePool(\"puck_pool\", 2, 2, { shape = \"sphere\", radius = 0.3, mass = 1.0, friction = 0.5 })",
+                "Exactly 4 arguments total. The 4th is a PLAIN Lua table of key = value pairs — NO `local` keyword inside, NO JSON-style \"key\": value, NO extra positional args.",
                 "Acquire/Return: PoolAcquire(name, lx, ly, lz) -> handle. PoolReturn(name, handle).",
                 "Culling: PoolCullBelow(name, yThreshold). Query: PoolFree, PoolTotal.",
             ],

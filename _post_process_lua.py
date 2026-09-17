@@ -1588,6 +1588,45 @@ def _strip_broken_local_declarations(content: str) -> str:
     return content
 
 
+def _fix_json_colon_tables(content: str) -> str:
+    """Rewrite JSON-style table keys to Lua ``key = value`` (Fix #25).
+
+    The coder emits JSON (``{"shape": "sphere", "radius": 0.5}``) instead of Lua
+    table syntax.  A quoted identifier followed by ``:`` is invalid Lua everywhere,
+    so ``"key":`` / ``'key':`` -> ``key =`` is always safe.
+    """
+    _pat = re.compile(r'(["\'])([A-Za-z_]\w*)\1\s*:')
+    content, n = _pat.subn(r'\2 =', content)
+    if n:
+        print(f"  [Post-Process Fix #25] Rewrote {n} JSON-style table key(s) to Lua `key = value`")
+    return content
+
+
+def _strip_stray_closing_parens(content: str) -> str:
+    """Comment out orphaned ``)`` lines (Fix #26).
+
+    A line consisting solely of ``)`` with no open paren pending is a stray
+    "phantom closing paren" left by a malformed multi-line call.  Track paren
+    depth across lines (strings/comments masked); a lone ``)`` at depth 0 is
+    removed, while a legitimate ``)`` closing a prior line's ``(`` is preserved.
+    """
+    _paren_depth = 0
+    _out: list[str] = []
+    _removed = 0
+    for line in content.splitlines():
+        code = _mask_lua_strings(re.sub(r'--.*$', '', line))
+        if re.match(r'^\s*\)\s*$', code) and _paren_depth <= 0:
+            _out.append('-- [stray closing paren removed]')
+            _removed += 1
+            continue
+        _out.append(line)
+        _paren_depth += code.count('(') - code.count(')')
+        _paren_depth = max(0, _paren_depth)
+    if _removed:
+        print(f"  [Post-Process Fix #26] Removed {_removed} stray closing paren line(s)")
+    return "\n".join(_out)
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1609,6 +1648,8 @@ def post_process_lua(content: str) -> str:
     content = _repair_duplicate_underscore_locals(content)  # Fix #13 — local _ = a, _ = b syntax error
     content = _strip_local_in_tables(content)               # Fix #23 — `local` inside table constructor
     content = _strip_broken_local_declarations(content)     # Fix #24 — truncated `local _)` fragment
+    content = _fix_json_colon_tables(content)               # Fix #25 — JSON `"key":` -> Lua `key =`
+    content = _strip_stray_closing_parens(content)          # Fix #26 — orphaned `)` line
     content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
@@ -1665,6 +1706,8 @@ def post_process_surgery(content: str) -> str:
     content = _repair_duplicate_underscore_locals(content)  # Fix #13
     content = _strip_local_in_tables(content)               # Fix #23
     content = _strip_broken_local_declarations(content)     # Fix #24
+    content = _fix_json_colon_tables(content)               # Fix #25
+    content = _strip_stray_closing_parens(content)          # Fix #26
     content = _sanitize_modifier_keys(content)            # Fix #9
     content = _strip_duplicate_functions(content)         # Fix #1 - duplicate lifecycle
     content = _strip_engine_redefinitions(content)        # Fix #16
@@ -1696,6 +1739,8 @@ def repair_lua_syntax(content: str) -> str:
     content = _repair_duplicate_underscore_locals(content)   # Fix #13
     content = _strip_local_in_tables(content)                # Fix #23 — `local` inside table constructor
     content = _strip_broken_local_declarations(content)      # Fix #24 — truncated `local _)` fragment
+    content = _fix_json_colon_tables(content)                # Fix #25 — JSON `"key":` -> Lua `key =`
+    content = _strip_stray_closing_parens(content)           # Fix #26 — orphaned `)` line
     content = _repair_bare_expression_statements(content)    # Fix #15
     return content
 
