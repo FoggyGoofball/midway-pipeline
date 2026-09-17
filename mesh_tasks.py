@@ -23,6 +23,10 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Dict, Set
 
+from _luac_path import get_luac_exe as _get_luac_exe
+
+_LUAC_EXE = _get_luac_exe() or "luac"
+
 from _pipeline_helpers import (
     MAX_SUBTASKS_PER_AGENT,
     CODER_MODEL, REVIEWER_MODEL, DIRECTOR_MODEL,
@@ -1408,7 +1412,7 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
     # -- Run luac for syntax check --
     import subprocess
     _luac_proc = subprocess.run(
-        ["luac", "-p", str(_target_abs)],
+        [_LUAC_EXE, "-p", str(_target_abs)],
         capture_output=True, text=True, timeout=15,
     )
     if _luac_proc.returncode == 0:

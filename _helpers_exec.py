@@ -13,6 +13,10 @@ import re
 import subprocess
 import sys
 import time
+
+from _luac_path import get_luac_exe as _get_luac_exe
+
+_LUAC_EXE = _get_luac_exe() or "luac"
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from token_budget import TokenBudget
@@ -1784,7 +1788,7 @@ def execute_task(task, user_prompt: str, director_output: str,
                             _luac_ok = False
                             try:
                                 _luac_snap_proc = _sp_luac_snap.run(
-                                    ["luac", "-p", _tmp_luac.name],
+                                    [_LUAC_EXE, "-p", _tmp_luac.name],
                                     capture_output=True, text=True, timeout=20
                                 )
                                 _luac_ok = (_luac_snap_proc.returncode == 0)

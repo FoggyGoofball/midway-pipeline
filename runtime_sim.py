@@ -745,7 +745,7 @@ def run_phantom_api_final_pass(ctx) -> List[str]:
     #       global defined by booth_shared.lua, NOT a MidwayPhysics.* function.
     #       Engine.* calls are also excluded (they are legit bare globals too).
     _BARE_PHYSICS_CALL_RE = re.compile(
-        r"(?<!MidwayPhysics\.)\b(PoolAcquire|PoolReturn|PoolFree|PoolTotal|PoolCullBelow|CreatePool|"
+        r"(?<![\w.:])\b(PoolAcquire|PoolReturn|PoolFree|PoolTotal|PoolCullBelow|CreatePool|"
         r"DestroyBody|"
         r"SpawnStaticBox|SpawnStaticSphere|SpawnStaticCapsule|SpawnStaticCylinder|SpawnStaticMesh|"
         r"SpawnStaticBoxR|SpawnStaticSphereR|SpawnStaticCapsuleR|SpawnStaticCylinderR|"

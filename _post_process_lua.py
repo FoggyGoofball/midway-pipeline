@@ -530,13 +530,28 @@ def _strip_phantom_api_calls(content: str) -> str:
     # '.'".  The coder mixes Garry's Mod colon syntax with the MidwayPhysics
     # namespace.  Comment out the whole statement so luac passes; the coverage
     # gate then flags the missing functionality if it matters.
+    #
+    # Also catch the plain `handle:Method(...)` colon form (e.g.
+    # `player:GetLinearVelocity()`, `MidwayGame:GetPlayer()`) — the bridge is
+    # flat-namespace only, so ANY colon call is phantom.  Legit Lua stdlib
+    # colon receivers (table:insert, string:sub, ...) are preserved.
+    _colon_dotted_re = re.compile(
+        r'\b[A-Za-z_]\w*\s*:\s*(?:MidwayPhysics|Engine|MidwayInput|Physics)\.[A-Za-z_]\w*\s*\('
+    )
+    _colon_simple_re = re.compile(
+        r'\b([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*)\s*\('
+    )
     _colon_out: list[str] = []
     _colon_count = 0
     for _ln in content.splitlines():
-        if re.search(
-            r'\b[A-Za-z_]\w*\s*:\s*(?:MidwayPhysics|Engine|MidwayInput|Physics)\.[A-Za-z_]\w*\s*\(',
-            _ln,
-        ):
+        _is_phantom_colon = False
+        if _colon_dotted_re.search(_ln):
+            _is_phantom_colon = True
+        else:
+            _cm = _colon_simple_re.search(_ln)
+            if _cm and _cm.group(1) not in _LEGIT_COLON_RECEIVERS:
+                _is_phantom_colon = True
+        if _is_phantom_colon:
             _colon_out.append('-- [PHANTOM COLON-CALL] ' + _ln.lstrip())
             _colon_count += 1
         else:
@@ -1294,7 +1309,7 @@ def _lua_symbol_table(content: str):
     assigned: set[str] = set()
     read: set[str] = set()
 
-    _decl_re = re.compile(r'\blocal\s+([A-Za-z_]\w*)\b')
+    _decl_re = re.compile(r'\blocal\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)')
     _fn_def_re = re.compile(r'\bfunction\s+([A-Za-z_]\w*)\b')
     _param_re = re.compile(
         r'\bfunction\s+[A-Za-z_]\w*\s*\(([^)]*)\)|'
@@ -1310,7 +1325,10 @@ def _lua_symbol_table(content: str):
     for line in content.splitlines():
         code = _mask_lua_strings(re.sub(r'--.*$', '', line))
         for m in _decl_re.finditer(code):
-            declared.add(m.group(1))
+            for _tok in m.group(1).split(','):
+                _tok = _tok.strip()
+                if re.match(r'^[A-Za-z_]\w*$', _tok):
+                    declared.add(_tok)
         for m in _fn_def_re.finditer(code):
             declared.add(m.group(1))
         for m in _param_re.finditer(code):
@@ -1419,6 +1437,57 @@ def _localize_bare_assignments(content: str) -> str:
     return content
 
 
+# Legit Lua stdlib colon-call receivers — preserved by the colon neutralizer.
+_LEGIT_COLON_RECEIVERS = frozenset({
+    'table', 'string', 'io', 'os', 'coroutine', 'math', 'debug', 'package', 'utf8',
+})
+
+# Physics methods that can be (wrongly) called as handle methods rather than
+# flat MidwayPhysics.<Method>(handle, ...) calls.
+_PHYSICS_METHODS = frozenset({
+    'ApplyImpulse', 'ApplyAngularImpulse', 'SetLinearVelocity', 'AddLinearVelocity',
+    'SetVelocity', 'DestroyBody', 'GetVelocity', 'GetPosition', 'GetRotation',
+    'SetPosition', 'SetFriction', 'SetRestitution', 'SetGravityFactor', 'SetMass',
+    'SetLinearDamping', 'SetAngularDamping', 'MoveKinematic', 'IsSensorTriggered',
+    'IsActive', 'RayCast', 'OverlapSphere', 'OverlapBox',
+})
+
+
+def _neutralize_method_calls(content: str) -> str:
+    """Rewrite handle.Method(...) / handle:Method(...) to flat MidwayPhysics.Method(handle, ...) (Fix #21).
+
+    The coder repeatedly emits GMod/Unity-style METHOD calls on handles
+    (``counter_weight.IsActive()``, ``player:GetLinearVelocity()``) instead of
+    the flat bridge form ``MidwayPhysics.IsActive(counter_weight)``.  Rewrite
+    mechanically for every known physics method.  Receivers that are engine
+    namespaces / stdlib / keywords (``MidwayPhysics``, ``Engine``, ``math``, ...)
+    are left untouched so already-flat calls never double-prefix.
+    """
+    _alt = '|'.join(sorted(_PHYSICS_METHODS, key=len, reverse=True))
+    _pat = re.compile(
+        r'\b([A-Za-z_]\w*)[ \t]*([.:])[ \t]*(' + _alt + r')[ \t]*'
+        r'\(([^()]*(?:\([^()]*\)[^()]*)*)\)'
+    )
+    _count = 0
+
+    def _repl(m):
+        nonlocal _count
+        handle, sep, method, args = m.groups()
+        if handle in _LUA_SYMBOL_EXCLUDE:
+            return m.group(0)
+        args = args.strip()
+        _count += 1
+        if args:
+            return f'MidwayPhysics.{method}({handle}, {args})'
+        return f'MidwayPhysics.{method}({handle})'
+
+    content = _pat.sub(_repl, content)
+    if _count:
+        print(f"  [Post-Process Fix #21] Flattened {_count} handle method call(s) "
+              f"to MidwayPhysics.<Method>(handle, ...)")
+    return content
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1441,6 +1510,7 @@ def post_process_lua(content: str) -> str:
     content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
+    content = _neutralize_method_calls(content)        # Fix #21 — handle.Method -> MidwayPhysics.Method(handle)
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
     content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
@@ -1494,6 +1564,7 @@ def post_process_surgery(content: str) -> str:
     content = _strip_duplicate_functions(content)         # Fix #1 - duplicate lifecycle
     content = _strip_engine_redefinitions(content)        # Fix #16
     content = _add_midwayphysics_prefix(content)          # Fix #6
+    content = _neutralize_method_calls(content)           # Fix #21
     content = _strip_phantom_api_calls(content)           # Fix #8
     content = _dedupe_spawn_shared_booth(content)         # Fix #17
     content = _normalize_pool_name_arguments(content)     # Fix #14

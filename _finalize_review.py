@@ -23,6 +23,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 from token_budget import TokenBudget
 
+from _luac_path import get_luac_exe as _get_luac_exe
+
+_LUAC_EXE = _get_luac_exe() or "luac"
+
 from models import PipelineContext, SignalType, MeshSignal, ConsensusResult
 from _pipeline_helpers import (
     atomic_write_text, trigger_chime, generate_failure_report,
@@ -85,7 +89,7 @@ def _luac_syntax_errors(ctx: PipelineContext) -> str:
     """
     import subprocess as _sp
     try:
-        _sp.run(["luac", "-v"], capture_output=True, text=True, timeout=5)
+        _sp.run([_LUAC_EXE, "-v"], capture_output=True, text=True, timeout=5)
     except FileNotFoundError:
         return ""  # luac not installed — not a gate we can run
     except Exception:
@@ -108,7 +112,7 @@ def _luac_syntax_errors(ctx: PipelineContext) -> str:
         if not _abs.is_file():
             continue
         try:
-            _p = _sp.run(["luac", "-p", str(_abs)], capture_output=True, text=True, timeout=30)
+            _p = _sp.run([_LUAC_EXE, "-p", str(_abs)], capture_output=True, text=True, timeout=30)
         except Exception:
             continue
         if _p.returncode != 0:
@@ -591,7 +595,7 @@ def _gap_filler_surgery(ctx: PipelineContext, target_rel: str) -> bool:
     try:
         with _os_mod.fdopen(_fd, "w", encoding="utf-8") as _fh:
             _fh.write(_fixed)
-        _r = _sp.run(["luac", "-p", _tf], capture_output=True, text=True, timeout=30)
+        _r = _sp.run([_LUAC_EXE, "-p", _tf], capture_output=True, text=True, timeout=30)
     finally:
         try:
             _os_mod.unlink(_tf)
@@ -726,7 +730,7 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
     try:
         with _os_mod.fdopen(_fd, "w", encoding="utf-8") as _fh:
             _fh.write(_fixed)
-        _r = _sp.run(["luac", "-p", _tmp], capture_output=True, text=True, timeout=30)
+        _r = _sp.run([_LUAC_EXE, "-p", _tmp], capture_output=True, text=True, timeout=30)
     finally:
         try:
             _os_mod.unlink(_tmp)
@@ -1690,7 +1694,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                 # syntax-broken one, cycle over cycle.
                 import subprocess as _mono_sp
                 _mono_luac = _mono_sp.run(
-                    ["luac", "-p", str(_mono_read_path)],
+                    [_LUAC_EXE, "-p", str(_mono_read_path)],
                     capture_output=True, text=True, timeout=15,
                 )
                 if _mono_luac.returncode == 0:
@@ -1936,7 +1940,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                             _fx_luac_ok = True
                             try:
                                 _fx_proc = _fx_spx.run(
-                                    ["luac", "-p", _fx_tmp.name],
+                                    [_LUAC_EXE, "-p", _fx_tmp.name],
                                     capture_output=True, text=True, timeout=20,
                                 )
                                 _fx_luac_ok = (_fx_proc.returncode == 0)

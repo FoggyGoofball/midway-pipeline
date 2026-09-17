@@ -15,6 +15,10 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+from _luac_path import get_luac_exe as _get_luac_exe
+
+_LUAC_EXE = _get_luac_exe() or "luac"
+
 # ── SEARCH/REPLACE conflict-marker regex (inline — patch_regexes.py was deleted) ──
 SEARCH_REPLACE_PATTERN = re.compile(
     r"<<<<<<<\s*SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>>\s*(?:REPLACE)?",
@@ -592,7 +596,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
 
             try:
                 lua_proc = subprocess.run(
-                    ["luac", "-p", str(lf)],
+                    [_LUAC_EXE, "-p", str(lf)],
                     capture_output=True, text=True, timeout=30,
                 )
                 if lua_proc.returncode != 0:
@@ -632,7 +636,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                     with _bal_os.fdopen(_bal_fd, "w", encoding="utf-8") as _bal_fh:
                                         _bal_fh.write(_bal_out)
                                     _bal_luac = subprocess.run(
-                                        ["luac", "-p", _bal_tmp],
+                                        [_LUAC_EXE, "-p", _bal_tmp],
                                         capture_output=True, text=True, timeout=30,
                                     )
                                 finally:
@@ -810,7 +814,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
         for _lf, _lf_rel in _affected_files.items():
             try:
                 _lua_proc = subprocess.run(
-                    ["luac", "-p", str(_lf)],
+                    [_LUAC_EXE, "-p", str(_lf)],
                     capture_output=True, text=True, timeout=30,
                 )
                 if _lua_proc.returncode != 0:
@@ -1664,7 +1668,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                 continue
             try:
                 _rc_proc = _sp_recheck.run(
-                    ["luac", "-p", str(_rc_lf)], capture_output=True, text=True, timeout=30
+                    [_LUAC_EXE, "-p", str(_rc_lf)], capture_output=True, text=True, timeout=30
                 )
                 if _rc_proc.returncode != 0:
                     _rc_err = _rc_proc.stderr.strip().replace(str(_rc_lf), _rc_lf.name)
