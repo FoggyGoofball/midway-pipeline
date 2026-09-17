@@ -4,6 +4,7 @@ cd /d "%~dp0"
 
 set "MIDWAY_PROJECT_ROOT=%~dp0..\midway"
 set "PYTHONUTF8=1"
+set "PATH=%LOCALAPPDATA%\Programs\Lua\bin;%PATH%"
 
 rem -- Phone push notifications via ntfy.sh. Install "ntfy" on the phone and
 rem    subscribe to this topic to receive watchdog degradation alerts.

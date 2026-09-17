@@ -34,6 +34,13 @@ import server_status as _status
 # reports isatty()=True (which can happen in Popen-detached subprocesses).
 os.environ["MIDWAY_FORCED_DETERMINISTIC"] = "1"
 
+# Ensure luac (Lua 5.4 compiler) is on PATH even when the server was launched
+# from a hidden / NoProfile shell that dropped the per-user PATH entry.  All
+# the deterministic luac gates call bare subprocess.run(["luac", ...]).
+_LUA_BIN = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Lua", "bin")
+if _LUA_BIN and _LUA_BIN not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _LUA_BIN + os.pathsep + os.environ.get("PATH", "")
+
 # Enforce local directory import precedence
 LOCAL_DIR = Path(__file__).resolve().parent
 if str(LOCAL_DIR) in sys.path:
