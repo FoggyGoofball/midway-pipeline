@@ -297,6 +297,38 @@ def _build_requirements_scaffold(ctx, tid, task_obj, domain, broken_output) -> s
     return _base
 
 
+_ANCHOR_TOKEN_RE = re.compile(r"TASK_(\d+)_INSERT_HOOK")
+
+
+def _resolve_anchor_owner(file_path, line_num: int, anchor_num_to_tid: dict) -> str:
+    """Return the task id whose `-- [TASK_N_INSERT_HOOK]` anchor most immediately
+    precedes *line_num* (1-based) in *file_path*.
+
+    When every task targets the same .lua file, the flat file→task ownership
+    map collapses to a single owner and every luac error gets blamed on the
+    LAST task (the task_9/task_12 death-spiral).  This maps the error back to
+    the task whose anchor region actually contains the failing line.  Returns
+    "" when no anchor precedes the line (error in the pre-anchor header) or
+    the file can't be read.
+    """
+    try:
+        _lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return ""
+    _best_tid = ""
+    _best_line = -1
+    for _i, _ln in enumerate(_lines, start=1):
+        if _i > line_num:
+            break
+        _m = _ANCHOR_TOKEN_RE.search(_ln)
+        if _m:
+            _tid = anchor_num_to_tid.get(_m.group(1), "")
+            if _tid and _i > _best_line:
+                _best_tid = _tid
+                _best_line = _i
+    return _best_tid
+
+
 def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     """
     Phase 6 pre-flight: run background compilers (C++ / Make), Lua syntax
@@ -544,6 +576,18 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
     print(f"  [luac] Ownership map built: {len(_lua_file_to_tid)} key(s) "
           f"for {len(ctx.task_map or {})} task(s) - "
           f"keys={sorted(_lua_file_to_tid)[:8]}")
+    # Anchor→task map for LINE-LEVEL error attribution.  The flat file→task
+    # map above collapses when all tasks share one .lua file (every luac error
+    # blamed on the LAST task).  Map each anchor's task NUMBER to its task id
+    # so a luac error at line N can be routed to the task whose anchor region
+    # actually contains the failing line.
+    _anchor_num_to_tid: dict = {}
+    if ctx.task_map:
+        for _atid, _atask in ctx.task_map.items():
+            _am = (getattr(_atask, "anchor_marker", None) or "").strip()
+            _m_anchor = _ANCHOR_TOKEN_RE.search(_am)
+            if _m_anchor:
+                _anchor_num_to_tid[_m_anchor.group(1)] = _atid
     for _rkey in ctx.all_results_dict:
         if _rkey.startswith("merged:"):
             _rrel = _rkey[len("merged:"):]
@@ -613,6 +657,22 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                     _line_m = re.search(r':(\d+):', _clean_err)
                     if _line_m:
                         _line_ref = f" (line {_line_m.group(1)})"
+
+                    # -- Line-aware owner resolution (error-owner routing) -----
+                    # Attribute the syntax error to the task whose anchor region
+                    # contains the failing line, instead of the flat file→task
+                    # owner (which collapses to the last task when all tasks
+                    # share one .lua file).  Falls back to the flat owner when
+                    # the line is before the first anchor or anchors are gone.
+                    if _line_m and _anchor_num_to_tid:
+                        try:
+                            _line_owner = _resolve_anchor_owner(
+                                lf, int(_line_m.group(1)), _anchor_num_to_tid
+                            )
+                            if _line_owner:
+                                _owning_tid = _line_owner
+                        except Exception:
+                            pass
 
                     _task_label = f"Task {_owning_tid}" if _owning_tid else f"file {lf.name}"
                     # -- Deterministic block-balance repair (stray / missing `end`) --

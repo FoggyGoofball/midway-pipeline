@@ -90,7 +90,9 @@ def _fix_spawn_arities_in_text(text: str):
             _cur += _ch
         if _cur.strip():
             _tokens.append(_cur.strip())
-        _valid = _tokens[:_min_exp]
+        # Truncate over-arg calls to the MAX arity (not min), so optional args
+        # (CreatePool's paramsTable, SpawnDynamic* mass) survive the repair.
+        _valid = _tokens[:_max_exp]
         if not _valid:
             continue
         _bad_call = _m.group(0) + _args + ")"
@@ -572,13 +574,13 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
 
         if domain == "Lua":
             for _spawn_m in re.finditer(
-                r'MidwayPhysics\.(Spawn\w+)\s*\(',
+                r'MidwayPhysics\.(Spawn\w+|CreatePool|Pool\w+)\s*\(',
                 content, re.IGNORECASE
             ):
                 _fn_name = _spawn_m.group(1)
                 # Use depth-tracker instead of naive [^)] regex for args extraction
                 _args_str = _balanced_spawn_args(content, _spawn_m.start() + len(_spawn_m.group(0)) - 1)
-                _expected = _SPAWN_SIGS.get(_fn_name)
+                _expected = _ARITY_SIGS.get(_fn_name)
                 if _expected is None:
                     if _fn_name == "SpawnSharedBooth":
                         # SpawnSharedBooth() is a BARE global helper from
@@ -639,6 +641,12 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                             "SpawnKinematicSphere": "lx, ly, lz, radius",
                             "SpawnSensorBox":       "lx, ly, lz, w, h, d",
                             "SpawnSensorSphere":    "lx, ly, lz, radius",
+                            "CreatePool":           "name, hotN, coldN [, paramsTable]",
+                            "PoolAcquire":          "name, lx, ly, lz",
+                            "PoolReturn":           "name, handle",
+                            "PoolCullBelow":        "name, yThreshold",
+                            "PoolFree":             "name",
+                            "PoolTotal":            "name",
                         }
                         _pos_hint = _POS_LABELS.get(_fn_name, f"{_min_exp}..{_max_exp} positional args")
                         _fg_patched = False
@@ -683,8 +691,10 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                                 _current_g += _ch_g
                             if _current_g.strip():
                                 _tokens_g.append(_current_g.strip())
-                            # Keep only the first _min_exp positional args
-                            _valid_tokens = _tokens_g[:_min_exp]
+                            # Keep only the first _max_exp positional args
+                            # (max, not min, so optional args like CreatePool's
+                            # paramsTable survive the truncation).
+                            _valid_tokens = _tokens_g[:_max_exp]
                             # If short, pad by repeating the last usable value.
                             # "Usable" = a number or identifier (not a string/table).
                             _last_usable = 1.0  # safe default for any missing dimension
