@@ -687,8 +687,20 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                         try:
                             from _lua_balancer import balance_lua_blocks
                             _bal_src = lf.read_text(encoding="utf-8", errors="replace")
+                            # Fix #27 first: close unbalanced brackets/blocks (the
+                            # balancer only handles `end`/`until`).  If this already
+                            # repairs the file, the balancer below is a no-op.
+                            _struct_repaired = False
+                            try:
+                                from _post_process_lua import _repair_lua_structure
+                                _struct_out = _repair_lua_structure(_bal_src)
+                                if _struct_out != _bal_src:
+                                    _bal_src = _struct_out
+                                    _struct_repaired = True
+                            except Exception:
+                                pass
                             _bal_out, _bal_actions = balance_lua_blocks(_bal_src)
-                            if _bal_actions and _bal_out != _bal_src:
+                            if _struct_repaired or _bal_actions:
                                 import tempfile as _bal_tf_mod
                                 import os as _bal_os
                                 _bal_fd, _bal_tmp = _bal_tf_mod.mkstemp(suffix=".lua")
@@ -721,11 +733,11 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                     _bal_snap = getattr(ctx, "_last_luac_clean_anchor", None)
                                     if _bal_snap is not None and _bal_tf:
                                         _bal_snap[_bal_tf.replace("\\", "/")] = _bal_out
-                                    print(f"  [Balancer] ✅ fixed block imbalance in {lf.name} "
-                                          f"({'; '.join(_bal_actions)}) — luac now clean.")
+                                    print(f"  [Balancer] ✅ fixed structural imbalance in {lf.name} "
+                                          f"({'; '.join(_bal_actions) or 'closed unbalanced brackets/blocks'}) — luac now clean.")
                                     _bal_fixed_syntax = True
                                 else:
-                                    print(f"  [Balancer] ⚠ balanced output still fails luac "
+                                    print(f"  [Balancer] ⚠ repaired output still fails luac "
                                           f"({_bal_luac.stderr.strip()[:120]}) — deferring to fix loop.")
                         except Exception as _bal_e:
                             print(f"  [Balancer] ⚠ skipped: {_bal_e}")
