@@ -1187,10 +1187,32 @@ def execute_task(task, user_prompt: str, director_output: str,
                         # Shared handle contract is injected in the KV-cached
                         # shared prefix via _build_design_state_contract, so the
                         # per-task staging block stays lean.
+                        # -- Mechanics Scaffold injection (MIDWAY_MECHANICS_SCAFFOLD=1) --
+                        # If a validated scaffold exists for this anchor, the coder
+                        # TRANSLATES it instead of inventing logic + API at once.
+                        _scaffold_block = ""
+                        try:
+                            from pipeline import _CTX as _scaffold_ctx
+                            if _scaffold_ctx is not None:
+                                from mechanics_scaffold import get_scaffold_for_task
+                                _sc = get_scaffold_for_task(_scaffold_ctx, _anchor_marker)
+                                if _sc is not None:
+                                    _scaffold_block = (
+                                        f"## 🧩 MECHANICS SCAFFOLD (TRANSLATE THIS — DO NOT INVENT)\n"
+                                        f"{_sc.to_context_block()}\n"
+                                        f"Translate the PSEUDO above into Lua at this anchor, using "
+                                        f"the EXACT API signatures in the API: column. Do NOT add new "
+                                        f"API calls, new handle names, or new module-level state "
+                                        f"beyond what the scaffold declares.\n"
+                                    )
+                        except Exception:
+                            pass
+
                         _stage_block = (
                             f"\n\n## ⚡ CURRENT ON-DISK STATE: {task.target_file}\n"
                             f"Relevant region around your anchor marker:\n"
                             f"```\n{_anchor_context}\n```{_context_note}"
+                            f"{_scaffold_block}"
                             f"## ANCHOR PATCH MODE (MANDATORY)\n"
                             f"Your marker line: `{_anchor_marker}`\n"
                             f"(The `NN |` / `NN >` prefixes above are line-number hints ONLY - never copy them into your SEARCH block.)\n"

@@ -135,6 +135,18 @@ def run_tasks(ctx: PipelineContext) -> PipelineContext:
     # and future iterative fix loops.
     _enforce_one_anchor_per_task(ctx)
 
+    # -- Mechanics Scaffold (behind MIDWAY_MECHANICS_SCAFFOLD=1) ------------
+    # Runs AFTER anchors are finalized and BEFORE any code generation, so the
+    # coder can translate a validated INTENT/PSEUDO/API scaffold instead of
+    # inventing logic + API simultaneously.  Gracefully no-ops when the flag
+    # is off or no design is present.
+    try:
+        from mechanics_scaffold import run_mechanics_scaffold
+        ctx = run_mechanics_scaffold(ctx)
+    except Exception as _scaffold_err:
+        print(f"  [Scaffold] ⚠ Mechanics scaffold pass skipped "
+              f"(import/runtime error): {_scaffold_err}")
+
     # -- Phase A: Deterministic Skeleton Builder (MUST run BEFORE tasks) --
     # Ensure every .lua target file has a valid canonical skeleton before
     # any SEARCH/REPLACE patch tries to target its anchor markers.

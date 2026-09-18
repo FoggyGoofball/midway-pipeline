@@ -99,6 +99,38 @@ class AttractionDesign(BaseModel):
         return "\n".join(parts)
 
 
+class MechanicScaffold(BaseModel):
+    """A bounded, checkable reasoning artifact for ONE logic-bearing anchor task.
+
+    Produced between the Architect JSON and the per-anchor coder, it captures
+    *how* a mechanic works and *which exact approved API* realizes it, so the
+    coder translates a known shape instead of inventing logic + API at once.
+
+    See docs/MECHANICS_SCAFFOLD_PLAN.md.
+    """
+    name: str = ""                        # short mechanic name ("Bell's Curse")
+    intent: str = ""                       # ONE sentence: what and why
+    pseudo: str = ""                       # <=12 lines of language-neutral pseudocode
+    api_calls: List[str] = Field(default_factory=list)  # exact approved MidwayPhysics.X/Engine.X lines
+    task_id: str = ""                      # anchor task number this scaffold belongs to
+    raw: str = ""                          # original LLM output (for diagnostics)
+
+    def to_context_block(self) -> str:
+        """Render the scaffold for injection into the coder prompt."""
+        lines = [f"### Mechanic: {self.name}" if self.name else "### Mechanic Scaffold"]
+        if self.intent:
+            lines.append(f"INTENT: {self.intent}")
+        if self.pseudo:
+            lines.append("PSEUDO:")
+            for _pl in self.pseudo.splitlines():
+                lines.append(f"  {_pl}")
+        if self.api_calls:
+            lines.append("API:")
+            for _ac in self.api_calls:
+                lines.append(f"  {_ac}")
+        return "\n".join(lines)
+
+
 # -- Integration Schema --------------------------------------------------------
 
 class SchemaHandleEntry(BaseModel):
@@ -545,6 +577,11 @@ class PipelineContext(BaseModel):
 
     # -- Pre-Decomposition Architect Output -----------------------------------
     attraction_design: Optional[AttractionDesign] = None
+
+    # -- Mechanics Scaffold (between Architect and coder) ----------------------
+    # Keyed by anchor task number ("1", "2", ...).  Populated by
+    # mechanics_scaffold.run_mechanics_scaffold when MIDWAY_MECHANICS_SCAFFOLD=1.
+    scaffolds: Dict[str, MechanicScaffold] = Field(default_factory=dict)
 
     # -- Cross-Agent Integration Schema ---------------------------------------
     integration_schema: Optional[IntegrationSchema] = None
