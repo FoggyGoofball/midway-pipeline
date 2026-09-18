@@ -489,6 +489,26 @@ def _extract_search_replace_blocks(output: str) -> list[dict[str, str]]:
             "search": _search,
             "replace": _replace,
         })
+
+    # Fallback: some coders collapse the canonical 3-part conflict marker into a
+    # 2-part form by merging the `=======` separator with the `>>>>>>> REPLACE`
+    # closer, e.g. `=====> REPLACE`.  The primary pattern above misses those;
+    # accept them here so a malformed-but-intelligible block still applies.
+    _alt_pattern = re.compile(
+        r'<{5,7}\s*SEARCH\s*\n(.*?)\n\s*(?=[=>]*=)(?=[=>]*>)[=>]{5,7}\s*REPLACE\s*\n(.*?)(?=\n\s*<{5,7}\s*SEARCH|$)',
+        re.DOTALL,
+    )
+    for _m in re.finditer(_alt_pattern, output):
+        _s = _m.group(1).strip("\n")
+        _r = _m.group(2).strip("\n")
+        _s = "\n".join(ln for ln in _s.splitlines() if not _marker_line_re.match(ln))
+        _r = "\n".join(ln for ln in _r.splitlines() if not _marker_line_re.match(ln))
+        _s = _strip_line_number_gutter(_s)
+        _r = _strip_line_number_gutter(_r)
+        if not _s.strip() and not _r.strip():
+            continue
+        blocks.append({"search": _s, "replace": _r})
+        print("  [PatchParser] Parsed a 2-part SEARCH/REPLACE block (merged separator).", flush=True)
     return blocks
 
 def _replace_impl_text(replace_text: str) -> str:

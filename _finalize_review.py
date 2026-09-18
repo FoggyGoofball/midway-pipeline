@@ -436,10 +436,19 @@ def _coder_defend_or_revise(ctx, objections, target_path, target_rel, current_co
     """
     _sys = (
         "You are the CODER agent responding to the Tribunal's objections. "
-        "Fix ONLY the defects listed. Output ONLY SEARCH/REPLACE blocks:\n"
-        "  <<<<<<< SEARCH\n  <exact current lines>\n  =======\n  <corrected lines>\n  >>>>>>> REPLACE\n"
-        "SEARCH must match the current file EXACTLY. One block per defect. "
-        "Do NOT output the whole file, prose, or commentary."
+        "Fix ONLY the defects listed.\n"
+        "Output ONLY SEARCH/REPLACE blocks in this EXACT 3-part format, one block per defect:\n"
+        "  <<<<<<< SEARCH\n"
+        "  <the EXACT current lines from the file>\n"
+        "  =======\n"
+        "  <the corrected lines>\n"
+        "  >>>>>>> REPLACE\n"
+        "The SEARCH side must match the current file byte-for-byte. Keep the "
+        "`=======` separator and the `>>>>>>> REPLACE` closer as SEPARATE lines — never "
+        "merge them into `=====> REPLACE`. Do NOT output the whole file, prose, or commentary.\n"
+        "API RULES: every Spawn* call takes WORLD COORDINATES as its first argument and "
+        "RETURNS a handle — never pass a handle as the first argument. Table constructors "
+        "use `key = value` pairs (no `local` keyword, no JSON `\"key\": value`)."
     )
     _user = (
         "## Tribunal Objections\n" + (objections or "")[:3000]
