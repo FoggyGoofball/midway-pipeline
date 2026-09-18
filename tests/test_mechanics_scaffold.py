@@ -165,6 +165,15 @@ class TestValidateScaffold:
         violations = _validate_scaffold(s, contract, {"bell_handle"})
         assert any("handle 'bell_handle'" in v for v in violations)
 
+    def test_lua_std_global_allowed(self):
+        # print(message) is a legal Lua global for diagnostics — not a phantom API.
+        contract = _make_contract(physics=["DestroyBody"])
+        s = _parse_scaffold(
+            "### Mechanic: M\nINTENT: cleanup\nPSEUDO:\n  destroy\nAPI:\n  DestroyBody(handle)\n  print(message)\n",
+            "11",
+        )
+        assert _validate_scaffold(s, contract, set()) == []
+
 
 # ---------------------------------------------------------------------------
 # Feature flag

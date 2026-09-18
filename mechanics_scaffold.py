@@ -135,6 +135,17 @@ _NS_CALL_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\s*\(")
 # Matches a bare call: Symbol(  (not preceded by a dot/word char)
 _BARE_CALL_RE = re.compile(r"(?<![.\w])([A-Za-z_]\w*)\s*\(")
 
+# Lua stdlib GLOBAL functions (not tables): legal anywhere, never engine APIs.
+# The API column may legitimately list these for diagnostics/cleanup tasks
+# (e.g. `print(message)`); they are not phantom APIs and are not validated
+# against the bridge contract.
+_LUA_GLOBAL_FUNCS = frozenset({
+    "print", "pairs", "ipairs", "next", "select", "tostring", "tonumber",
+    "type", "setmetatable", "getmetatable", "rawget", "rawset", "rawequal",
+    "rawlen", "pcall", "xpcall", "error", "assert", "warn", "load",
+    "loadfile", "dofile", "require", "collectgarbage", "unpack",
+})
+
 
 def _match_call(line: str):
     """Return (namespace_or_empty, symbol) for the first call on a line, or None."""
@@ -260,7 +271,11 @@ def _validate_scaffold(
         if _ns:
             _full = f"{_ns.lower()}.{_sym.lower()}"
         else:
-            # Bare call: resolve the namespace via the contract's bare-name map.
+            # Bare call: Lua stdlib globals (print, pairs, ...) are always
+            # legal and are NOT engine APIs — skip them without a violation.
+            if _sym.lower() in _LUA_GLOBAL_FUNCS:
+                continue
+            # Otherwise resolve the namespace via the contract's bare-name map.
             _canonical_ns = _bare_ns.get(_sym.lower(), "")
             if not _canonical_ns:
                 violations.append(
