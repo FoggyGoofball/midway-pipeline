@@ -1602,6 +1602,88 @@ def _fix_json_colon_tables(content: str) -> str:
     return content
 
 
+_STRUCT_TOK_RE = re.compile(
+    r'\bfunction\b|\bif\b|\bdo\b|\brepeat\b|\bend\b|\buntil\b|[()\[\]{}]'
+)
+_STRUCT_OPEN = {
+    'function': 'end', 'if': 'end', 'do': 'end', 'repeat': 'until',
+    '(': ')', '[': ']', '{': '}',
+}
+_STRUCT_CLOSERS = {'end', 'until', ')', ']', '}'}
+
+
+def _repair_lua_structure(content: str) -> str:
+    """Close unbalanced brackets/blocks and remove surplus closers (Fix #27).
+
+    The one structural error class the regex balancer and the LLM fix loop
+    cannot repair is an unclosed ``(`` / ``{`` / ``[`` or a missing ``end`` in
+    the middle of a file (luac reports it but the fixer re-emits whole-file
+    garbage).  This is a deterministic, comment/string-aware stack scanner:
+
+      * an opener pushes its expected closer;
+      * a closer matching the stack top pops it;
+      * a closer that does NOT match the stack top is surplus and is removed;
+      * a named ``function`` DECLARATION encountered while a bracket is still
+        open means the enclosing expression must close first — insert the
+        owed closers (top-of-stack first) right before that declaration;
+      * anything still open at EOF is closed at EOF.
+
+    Idempotent on already-clean input (returns ``content`` unchanged).  The
+    caller is expected to verify the result with ``luac -p`` — the existing
+    revert-on-regression gates already do — so this can never make a clean file
+    worse.
+    """
+    if not content:
+        return content
+    if any(m in content for m in ('<<<<<<<', '=======', '>>>>>>>')):
+        return content
+    try:
+        from _lua_balancer import _mask_noise as _mn
+        masked = _mn(content)
+    except Exception:
+        masked = content  # defensive fallback: never worse than doing nothing
+
+    stack: list[str] = []
+    surplus: list[tuple[int, int]] = []
+    insert: tuple[int, list[str]] | None = None
+
+    for m in _STRUCT_TOK_RE.finditer(masked):
+        tok = m.group(0)
+        if tok in _STRUCT_OPEN:
+            if (tok == 'function'
+                    and masked[m.end():m.end() + 1] != '('
+                    and stack and stack[-1] in (')', ']', '}')
+                    and insert is None):
+                # Named function declaration while a bracket is still open:
+                # the enclosing expression must close before this statement.
+                insert = (m.start(), list(reversed(stack)))
+                stack = ['end']  # the declaration itself opens a block
+            else:
+                stack.append(_STRUCT_OPEN[tok])
+        else:  # closer
+            if stack and tok == stack[-1]:
+                stack.pop()
+            else:
+                surplus.append((m.start(), m.end()))
+
+    if insert is None and stack:
+        insert = (len(content), list(reversed(stack)))
+
+    if not surplus and insert is None:
+        return content
+
+    out = list(content)
+    for s, e in sorted(surplus, reverse=True):
+        for x in range(s, e):
+            out[x] = ' '
+    if insert is not None:
+        _pos, _closers = insert
+        _closers = [c for c in _closers if c in _STRUCT_CLOSERS]
+        if _closers:
+            out.insert(_pos, '\n'.join(_closers) + '\n')
+    return ''.join(out)
+
+
 def _strip_stray_closing_parens(content: str) -> str:
     """Comment out orphaned ``)`` lines (Fix #26).
 
@@ -1644,6 +1726,7 @@ def post_process_lua(content: str) -> str:
     # structural fixes, then fix structure, then add missing pieces.
     content = _strip_pipeline_artifacts(content)      # Fix #3 first
     content = _strip_comment_monologues(content)       # Fix #11 — kill prose comment essays
+    content = _repair_lua_structure(content)           # Fix #27 — close unbalanced brackets/blocks
     content = _strip_module_level_mod(content)         # Fix #2
     content = _repair_duplicate_underscore_locals(content)  # Fix #13 — local _ = a, _ = b syntax error
     content = _strip_local_in_tables(content)               # Fix #23 — `local` inside table constructor
@@ -1691,8 +1774,9 @@ def post_process_surgery(content: str) -> str:
         which the surgery already preserves and re-injecting could duplicate.
     """
     had_trailing_newline = content.endswith('\n')
-    # Balance blocks first so a stray/missing `end` from the surgery splice is
-    # repaired before the other structural fixes run.
+    content = _repair_lua_structure(content)           # Fix #27 — close unbalanced brackets/blocks
+    # Balance blocks next (no-op after Fix #27) so a stray/missing `end` from
+    # the surgery splice is repaired before the other structural fixes run.
     try:
         from _lua_balancer import balance_lua_blocks
         _bal, _actions = balance_lua_blocks(content)
@@ -1736,6 +1820,7 @@ def repair_lua_syntax(content: str) -> str:
     partially-assembled accumulated file without disturbing the anchor-based
     incremental build.
     """
+    content = _repair_lua_structure(content)                 # Fix #27 — close unbalanced brackets/blocks
     content = _repair_duplicate_underscore_locals(content)   # Fix #13
     content = _strip_local_in_tables(content)                # Fix #23 — `local` inside table constructor
     content = _strip_broken_local_declarations(content)      # Fix #24 — truncated `local _)` fragment

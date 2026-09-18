@@ -15,6 +15,8 @@ from _post_process_lua import (
     _inject_onload_static,
     _inject_slot_id,
     _add_midwayphysics_prefix,
+    _repair_lua_structure,
+    repair_lua_syntax,
     search_exactly_once_gate,
 )
 
@@ -457,3 +459,65 @@ end
         assert "local SLOT_ID = BOOTH_SLOT_ID or -1" in result
         # Fix #6: MidwayPhysics. prefix
         assert "MidwayPhysics.SpawnDynamicSphere" in result
+
+
+# ==============================================================================
+#  Fix #27: Structural stack-scan repair (unbalanced brackets/blocks)
+# ==============================================================================
+
+class TestRepairLuaStructure:
+    def test_idempotent_on_clean_file(self):
+        src = "function OnLoad()\n    print(1)\nend\n\nfunction OnUnload()\nend\n"
+        assert _repair_lua_structure(src) == src
+
+    def test_closes_unclosed_table_call(self):
+        """CreatePool(..., { ...  never closed -> insert `})` + enclosing `end`."""
+        src = (
+            'function OnLoad()\n'
+            '    MidwayPhysics.CreatePool("puck_pool", 2, 2, {\n'
+            '        radius = 0.3\n'
+            '\n'
+            'function OnStep(dt)\n'
+            '    print(dt)\n'
+            'end\n'
+        )
+        out = _repair_lua_structure(src)
+        assert '}\n)\nend\nfunction OnStep' in out
+        # no phantom stray text: the inserted closers appear exactly once
+        assert out.count('}\n)\nend\n') == 1
+
+    def test_closes_anonymous_function_callback(self):
+        """OnStep(function(dt) ... end with no `)` and no OnLoad `end`."""
+        src = (
+            'function OnLoad()\n'
+            '    MidwayPhysics.OnStep(function(dt)\n'
+            '        print(dt)\n'
+            '    end\n'
+            '\n'
+            'function OnUnload()\n'
+            'end\n'
+        )
+        out = _repair_lua_structure(src)
+        assert ')\nend\nfunction OnUnload' in out
+        # OnUnload must end up at module level (OnLoad closed before it)
+        assert out.index('function OnUnload') > out.index(')\nend\n')
+
+    def test_removes_surplus_end(self):
+        src = "function OnLoad()\n    print(1)\nend\nend\n"
+        out = _repair_lua_structure(src)
+        # surplus `end` is blanked, leaving exactly one live `end`
+        assert out.count('end') == 1
+
+    def test_repair_lua_syntax_fixes_broken_file(self):
+        """Minimal pass must leave the file with no unbalanced closer."""
+        src = (
+            'function OnLoad()\n'
+            '    MidwayPhysics.OnStep(function(dt)\n'
+            '        print(dt)\n'
+            '    end\n'
+            '\n'
+            'function OnUnload()\n'
+            'end\n'
+        )
+        out = repair_lua_syntax(src)
+        assert ')\nend\nfunction OnUnload' in out
