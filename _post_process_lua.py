@@ -1555,6 +1555,48 @@ def _strip_phantom_engine_calls(content: str) -> str:
     return content
 
 
+_ORPHAN_MARKER_RE = re.compile(r'^\s*--\s*\[(?:PHANTOM|phantom|broken|stray|pipeline)')
+
+
+def _repair_orphaned_then(content: str) -> str:
+    """Comment out orphaned ``then``/``do`` continuation lines (Fix #28).
+
+    When an earlier fix comments out a multi-line ``if``/``for``/``while``
+    OPENER (e.g. a phantom colon-call ``if player:GetAttribute("X") and``),
+    the trailing continuation line (``... > 0.5 then``) is left live with a
+    dangling ``then`` — luac reports ``unexpected symbol near 'then'`` and no
+    bracket/block repair can see it.  Rule: a live line ending in ``then``/
+    ``do`` whose nearest preceding non-blank line is one of OUR removal
+    markers (``-- [PHANTOM ...]`` / ``-- [broken ...]`` / ``-- [stray ...]``)
+    AND that contains no block opener of its own is an orphaned continuation
+    — comment it out.
+    """
+    _out: list[str] = []
+    _fixed = 0
+    _prev_removed = False
+    for _ln in content.splitlines():
+        if not _ln.strip():
+            _out.append(_ln)
+            continue
+        _is_marker = bool(_ORPHAN_MARKER_RE.match(_ln))
+        _is_comment = _ln.lstrip().startswith('--')
+        _code = re.sub(r'--.*$', '', _ln)
+        _ends_then = (not _is_comment) and bool(
+            re.search(r'\b(?:then|do)\b\s*$', _code)
+        )
+        _has_opener = bool(re.search(r'\b(?:if|elseif|for|while)\b', _code))
+        if _ends_then and _prev_removed and not _has_opener:
+            _out.append('-- [orphaned then/do removed] ' + _ln.lstrip())
+            _fixed += 1
+            _prev_removed = True
+            continue
+        _out.append(_ln)
+        _prev_removed = _is_marker
+    if _fixed:
+        print(f"  [Post-Process Fix #28] Commented out {_fixed} orphaned `then`/`do` continuation line(s)")
+    return "\n".join(_out)
+
+
 def _strip_local_in_tables(content: str) -> str:
     """Strip ``local`` inside table constructors (Fix #23).
 
@@ -1739,6 +1781,7 @@ def post_process_lua(content: str) -> str:
     content = _neutralize_method_calls(content)        # Fix #21 — handle.Method -> MidwayPhysics.Method(handle)
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
     content = _strip_phantom_engine_calls(content)     # Fix #22 — neutralize phantom Engine.* setters
+    content = _repair_orphaned_then(content)           # Fix #28 — orphaned then/do from commented openers
     content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
     content = _align_createpool_names(content)         # Fix #18 — CreatePool literal -> declared pool constant
@@ -1799,6 +1842,7 @@ def post_process_surgery(content: str) -> str:
     content = _neutralize_method_calls(content)           # Fix #21
     content = _strip_phantom_api_calls(content)           # Fix #8
     content = _strip_phantom_engine_calls(content)        # Fix #22
+    content = _repair_orphaned_then(content)              # Fix #28
     content = _dedupe_spawn_shared_booth(content)         # Fix #17
     content = _normalize_pool_name_arguments(content)     # Fix #14
     content = _align_createpool_names(content)            # Fix #18
@@ -1824,6 +1868,7 @@ def repair_lua_syntax(content: str) -> str:
     content = _repair_duplicate_underscore_locals(content)   # Fix #13
     content = _strip_local_in_tables(content)                # Fix #23 — `local` inside table constructor
     content = _strip_broken_local_declarations(content)      # Fix #24 — truncated `local _)` fragment
+    content = _repair_orphaned_then(content)                 # Fix #28 — orphaned then/do from commented openers
     content = _fix_json_colon_tables(content)                # Fix #25 — JSON `"key":` -> Lua `key =`
     content = _strip_stray_closing_parens(content)           # Fix #26 — orphaned `)` line
     content = _repair_bare_expression_statements(content)    # Fix #15

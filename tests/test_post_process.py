@@ -16,6 +16,7 @@ from _post_process_lua import (
     _inject_slot_id,
     _add_midwayphysics_prefix,
     _repair_lua_structure,
+    _repair_orphaned_then,
     repair_lua_syntax,
     search_exactly_once_gate,
 )
@@ -521,3 +522,37 @@ class TestRepairLuaStructure:
         )
         out = repair_lua_syntax(src)
         assert ')\nend\nfunction OnUnload' in out
+
+
+# ==============================================================================
+#  Fix #28: orphaned `then`/`do` continuation repair
+# ==============================================================================
+
+class TestRepairOrphanedThen:
+    def test_comments_orphaned_then_after_phantom_marker(self):
+        src = (
+            '-- [PHANTOM COLON-CALL] if player:GetAttribute("CanSwing") and\n'
+            '-- [PHANTOM COLON-CALL] player:GetAttribute("IsSwinging") and\n'
+            '       vector3magnitude(player.Input.KeyCode(Enum.KeyCode.E)) > 0.5 then\n'
+            '    isSwinging = true\n'
+            'end\n'
+        )
+        out = _repair_orphaned_then(src)
+        assert '-- [orphaned then/do removed]' in out
+        assert 'vector3magnitude' in out  # the text is preserved, just commented
+
+    def test_keeps_legit_if_then_after_normal_comment(self):
+        src = '-- a normal comment\nif x > 0 then\n    print(x)\nend\n'
+        out = _repair_orphaned_then(src)
+        assert '-- [orphaned then/do removed]' not in out
+        assert 'if x > 0 then' in out
+
+    def test_keeps_multiline_if_continuation(self):
+        src = 'if a and\n    b then\n    print(1)\nend\n'
+        out = _repair_orphaned_then(src)
+        assert '-- [orphaned then/do removed]' not in out
+
+    def test_keeps_for_do(self):
+        src = 'for i = 1, 10 do\n    print(i)\nend\n'
+        out = _repair_orphaned_then(src)
+        assert '-- [orphaned then/do removed]' not in out

@@ -2481,16 +2481,50 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         ctx = _remerge(ctx)
                         print(f"  [Post-Fix Re-Merge] ✅ Re-merge complete.")
 
-                # -- Insanity Detector (similarity-based) --------------
-                normalized = _normalize_fix_fingerprint(issues_text + ctx.conflicts_str)
-                if check_insanity_similarity(normalized, ctx.seen_code_hashes_set, threshold=0.95):
+                # -- Insanity Detector (progress-based) -----------------
+                # The old similarity-on-INPUT check fired when two cycles
+                # produced >95% similar *error text* — which is exactly when a
+                # fix loop should KEEP trying (e.g. the same luac error while a
+                # small change like a closing paren is all that's needed).  It
+                # also tripped on the FIRST similar cycle, so it allowed
+                # effectively one fix attempt per round.
+                #
+                # New rule: fingerprint the *outcome* (accumulated outputs +
+                # error state).  Only consecutive cycles with an IDENTICAL
+                # outcome count as "no progress"; trip after 3 of those.  Any
+                # change at all — even one inserted `)` — resets the streak.
+                import hashlib as _ins_hashlib
+                _fp_parts: list[str] = []
+                try:
+                    for _fk in sorted(ctx.all_results_dict.keys()):
+                        _fp_parts.append(str(_fk))
+                        _fp_parts.append(str(ctx.all_results_dict[_fk]))
+                except Exception:
+                    pass
+                _fp_parts.append(ctx.pre_flight_errors or "")
+                try:
+                    _fp_parts.append("\n".join(ctx.runtime_errors or []))
+                except Exception:
+                    pass
+                _fp_digest = _ins_hashlib.md5(
+                    "\n".join(_fp_parts).encode("utf-8", "replace")
+                ).hexdigest()
+                _prev_digest = getattr(ctx, "_last_fix_fingerprint", None)
+                _streak = getattr(ctx, "_no_progress_streak", 0)
+                if _prev_digest == _fp_digest:
+                    _streak += 1
+                else:
+                    _streak = 0
+                ctx._last_fix_fingerprint = _fp_digest
+                ctx._no_progress_streak = _streak
+                if _streak >= 3:
                     print(
                         f"\n  [Insanity Detector] ⛔ Infinite fix loop detected! "
-                        f"Similar input >95% matches previous cycle  circuit breaker tripped."
+                        f"No change in fix outcome for {_streak} consecutive cycles  "
+                        f"circuit breaker tripped."
                     )
                     ctx.review_verdict = "BLOCKED"
                     break
-                ctx.seen_code_hashes_set.add(normalized)
                 continue
 
         break
