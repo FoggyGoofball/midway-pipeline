@@ -2059,6 +2059,29 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     last_good_output=_fix_last_good,
                 )
 
+                # -- Mechanics Scaffold injection (fix TO the scaffold) ------
+                # The initial-generation coder translates a validated scaffold;
+                # the fix agent must see the SAME scaffold or it re-invents
+                # (wrong Spawn arity, leaked SEARCH/REPLACE markers) — the exact
+                # regression this run showed at fix cycle 2.  No-op when the
+                # flag is off or no scaffold exists for this task's anchor.
+                try:
+                    from mechanics_scaffold import get_scaffold_for_task
+                    _sc_fix = get_scaffold_for_task(
+                        ctx, getattr(task_obj, 'anchor_marker', None) or ""
+                    )
+                    if _sc_fix is not None:
+                        agent_fix_input = (
+                            "## 🧩 MECHANICS SCAFFOLD (fix TO THIS — do not invent)\n"
+                            + _sc_fix.to_context_block()
+                            + "\nTranslate the PSEUDO above into Lua at your anchor, "
+                            "using the EXACT API signatures in the API: column. "
+                            "Do NOT change argument counts or add new API calls.\n\n"
+                            + agent_fix_input
+                        )
+                except Exception:
+                    pass
+
                 # Prefer live cartridge domain_registry (populated by mount_cartridge)
                 # over the kernel-only ALL_DOMAINS which omits C++/Lua/PHYS entries.
                 _live_registry = getattr(ctx, 'domain_registry', None) or {}
