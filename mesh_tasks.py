@@ -1431,7 +1431,7 @@ def _run_monolithic_lua_generation(ctx: PipelineContext, target_file: str) -> Pi
         print(f"  [Monolithic] ✅ luac syntax check passed")
     else:
         _err = _luac_proc.stderr.strip()
-        print(f"  [Monolithic] ⚠ luac syntax error: {_err[:200]}")
+        print(f"  [Monolithic] ⚠ luac syntax error: {_err}")
         ctx.pre_flight_errors += (
             f"\n## Monolithic Generation Syntax Error ({target_file})\n"
             f"```\n{_err}\n```\n"

@@ -500,8 +500,8 @@ def _coder_defend_or_revise(ctx, objections, target_path, target_rel, current_co
                     _fh.write(_patched)
                 _r = _sp.run([_exe, "-p", _tmp], capture_output=True, text=True, timeout=30)
                 if _r.returncode != 0:
-                    print(f"  [Tribunal Debate] ⚠ coder revision broke syntax — discarding "
-                          f"({_r.stderr.strip()[:120]})")
+                    print(f"  [Tribunal Debate] ⚠ coder revision broke syntax — discarding.")
+                    print(f"  [Tribunal Debate luac] {_r.stderr.strip()}")
                     return None
             finally:
                 try:
@@ -829,8 +829,8 @@ def _gap_filler_surgery(ctx: PipelineContext, target_rel: str) -> bool:
         except Exception:
             pass
     if _r.returncode != 0:
-        print(f"  [Gap Fill] deterministic repair still not luac-clean "
-              f"({_r.stderr.strip()[:120]}) - deferring to LLM surgery.")
+        print(f"  [Gap Fill] deterministic repair still not luac-clean - deferring to LLM surgery.")
+        print(f"  [Gap Fill luac] {_r.stderr.strip()}")
         return False
 
     try:
@@ -964,7 +964,8 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
         except Exception:
             pass
     if _r.returncode != 0:
-        print(f"  [Surgery] ⚠ luac rejected rewrite: {_r.stderr.strip()[:160]}")
+        print(f"  [Surgery] ⚠ luac rejected rewrite:")
+        print(f"  [Surgery luac] {_r.stderr.strip()}")
         return False
 
     # Gate 2: RuntimeSim arity / phantom-API analysis must pass.
@@ -1944,10 +1945,11 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         if not _rg_found:
                             ctx.all_results.append({"task_id": "task_monolithic", "output": _mono_fixed})
                         print(f"  [Monolithic Fix] ⛔ luac syntax error — REVERTED to last luac-clean "
-                              f"version ({len(_last_good)} chars). Error was: {_mono_err[:120]}")
+                              f"version ({len(_last_good)} chars).")
+                        print(f"  [Monolithic Fix luac] {_mono_err}")
                     else:
-                        print(f"  [Monolithic Fix] ⚠ luac syntax error (no clean baseline to revert to): "
-                              f"{_mono_err[:200]}")
+                        print(f"  [Monolithic Fix] ⚠ luac syntax error (no clean baseline to revert to):")
+                        print(f"  [Monolithic Fix luac] {_mono_err}")
 
                 # Refresh static checks so next review cycle sees current state
                 try:

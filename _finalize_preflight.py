@@ -737,8 +737,8 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                           f"({'; '.join(_bal_actions) or 'closed unbalanced brackets/blocks'}) — luac now clean.")
                                     _bal_fixed_syntax = True
                                 else:
-                                    print(f"  [Balancer] ⚠ repaired output still fails luac "
-                                          f"({_bal_luac.stderr.strip()[:120]}) — deferring to fix loop.")
+                                    print(f"  [Balancer] ⚠ repaired output still fails luac — deferring to fix loop.")
+                                    print(f"  [Balancer luac] {_bal_luac.stderr.strip()}")
                         except Exception as _bal_e:
                             print(f"  [Balancer] ⚠ skipped: {_bal_e}")
                     if _bal_fixed_syntax:
