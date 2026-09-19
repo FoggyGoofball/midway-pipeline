@@ -158,17 +158,17 @@ _ECONOMY_CALL_RE = re.compile(
     re.MULTILINE,
 )
 
-# Argument counting heuristic: count commas at the top level of the argument list
-_TOP_LEVEL_COMMA_RE = re.compile(r",(?![^(]*\))")
-
-
+# Argument counting: count commas at depth 0 across (), {}, AND [] so a
+# paramsTable ({ k=v, ... }) is counted as ONE argument, not one-per-field.
+# The old heuristic (r",(?![^(]*\))") only tracked () depth, so a CreatePool
+# call with a multi-field params table was misreported as 6-7 args instead of 2.
 def _count_args(call_text: str) -> int:
-    """Return the argument count from a Lua call site text like 'Foo(a, b, c)'."""
+    """Return the top-level argument count from a Lua call site like 'Foo(a, b, c)'."""
     paren_start = call_text.find("(")
     if paren_start == -1:
         return 0
     inner = call_text[paren_start + 1:]
-    # Walk to find the matching close paren
+    # Walk to find the matching close paren of the call.
     depth = 1
     end = 0
     for i, ch in enumerate(inner):
@@ -182,7 +182,31 @@ def _count_args(call_text: str) -> int:
     args_str = inner[:end].strip()
     if not args_str:
         return 0
-    return len(_TOP_LEVEL_COMMA_RE.split(args_str))
+    # Count commas at depth 0 across all bracket types, skipping string literals.
+    total_depth = 0
+    commas = 0
+    in_str = None
+    i = 0
+    while i < len(args_str):
+        ch = args_str[i]
+        if in_str:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == in_str:
+                in_str = None
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            in_str = ch
+        elif ch in "({[":
+            total_depth += 1
+        elif ch in ")}]":
+            total_depth -= 1
+        elif ch == "," and total_depth == 0:
+            commas += 1
+        i += 1
+    return commas + 1
 
 
 # -- Static analysis core ------------------------------------------------------
@@ -409,6 +433,12 @@ _LUA_TICK_HARNESS = textwrap.dedent("""\
     function Engine.GetTickets() return 0 end
     function Engine.GetTokens() return 0 end
     function Engine.GetStreak() return 0 end
+
+    -- Input bridge (MidwayInput.* — real API, was missing from the sandbox and
+    -- produced false "global 'MidwayInput' is nil" runtime errors)
+    MidwayInput = {}
+    function MidwayInput.IsActionDown(name) return false end
+    function MidwayInput.IsKeyDown(name) return false end
 
     -- Engine globals injected before every script
     BOOTH_SLOT_ID    = BOOTH_SLOT_ID    or 0
