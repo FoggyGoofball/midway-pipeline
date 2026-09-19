@@ -509,6 +509,35 @@ class TestRepairLuaStructure:
         # surplus `end` is blanked, leaving exactly one live `end`
         assert out.count('end') == 1
 
+    def test_closes_paren_before_truncated_local(self):
+        """SpawnSensorBox( unclosed, then a cut-off `local base_` statement."""
+        src = (
+            'function OnLoad()\n'
+            '    local base_wobble_sensor = MidwayPhysics.SpawnSensorBox(\n'
+            '        0.0, 0.0, 0.0, 1.0, 0.1, 1.0\n'
+            '    local base_\n'
+            '    if base_wobble_sensor then\n'
+            '        print("ok")\n'
+            '    end\n'
+            'end\n'
+        )
+        out = _repair_lua_structure(src)
+        assert ')\nlocal base_' in out
+
+    def test_closes_paren_before_statement_if(self):
+        """Unclosed call then an `if` statement (not a function declaration)."""
+        src = (
+            'function OnLoad()\n'
+            '    local x = MidwayPhysics.SpawnSensorBox(\n'
+            '        0.0, 0.0, 0.0, 1.0\n'
+            '    if x then\n'
+            '        print("ok")\n'
+            '    end\n'
+            'end\n'
+        )
+        out = _repair_lua_structure(src)
+        assert ')\nif x then' in out
+
     def test_repair_lua_syntax_fixes_broken_file(self):
         """Minimal pass must leave the file with no unbalanced closer."""
         src = (

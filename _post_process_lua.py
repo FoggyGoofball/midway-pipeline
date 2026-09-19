@@ -1645,13 +1645,17 @@ def _fix_json_colon_tables(content: str) -> str:
 
 
 _STRUCT_TOK_RE = re.compile(
-    r'\bfunction\b|\bif\b|\bdo\b|\brepeat\b|\bend\b|\buntil\b|[()\[\]{}]'
+    r'\bfunction\b|\bif\b|\bdo\b|\brepeat\b|\bend\b|\buntil\b'
+    r'|\blocal\b|\breturn\b|\bbreak\b|\belseif\b|\belse\b'
+    r'|[()\[\]{}]'
 )
 _STRUCT_OPEN = {
     'function': 'end', 'if': 'end', 'do': 'end', 'repeat': 'until',
     '(': ')', '[': ']', '{': '}',
 }
 _STRUCT_CLOSERS = {'end', 'until', ')', ']', '}'}
+_STRUCT_BRACKET_CLOSERS = (')', ']', '}')
+_STRUCT_STMT_KW = {'local', 'return', 'break', 'else', 'elseif'}
 
 
 def _repair_lua_structure(content: str) -> str:
@@ -1665,9 +1669,12 @@ def _repair_lua_structure(content: str) -> str:
       * an opener pushes its expected closer;
       * a closer matching the stack top pops it;
       * a closer that does NOT match the stack top is surplus and is removed;
-      * a named ``function`` DECLARATION encountered while a bracket is still
-        open means the enclosing expression must close first — insert the
-        owed closers (top-of-stack first) right before that declaration;
+      * a statement keyword (a named ``function`` declaration, ``if``/``do``/
+        ``repeat``, or ``local``/``return``/``break``/``else``/``elseif``)
+        encountered while a bracket is still open means the enclosing
+        expression must close first — insert the owed bracket closers right
+        before that statement (a named ``function`` also closes its enclosing
+        block, returning lifecycle hooks to module level);
       * anything still open at EOF is closed at EOF.
 
     Idempotent on already-clean input (returns ``content`` unchanged).  The
@@ -1692,16 +1699,37 @@ def _repair_lua_structure(content: str) -> str:
     for m in _STRUCT_TOK_RE.finditer(masked):
         tok = m.group(0)
         if tok in _STRUCT_OPEN:
-            if (tok == 'function'
-                    and masked[m.end():m.end() + 1] != '('
-                    and stack and stack[-1] in (')', ']', '}')
-                    and insert is None):
-                # Named function declaration while a bracket is still open:
-                # the enclosing expression must close before this statement.
+            _is_fn_decl = (tok == 'function' and masked[m.end():m.end() + 1] != '(')
+            _bracket_open = bool(stack) and stack[-1] in _STRUCT_BRACKET_CLOSERS
+            if _bracket_open and insert is None and _is_fn_decl:
+                # Named function declaration while a bracket is open: the
+                # enclosing expression AND its enclosing block(s) must close
+                # first (lifecycle hooks must return to module level).
                 insert = (m.start(), list(reversed(stack)))
                 stack = ['end']  # the declaration itself opens a block
-            else:
+            elif _bracket_open and insert is None and tok in ('if', 'do', 'repeat'):
+                # A block statement (if/do/repeat) while a bracket is open:
+                # close only the pending bracket(s); the enclosing block stays
+                # open because the statement is nested inside it.
+                _owed = []
+                while stack and stack[-1] in _STRUCT_BRACKET_CLOSERS:
+                    _owed.append(stack.pop())
+                insert = (m.start(), _owed)
                 stack.append(_STRUCT_OPEN[tok])
+            else:
+                # Anonymous `function(` is part of the enclosing expression —
+                # push its closer normally.
+                stack.append(_STRUCT_OPEN[tok])
+        elif tok in _STRUCT_STMT_KW:
+            # A non-block statement keyword (local/return/break/else/elseif)
+            # while a bracket is open: close only the pending bracket(s).  This
+            # is the truncated-statement case (e.g. `SpawnSensorBox(` never
+            # closed, then a cut-off `local base_` starts a new statement).
+            if stack and stack[-1] in _STRUCT_BRACKET_CLOSERS and insert is None:
+                _owed = []
+                while stack and stack[-1] in _STRUCT_BRACKET_CLOSERS:
+                    _owed.append(stack.pop())
+                insert = (m.start(), _owed)
         else:  # closer
             if stack and tok == stack[-1]:
                 stack.pop()
