@@ -31,19 +31,19 @@ CANONICAL_ANCHORS: list[tuple[str, str, str]] = [
     ("onload", "pre-registration",
      "-- [TASK_4_INSERT_HOOK] -- object pool creation (MidwayPhysics.CreatePool with shape/mass/restitution)"),
     ("onload", "pre-registration",
-     "-- [TASK_5_INSERT_HOOK] -- round state init (ball counters, timers, round variables)"),
+     "-- [TASK_5_INSERT_HOOK] -- round state init: declare ball counters, timers, and round variables (locals only, no physics)"),
     ("onload", "pre-registration",
      "-- [TASK_6_INSERT_HOOK] -- input handling / aiming mechanism setup"),
 
     # ── OnStep (inside the callback) ────────────────────────────────────────
     ("onstep", "",
-     "-- [TASK_7_INSERT_HOOK] -- modifier read: AttractionConstants.modifiers every frame, apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND"),
+     "-- [TASK_7_INSERT_HOOK] -- static modifier read (per frame): apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND (no streak, no scoring)"),
     ("onstep", "",
-     "-- [TASK_8_INSERT_HOOK] -- gameplay tick & scoring: Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier"),
+     "-- [TASK_8_INSERT_HOOK] -- scoring (tickets): Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier (tickets ONLY)"),
     ("onstep", "",
-     "-- [TASK_9_INSERT_HOOK] -- advanced modifier read: AttractionConstants.modifiers every OnStep frame, compute dynamic heat/luck/sleight-of-hand effects per game event"),
+     "-- [TASK_9_INSERT_HOOK] -- dynamic difficulty tuning: recompute heat/luck/sleight-of-hand from current streak on score events"),
     ("onstep", "",
-     "-- [TASK_10_INSERT_HOOK] -- advanced economy hooks: Engine.AwardTickets or Engine.AwardTokens with streak multiplier on each score event, wire modifier scalars into payout"),
+     "-- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUASION payout scaling on score"),
 
     # ── OnUnload ─────────────────────────────────────────────────────────────
     ("onunload", "",

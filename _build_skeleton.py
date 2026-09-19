@@ -58,14 +58,14 @@ end
 function OnLoad()
     -- [TASK_2_INSERT_HOOK] -- shared constants table (geometry, physics, gameplay values)
     -- [TASK_4_INSERT_HOOK] -- object pool creation (MidwayPhysics.CreatePool with shape/mass/restitution)
-    -- [TASK_5_INSERT_HOOK] -- round state init (ball counters, timers, round variables)
+    -- [TASK_5_INSERT_HOOK] -- round state init: declare ball counters, timers, and round variables (locals only, no physics)
     -- [TASK_6_INSERT_HOOK] -- input handling / aiming mechanism setup
     MidwayPhysics.OnStep(function(dt)
         local MOD = AttractionConstants.modifiers  -- INSIDE callback
-    -- [TASK_7_INSERT_HOOK] -- modifier read: AttractionConstants.modifiers every frame, apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND
-    -- [TASK_8_INSERT_HOOK] -- gameplay tick & scoring: Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier
-    -- [TASK_9_INSERT_HOOK] -- advanced modifier read: AttractionConstants.modifiers every OnStep frame, compute dynamic heat/luck/sleight-of-hand effects per game event
-    -- [TASK_10_INSERT_HOOK] -- advanced economy hooks: Engine.AwardTickets or Engine.AwardTokens with streak multiplier on each score event, wire modifier scalars into payout
+    -- [TASK_7_INSERT_HOOK] -- static modifier read (per frame): apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND (no streak, no scoring)
+    -- [TASK_8_INSERT_HOOK] -- scoring (tickets): Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier (tickets ONLY)
+    -- [TASK_9_INSERT_HOOK] -- dynamic difficulty tuning: recompute heat/luck/sleight-of-hand from current streak on score events
+    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUASION payout scaling on score
     end)
 end
 

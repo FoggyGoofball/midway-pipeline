@@ -1161,7 +1161,15 @@ def execute_task(task, user_prompt: str, director_output: str,
                                 _end = min(len(_file_lines), _li + 3)
                                 for _si in range(_start, _end):
                                     _prefix = f"{_si+1:4d} | " if _si != _li else f"{_si+1:4d} > "
-                                    _anchor_context_lines.append(_prefix + _file_lines[_si])
+                                    _raw = _file_lines[_si]
+                                    # Redact sibling anchor hooks so this task sees
+                                    # ONLY its own marker.  The OnStep callback holds
+                                    # 4 adjacent TASK_N hooks (7/8/9/10) and showing
+                                    # them together made the coder collapse tasks onto
+                                    # a single "modifier read" theme.
+                                    if _si != _li and "[TASK_" in _raw and "_INSERT_HOOK]" in _raw:
+                                        _raw = "-- (other task anchor, NOT yours)"
+                                    _anchor_context_lines.append(_prefix + _raw)
                                 break
                         if _anchor_found:
                             _anchor_context = "\n".join(_anchor_context_lines)
@@ -1218,6 +1226,9 @@ def execute_task(task, user_prompt: str, director_output: str,
                             f"(The `NN |` / `NN >` prefixes above are line-number hints ONLY - never copy them into your SEARCH block.)\n"
                             f"The orchestrator wraps your code in the correct lifecycle function; "
                             f"you only fill this anchor.\n"
+                            f"This task owns ONE anchor and ONE small piece of logic. Do NOT "
+                            f"implement any other task's hook, do NOT search for or edit other "
+                            f"TASK_N anchors, and do NOT combine this task with its neighbors.\n"
                             f"- Do NOT redefine `function OnLoadStatic/OnLoad/OnStep/OnUnload`.\n"
                             f"- Do NOT emit `MidwayPhysics.OnStep(` — the single per-frame callback "
                             f"already exists in OnLoad; write plain per-frame logic only.\n"
