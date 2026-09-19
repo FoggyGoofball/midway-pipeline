@@ -1007,6 +1007,21 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
 _TARGETED_FIX_MAX = 6                # max one-error-one-fix coder calls per stage
 _TARGETED_CRITIC_MODEL = "phi3:14b"  # fresh-eyes critic, used only as a fallback
 
+_FIX_TEMP_BASE = 0.4
+_FIX_TEMP_STEP = 0.1
+_FIX_TEMP_CAP = 1.0
+
+
+def _fix_temperature(ctx) -> float:
+    """Escalate sampling temperature as the fix loop makes no progress.
+
+    A stuck loop (identical output + identical errors) is a deterministic trap
+    — warming the temperature each no-progress cycle lets the model escape it.
+    Cools back to base as soon as any progress resets the streak.
+    """
+    _streak = getattr(ctx, "_no_progress_streak", 0) or 0
+    return min(_FIX_TEMP_CAP, _FIX_TEMP_BASE + _FIX_TEMP_STEP * _streak)
+
 
 def _extract_individual_errors(ctx) -> list[str]:
     """Deterministic, individually-actionable errors (RuntimeSim + luac)."""
@@ -1150,7 +1165,8 @@ def _run_targeted_fix_stage(ctx) -> bool:
             _out = ""
             try:
                 _out = call_ollama(_sys, _user, "Targeted One-Error Fix", CODER_MODEL,
-                                   params={"num_predict": 2048}, skip_pre_summarizer=True)
+                                   params={"num_predict": 2048, "temperature": _fix_temperature(ctx)},
+                                   skip_pre_summarizer=True)
             except Exception as _e:
                 print(f"  [Targeted Fix] ⚠ coder call failed: {_e}")
                 continue
@@ -2063,7 +2079,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     _mono_fix_prompt,
                     f"Monolithic Fix (cycle {ctx.review_cycle})",
                     CODER_MODEL,
-                    params={"num_predict": 4096},
+                    params={"num_predict": 4096, "temperature": _fix_temperature(ctx)},
                     skip_pre_summarizer=True,
                 )
 
@@ -2335,6 +2351,7 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     original_agent_system, agent_fix_input,
                     f"{domain_name} (Fix cycle {ctx.review_cycle})",
                     fix_model,
+                    params={"temperature": _fix_temperature(ctx)},
                     skip_pre_summarizer=True,
                 )
 
