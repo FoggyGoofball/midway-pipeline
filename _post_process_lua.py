@@ -1597,6 +1597,36 @@ def _repair_orphaned_then(content: str) -> str:
     return "\n".join(_out)
 
 
+_ROBLOX_TOKEN_RE = re.compile(
+    r'\b(?:Vector3|Vector2|CFrame|UDim2|UDim|Color3|BrickColor|TweenService|TweenInfo|Instance|workspace|Enum)\b'
+    r'|\.(?:Position|Velocity|CFrame|Parent|Magnitude|Transparency|Anchored)\b'
+)
+
+
+def _neutralize_roblox(content: str) -> str:
+    """Comment out lines using Roblox/Luau-only APIs (Fix #29).
+
+    The fix-loop coder sometimes drifts into Roblox idioms — ``Vector3.new``,
+    ``workspace:FindFirstChild``, ``Enum.KeyCode``, ``part.Position`` — which are
+    valid Lua but phantom against the Midway bridge (positions are fetched via
+    ``MidwayPhysics.GetPosition(handle)``).  Blanking the line is always
+    comment-safe, and orphaned ``then``/``do`` continuations it leaves behind
+    are cleaned by Fix #28 downstream.
+    """
+    _out: list[str] = []
+    _n = 0
+    for _ln in content.splitlines():
+        _code = _mask_lua_strings(re.sub(r'--.*$', '', _ln))
+        if _ROBLOX_TOKEN_RE.search(_code):
+            _out.append('-- [roblox removed] ' + _ln.lstrip())
+            _n += 1
+        else:
+            _out.append(_ln)
+    if _n:
+        print(f"  [Post-Process Fix #29] Commented out {_n} Roblox-API line(s)")
+    return "\n".join(_out)
+
+
 def _strip_local_in_tables(content: str) -> str:
     """Strip ``local`` inside table constructors (Fix #23).
 
@@ -1809,6 +1839,7 @@ def post_process_lua(content: str) -> str:
     content = _neutralize_method_calls(content)        # Fix #21 — handle.Method -> MidwayPhysics.Method(handle)
     content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
     content = _strip_phantom_engine_calls(content)     # Fix #22 — neutralize phantom Engine.* setters
+    content = _neutralize_roblox(content)              # Fix #29 — comment out Roblox/Luau idioms
     content = _repair_orphaned_then(content)           # Fix #28 — orphaned then/do from commented openers
     content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
@@ -1870,6 +1901,7 @@ def post_process_surgery(content: str) -> str:
     content = _neutralize_method_calls(content)           # Fix #21
     content = _strip_phantom_api_calls(content)           # Fix #8
     content = _strip_phantom_engine_calls(content)        # Fix #22
+    content = _neutralize_roblox(content)                 # Fix #29
     content = _repair_orphaned_then(content)              # Fix #28
     content = _dedupe_spawn_shared_booth(content)         # Fix #17
     content = _normalize_pool_name_arguments(content)     # Fix #14

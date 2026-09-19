@@ -17,6 +17,7 @@ from _post_process_lua import (
     _add_midwayphysics_prefix,
     _repair_lua_structure,
     _repair_orphaned_then,
+    _neutralize_roblox,
     repair_lua_syntax,
     search_exactly_once_gate,
 )
@@ -585,3 +586,35 @@ class TestRepairOrphanedThen:
         src = 'for i = 1, 10 do\n    print(i)\nend\n'
         out = _repair_orphaned_then(src)
         assert '-- [orphaned then/do removed]' not in out
+
+
+# ==============================================================================
+#  Fix #29: Roblox/Luau idiom neutralization
+# ==============================================================================
+
+class TestNeutralizeRoblox:
+    def test_comments_vector3_statement(self):
+        src = 'local v = Vector3.new(0, 0, 0)\n'
+        out = _neutralize_roblox(src)
+        assert '-- [roblox removed]' in out
+
+    def test_comments_position_property(self):
+        src = 'local dir = (target.Position - rightHand.Position).Unit\n'
+        out = _neutralize_roblox(src)
+        assert '-- [roblox removed]' in out
+
+    def test_comments_enum(self):
+        src = 'local key = Enum.KeyCode.E\n'
+        out = _neutralize_roblox(src)
+        assert '-- [roblox removed]' in out
+
+    def test_keeps_legit_physics_call(self):
+        src = '    MidwayPhysics.GetPosition(puck)\n'
+        out = _neutralize_roblox(src)
+        assert '-- [roblox removed]' not in out
+        assert 'MidwayPhysics.GetPosition' in out
+
+    def test_keeps_lowercase_position_var(self):
+        src = '    local position = MidwayPhysics.GetPosition(puck)\n'
+        out = _neutralize_roblox(src)
+        assert '-- [roblox removed]' not in out
