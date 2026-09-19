@@ -1601,7 +1601,8 @@ def execute_task(task, user_prompt: str, director_output: str,
                         from ollama_client import resolve_ctx_size as _guard_ctx
                         _guard_model = getattr(task, 'agent_model', preferred_model)
                         _guard_output = call_ollama_with_messages(
-                            _fix_msgs, f"Anchor Guard Fix ({task.task_id})", _guard_model
+                            _fix_msgs, f"Anchor Guard Fix ({task.task_id})", _guard_model,
+                            params={"temperature": 0.6},
                         )
                         if _guard_output and len(_guard_output.strip()) > 50:
                             print(f"  [Anchor Guard] ✅ Re-prompt produced corrected patch for {task.task_id}")
@@ -1669,7 +1670,8 @@ def execute_task(task, user_prompt: str, director_output: str,
                         ]
                         _guard_model = getattr(task, 'agent_model', preferred_model)
                         _guard_output = call_ollama_with_messages(
-                            _fix_msgs, f"Empty Block Fix ({task.task_id})", _guard_model
+                            _fix_msgs, f"Empty Block Fix ({task.task_id})", _guard_model,
+                            params={"temperature": 0.6},
                         )
                         if _guard_output and len(_guard_output.strip()) > 50:
                             output = _guard_output
@@ -2003,7 +2005,8 @@ def execute_task(task, user_prompt: str, director_output: str,
                         ]
                         _splice_model = getattr(task, 'agent_model', preferred_model)
                         _retry_output = call_ollama_with_messages(
-                            _splice_msgs, f"Anchor Splice Retry ({task.task_id})", _splice_model
+                            _splice_msgs, f"Anchor Splice Retry ({task.task_id})", _splice_model,
+                            params={"temperature": 0.6},
                         )
                         if _retry_output and len(_retry_output.strip()) > 50:
                             # Check if retry produced SEARCH/REPLACE blocks

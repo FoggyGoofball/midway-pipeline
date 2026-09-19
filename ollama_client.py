@@ -230,7 +230,8 @@ _CODEGEN_DEFAULTS = {
     "temperature": 0.4,
     "top_p": 0.9,
     "top_k": 40,
-    "repeat_penalty": 1.2,
+    "repeat_penalty": 1.3,
+    "repeat_last_n": 256,
 }
 
 
