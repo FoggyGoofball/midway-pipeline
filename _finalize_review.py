@@ -1628,6 +1628,18 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                     "Resolve these pre-flight errors immediately:\n"
                     + (ctx.pre_flight_errors or "")
                 )
+            else:
+                # ALWAYS append the deterministic errors (luac + RuntimeSim) so the
+                # fix agent sees the precise, actionable ground truth — not just the
+                # reviewer's paraphrase, which has repeatedly misdiagnosed the real
+                # defect ("duplicate local MOD", "MOD.heat indexing").
+                _det = (ctx.pre_flight_errors or "").strip()
+                if _det:
+                    issues_text = (
+                        issues_text
+                        + "\n\n## DETERMINISTIC ERRORS (resolve these EXACTLY — luac/RuntimeSim ground truth):\n"
+                        + _det
+                    )
 
             print(f"  [Review-Fix] Review failed  routing critiques to original domain agents...")
             ctx.output_parts.append(
