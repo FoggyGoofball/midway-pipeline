@@ -1004,6 +1004,233 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
     return True
 
 
+_TARGETED_FIX_MAX = 6                # max one-error-one-fix coder calls per stage
+_TARGETED_CRITIC_MODEL = "phi3:14b"  # fresh-eyes critic, used only as a fallback
+
+
+def _extract_individual_errors(ctx) -> list[str]:
+    """Deterministic, individually-actionable errors (RuntimeSim + luac)."""
+    _errs: list[str] = []
+    try:
+        for _e in (getattr(ctx, "runtime_errors", None) or []):
+            _s = str(_e).strip()
+            if _s and _s not in _errs:
+                _errs.append(_s)
+    except Exception:
+        pass
+    try:
+        for _ln in (getattr(ctx, "pre_flight_errors", "") or "").splitlines():
+            _s = _ln.strip()
+            if not _s or _s.startswith(("##", "###", "**", "```")):
+                continue
+            if ("syntax error" in _s.lower() or "expected" in _s.lower()) and ":" in _s:
+                if _s not in _errs:
+                    _errs.append(_s)
+    except Exception:
+        pass
+    return _errs
+
+
+def _apply_one_error_patch(file_text: str, model_out: str):
+    """Apply the FIRST extractable SEARCH/REPLACE block. Returns (text, applied)."""
+    if not model_out or not file_text:
+        return file_text, 0
+    try:
+        from _helpers_exec import _extract_search_replace_blocks as _extract_sr
+        from _helpers_exec import _fuzzy_apply_patch as _fuzzy
+        _blocks = _extract_sr(model_out)
+        _patched = file_text
+        _applied = 0
+        for _blk in _blocks[:1]:
+            _new = _fuzzy(_patched, _blk.get("search", ""), _blk.get("replace", ""))
+            if _new != _patched:
+                _patched = _new
+                _applied += 1
+        return _patched, _applied
+    except Exception:
+        return file_text, 0
+
+
+def _luac_clean(content: str):
+    """Return (is_clean, stderr)."""
+    import subprocess
+    import tempfile
+    import os as _os
+    try:
+        from _luac_path import get_luac_exe
+        _exe = get_luac_exe() or "luac"
+    except Exception:
+        _exe = "luac"
+    _fd, _tmp = tempfile.mkstemp(suffix=".lua")
+    try:
+        with _os.fdopen(_fd, "w", encoding="utf-8") as _fh:
+            _fh.write(content)
+        _r = subprocess.run([_exe, "-p", _tmp], capture_output=True, text=True, timeout=30)
+    except Exception as _e:
+        return False, str(_e)
+    finally:
+        try:
+            _os.unlink(_tmp)
+        except Exception:
+            pass
+    return _r.returncode == 0, _r.stderr.strip()
+
+
+def _run_critic_pass(ctx, file_text: str, errors: list[str]) -> str:
+    """One fresh-eyes critic pass (a DIFFERENT model) emitting SEARCH/REPLACE
+    fixes for the remaining errors. Returns the raw model output."""
+    _sys = (
+        "You are a meticulous Lua 5.4 code reviewer (the CRITIC) auditing a "
+        "carnival-attraction script that failed deterministic runtime checks. "
+        "Output ONE SEARCH/REPLACE block per defect, using the exact format:\n"
+        "<<<<<<< SEARCH\n<exact current lines>\n=======\n<corrected lines>\n"
+        ">>>>>>> REPLACE\n"
+        "No prose, no full-file rewrite."
+    )
+    _err_list = "\n".join(f"- {e}" for e in errors[:10])
+    _user = (
+        f"## Defects reported by the deterministic checker\n{_err_list}\n\n"
+        f"## Current file\n```lua\n{file_text}\n```\n"
+    )
+    try:
+        return call_ollama(_sys, _user, "Critic Pass (14B)", _TARGETED_CRITIC_MODEL,
+                           params={"num_predict": 2048}, skip_pre_summarizer=True)
+    except Exception as _e:
+        print(f"  [Critic Pass] ⚠ call failed: {_e}")
+        return ""
+
+
+def _run_targeted_fix_stage(ctx) -> bool:
+    """High-level one-error-one-fix stage, run BEFORE the tribunal.
+
+    The tribunal (the SAME 9B model) can argue but cannot write correct code.
+    This stage feeds each deterministic error to the CODER one at a time with
+    precise extrinsic feedback (exact error + exact file + exact fix), applies
+    the surgical patch, and re-verifies with luac.  Only when the coder leaves
+    the file dirty do we escalate to a fresh-eyes CRITIC (a different model).
+    Returns True when the file ends luac-clean AND runtime-clean.
+    """
+    _errs = _extract_individual_errors(ctx)
+    if not _errs:
+        print("  [Targeted Fix] No individual errors — file already clean.")
+        return True
+
+    try:
+        from runtime_sim import _effective_lua_files
+        _files = _effective_lua_files(ctx) or {}
+    except Exception:
+        _files = {}
+
+    if not _files:
+        return False
+
+    from _pipeline_helpers import CODER_MODEL
+    from _helpers_io import atomic_write_text
+
+    for _rel, _content in _files.items():
+        _cur = _content
+        _coder_fixed_any = False
+
+        # -- Pass 1: coder, one error at a time ---------------------------
+        for _err in _errs[:_TARGETED_FIX_MAX]:
+            _sys = (
+                "You are a senior Lua 5.4 engineer repairing ONE specific defect in a "
+                "carnival-attraction script. Output ONLY one SEARCH/REPLACE block that "
+                "fixes EXACTLY the error given. Do NOT rewrite the file, do NOT touch "
+                "unrelated code, no prose.\n\n"
+                "Format exactly:\n"
+                "<<<<<<< SEARCH\n<exact current lines>\n=======\n<corrected lines>\n"
+                ">>>>>>> REPLACE"
+            )
+            _user = (
+                f"## THE ONE ERROR TO FIX\n{_err}\n\n"
+                f"## CURRENT FILE (patch only the lines implicated above)\n"
+                f"```lua\n{_cur}\n```\n"
+            )
+            _out = ""
+            try:
+                _out = call_ollama(_sys, _user, "Targeted One-Error Fix", CODER_MODEL,
+                                   params={"num_predict": 2048}, skip_pre_summarizer=True)
+            except Exception as _e:
+                print(f"  [Targeted Fix] ⚠ coder call failed: {_e}")
+                continue
+            if not _out:
+                continue
+            _patched, _applied = _apply_one_error_patch(_cur, _out)
+            if not _applied:
+                continue
+            _clean, _luac_err = _luac_clean(_patched)
+            if not _clean:
+                print(f"  [Targeted Fix] ⚠ coder patch rejected (luac): {_luac_err[:120]}")
+                continue
+            _cur = _patched
+            _coder_fixed_any = True
+            print(f"  [Targeted Fix] ✅ coder applied a patch for: {_err[:90]}")
+
+        # -- Pass 2: write back, re-check, escalate to critic if still dirty --
+        try:
+            from _post_process_lua import post_process_lua as _ppl
+            _cur = _ppl(_cur)
+        except Exception as _e:
+            print(f"  [Targeted Fix] ⚠ post-process failed: {_e}")
+
+        # Write back so run_runtime_sim (which reads disk/staging) sees _cur.
+        try:
+            _real = ctx.project_root / _rel
+            atomic_write_text(_real, _cur)
+        except Exception as _e:
+            print(f"  [Targeted Fix] ⚠ write-back failed: {_e}")
+            continue
+
+        _clean, _luac_err = _luac_clean(_cur)
+        _remaining: list[str] = []
+        if _clean:
+            try:
+                from runtime_sim import run_runtime_sim as _run_rtsim
+                ctx.runtime_errors = []
+                _remaining = _run_rtsim(ctx) or []
+            except Exception:
+                _remaining = []
+
+        if (not _clean) or _remaining:
+            print("  [Targeted Fix] ⚠ Still dirty after coder pass — invoking 14B critic.")
+            _critic_errs = _remaining or _errs
+            _critic_out = _run_critic_pass(ctx, _cur, _critic_errs)
+            _patched, _applied = _apply_one_error_patch(_cur, _critic_out)
+            if _applied:
+                _pc, _pe = _luac_clean(_patched)
+                if _pc:
+                    _cur = _patched
+                    try:
+                        from _post_process_lua import post_process_lua as _ppl2
+                        _cur = _ppl2(_cur)
+                    except Exception:
+                        pass
+                    try:
+                        atomic_write_text(_real, _cur)
+                    except Exception:
+                        pass
+                    print("  [Targeted Fix] ✅ critic patch applied.")
+
+        # -- Finalize: verify clean (luac + runtime) ------------------------
+        _clean, _luac_err = _luac_clean(_cur)
+        if not _clean:
+            print(f"  [Targeted Fix] ⚠ final file still not luac-clean: {_luac_err[:160]}")
+            continue
+        try:
+            from runtime_sim import run_runtime_sim as _run_rtsim2
+            ctx.runtime_errors = []
+            _rem2 = _run_rtsim2(ctx) or []
+            if not _rem2:
+                print(f"  [Targeted Fix] ✅ {_rel} is luac-clean AND runtime-clean.")
+                return True
+            print(f"  [Targeted Fix] ⚠ {len(_rem2)} runtime error(s) remain after targeted stage.")
+        except Exception as _e:
+            print(f"  [Targeted Fix] ⚠ runtime re-check failed: {_e}")
+
+    return False
+
+
 def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
     """Phase 6: Integration review, domain-aware fix cycle, insanity
     detection, reconciliation gate, and pre-flight check integration."""
@@ -2567,6 +2794,21 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         if (hasattr(sys.stdin, 'isatty') and sys.stdin.isatty()
                 and not bool(os.environ.get("MIDWAY_FORCED_DETERMINISTIC", ""))):
             ctx.user_declined_review = True
+
+        # -- High-Level Targeted Fix Stage (one-error-one-fix) -------------
+        # The tribunal (the SAME 9B model) can argue but cannot write correct
+        # code.  Before it, run a precise one-error-one-fix pass with the coder
+        # (9B), escalating to the 14B critic only if the coder leaves the file
+        # dirty.  If this produces a clean file, skip the tribunal entirely.
+        if _run_targeted_fix_stage(ctx):
+            ctx.review_verdict = "PASS"
+            ctx.output_parts.append(
+                "\n## ✅ Targeted Fix Stage — file cleaned deterministically\n"
+                "The one-error-one-fix stage produced a luac-clean and "
+                "runtime-clean file; the tribunal was skipped.\n"
+            )
+            print("  [Targeted Fix] ✅ File clean — skipping tribunal.")
+            return ctx
 
         # Escalate to the appellate court (TRIBUNAL) for a binding verdict.
         # First run the bounded tribunal↔coder debate (argue until consensus);
