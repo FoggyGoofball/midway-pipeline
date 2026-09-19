@@ -889,6 +889,91 @@ def call_ollama_streamed(
     _last_paged_cache = dict(paging.paged_in_cache)
 
 
+# ===========================================================================
+#  Repetition Loop Guard (mid-stream)
+# ===========================================================================
+# Small models (qwen3.5:9b at low temperature) periodically fall into
+# degenerate repetition loops: one line, or a short block, repeated
+# indefinitely.  Static repeat_penalty/repeat_last_n cannot reliably break
+# these "attractor" loops (attempt 13: an 8-line TODO checklist streamed for
+# 10+ minutes).  This guard watches the streamed-text tail and, on detection,
+# abandons the in-flight stream, warms the temperature, and restarts the call.
+_LOOP_TAIL_CHARS = 3200         # only the last N chars are scanned (bounded cost)
+_LOOP_TAIL_LINES = 64           # max non-blank lines considered at the tail
+_LOOP_MAX_RETRIES = 2           # warm retries after the initial attempt
+_LOOP_WARM_STEP = 0.2           # temperature increase per retry
+_LOOP_MIN_LINE_LEN = 8          # ignore trivial structural lines (end, }, ...)
+
+
+def _is_repetition_loop(text: str) -> tuple[int, int] | None:
+    """Detect a repeating unit at the tail of a generated stream.
+
+    Returns (unit_lines, repeat_count) if the last non-blank lines form a
+    repetition loop, else None.  Only substantive lines (len >= 8) count as
+    loop evidence so legitimate `end` / `)` runs don't false-trigger.
+    """
+    tail = text[-_LOOP_TAIL_CHARS:]
+    lines = [ln for ln in tail.splitlines() if ln.strip()]
+    if len(lines) < 6:
+        return None
+    lines = lines[-_LOOP_TAIL_LINES:]
+    for unit in range(1, 17):
+        min_repeats = 6 if unit == 1 else 3
+        need = unit * min_repeats
+        if len(lines) < need:
+            continue
+        last_unit = lines[-unit:]
+        if max((len(ln) for ln in last_unit), default=0) < _LOOP_MIN_LINE_LEN:
+            continue
+        ok = True
+        for r in range(1, min_repeats):
+            if lines[-(unit * (r + 1)):-(unit * r)] != last_unit:
+                ok = False
+                break
+        if ok:
+            return (unit, min_repeats)
+    return None
+
+
+def _stream_with_repetition_guard(
+    system: str, user: str, label: str, model: str, params: dict | None,
+) -> str:
+    """Collect a full stream, discarding and warm-retrying on repetition loops.
+
+    The consumer loops (call_ollama / call_ollama_with_messages) previously
+    accumulated every token blindly, so a mid-stream repetition loop ran to
+    num_predict (minutes) and poisoned the result.  This wrapper detects the
+    loop in the accumulated tail, abandons the in-flight stream, warms the
+    temperature, and restarts — up to _LOOP_MAX_RETRIES times.
+    """
+    cur_params = dict(params or {})
+    cur_temp = float(cur_params.get("temperature", 0.4))
+    last_text = ""
+    for attempt in range(_LOOP_MAX_RETRIES + 1):
+        acc_text = ""
+        looped = False
+        for token in call_ollama_streamed(system, user, label, model, params=cur_params):
+            acc_text += token
+            if _is_repetition_loop(acc_text):
+                looped = True
+                break
+        last_text = acc_text
+        if not looped:
+            return last_text
+        if attempt >= _LOOP_MAX_RETRIES:
+            break
+        new_temp = min(1.0, cur_temp + _LOOP_WARM_STEP)
+        print(
+            f"  [Loop Guard] ⚠ Repetition loop detected in '{label}' — "
+            f"discarding {len(last_text)} chars, warming {cur_temp:.2f}→{new_temp:.2f}, restarting."
+        )
+        sys.stdout.flush()
+        cur_params = dict(cur_params)
+        cur_params["temperature"] = new_temp
+        cur_temp = new_temp
+    return last_text
+
+
 def call_ollama(system: str, user: str, label: str, model: Optional[str] = None, params: Optional[dict] = None,
                 skip_pre_summarizer: bool = False) -> str:
     """Call Ollama's /api/chat endpoint. Returns the full response text.
@@ -1055,10 +1140,7 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
     print(f"  [VRAM Guard] num_ctx={_e_model_ctx}, user={len(user)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
-    full: list[str] = []
-    for token in call_ollama_streamed(system, user, label, model, params=_e_params):
-        full.append(token)
-    result = "".join(full)
+    result = _stream_with_repetition_guard(system, user, label, model, _e_params)
     ts_end = datetime.now().strftime('%H:%M:%S')
     print(f"  [{ts_end}] {paint('[END]', 'green')} [{paint(label, 'blue')}] Execution complete.")
     sys.stdout.flush()
@@ -1168,10 +1250,7 @@ def call_ollama_with_messages(
     print(f"  [VRAM Guard] num_ctx={_model_ctx}, user={len(user_text)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
-    full: list[str] = []
-    for token in call_ollama_streamed(system_text, user_text, label, model, params=_b_params):
-        full.append(token)
-    result = "".join(full)
+    result = _stream_with_repetition_guard(system_text, user_text, label, model, _b_params)
     ts_end = datetime.now().strftime('%H:%M:%S')
     print(f"  [{ts_end}] {paint('[END]', 'green')} [{paint(label, 'blue')}] Execution complete.")
     sys.stdout.flush()
