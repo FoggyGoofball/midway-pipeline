@@ -223,6 +223,17 @@ def _cooldown_and_retry(
 
 
 
+# P4 small-model codegen decoding profile (from the research manifest):
+# conservative sampling for deterministic, low-hallucination code output.
+# Applied as defaults; callers may override via params.
+_CODEGEN_DEFAULTS = {
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "top_k": 40,
+    "repeat_penalty": 1.05,
+}
+
+
 def _stream_messages_payload(
     messages: list[dict],
     model: str,
@@ -263,7 +274,8 @@ def _stream_messages_payload(
 
     # Inject domain-specific temperature defaults if not already set
     resolved_params = dict(params or {})
-    resolved_params.setdefault("temperature", 0.2)
+    for _k, _v in _CODEGEN_DEFAULTS.items():
+        resolved_params.setdefault(_k, _v)
 
     payload = {
         "model": model,
@@ -566,6 +578,10 @@ def call_ollama_streamed(
         ],
 
     }
+
+    # P4 small-model codegen decoding profile (conservative sampling).
+    for _k, _v in _CODEGEN_DEFAULTS.items():
+        payload["options"].setdefault(_k, _v)
 
     if params:
         # Hoist `keep_alive` to the top-level payload if the caller supplied it

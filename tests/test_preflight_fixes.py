@@ -46,6 +46,27 @@ class TestFixSpawnArities:
         assert n == 1
         assert 'MidwayPhysics.PoolAcquire("puck_pool", 0, 1, 2)' in fixed
 
+    def test_spawn_handle_first_drops_handle(self):
+        """SpawnStaticBox(tower_base, ...) — Spawn* returns a handle, never takes one."""
+        src = 'MidwayPhysics.SpawnStaticBox(tower_base, 0, 0, 0, 10, 10, 10)'
+        fixed, n = _fix_spawn_arities_in_text(src)
+        assert n == 1
+        assert 'MidwayPhysics.SpawnStaticBox(0, 0, 0, 10, 10, 10)' in fixed
+        assert 'tower_base' not in fixed
+
+    def test_spawn_capsule_handle_first_drops_handle(self):
+        src = 'MidwayPhysics.SpawnStaticCapsule(platform, 0, 8, 0, 1.5, 0.3)'
+        fixed, n = _fix_spawn_arities_in_text(src)
+        assert n == 1
+        assert 'MidwayPhysics.SpawnStaticCapsule(0, 8, 0, 1.5, 0.3)' in fixed
+
+    def test_spawn_numeric_first_still_truncates_last(self):
+        """A numeric first arg is a real lx — keep it and drop the trailing excess."""
+        src = 'MidwayPhysics.SpawnStaticBox(0, 0, 0, 1, 1, 1, 99)'
+        fixed, n = _fix_spawn_arities_in_text(src)
+        assert n == 1
+        assert 'MidwayPhysics.SpawnStaticBox(0, 0, 0, 1, 1, 1)' in fixed
+
 
 # ---------------------------------------------------------------------------
 # Line-aware anchor owner resolution

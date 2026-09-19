@@ -92,7 +92,15 @@ def _fix_spawn_arities_in_text(text: str):
             _tokens.append(_cur.strip())
         # Truncate over-arg calls to the MAX arity (not min), so optional args
         # (CreatePool's paramsTable, SpawnDynamic* mass) survive the repair.
-        _valid = _tokens[:_max_exp]
+        # Spawn* functions RETURN a handle and never TAKE one — the coder
+        # repeatedly prepends a phantom handle (`SpawnStaticBox(tower_base,
+        # lx, ly, ...)`), inflating the count by 1.  Drop that first arg rather
+        # than the trailing positional arg (which would corrupt the call).
+        if (_fn in _SPAWN_SIGS and _tokens
+                and re.fullmatch(r'[A-Za-z_]\w*', _tokens[0])):
+            _valid = _tokens[1:_max_exp + 1]
+        else:
+            _valid = _tokens[:_max_exp]
         if not _valid:
             continue
         _bad_call = _m.group(0) + _args + ")"
