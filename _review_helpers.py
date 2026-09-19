@@ -226,7 +226,7 @@ def _prune_fix_context(
         else:
             # Fallback: strip lifecycle invariants so the model sees only the
             # game-specific logic sections.
-            _stripped = _strip_lifecycle(last_good_output)
+            _stripped = _strip_todo_stubs(_strip_lifecycle(last_good_output))
             # Root-cause fix (task_9 death-spiral): collapsing the live file here
             # produced <VRAM_STUB> placeholders which the fix agent copied verbatim
             # into the SEARCH half of its patch. Those tags never exist in the real
@@ -576,5 +576,20 @@ def _strip_lifecycle(content: str) -> str:
 
     return content.strip()
 
+
+def _strip_todo_stubs(content: str) -> str:
+    """Remove `-- TODO ...` placeholder lines from a file shown to the fix coder.
+
+    These visible TODO stubs are the primary "echo" material: a small model
+    shown a skeleton full of `-- TODO [TASK_N]: ...` placeholders tends to
+    re-emit the whole skeleton instead of emitting a surgical SEARCH/REPLACE.
+    Strip them so the coder sees real code (or a clean scaffold), not a list
+    of unimplemented anchors begging to be copied back.
+    """
+    if not content:
+        return content
+    content = re.sub(r'^[ \t]*--\s*TODO\b.*$', '', content, flags=re.MULTILINE)
+    content = re.sub(r'\n{3,}', '\n\n', content)
+    return content.strip()
 
 
