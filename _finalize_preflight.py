@@ -700,6 +700,15 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
                                     _struct_repaired = True
                             except Exception:
                                 pass
+                            # Fix #24: neutralize truncated `local lx)` declarations
+                            # (a `local` with a dangling `)` and no `=`) — the
+                            # structural scanner can't repair this class, so apply
+                            # the dedicated fix before the balancer + luac gate.
+                            try:
+                                from _post_process_lua import _strip_broken_local_declarations
+                                _bal_src = _strip_broken_local_declarations(_bal_src)
+                            except Exception:
+                                pass
                             _bal_out, _bal_actions = balance_lua_blocks(_bal_src)
                             if _struct_repaired or _bal_actions:
                                 import tempfile as _bal_tf_mod

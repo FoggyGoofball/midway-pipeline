@@ -262,6 +262,19 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             "C++ uses the :: scope operator. "
             "Replace MidwayInput.Register(...) with MidwayInput::Register(...) etc.",
         ),
+        # C19: Unknown MidwayInput method (phantom API).  The Lua bridge exposes
+        # only IsActionDown(action) and IsKeyDown(name); any other MidwayInput.*
+        # method is a hallucination (e.g. SetActionState) that fails at runtime.
+        (
+            "Lua",
+            re.compile(
+                r'\bMidwayInput\.(?!IsActionDown\s*\(|IsKeyDown\s*\()[A-Za-z_]\w*\s*\(',
+                re.IGNORECASE,
+            ),
+            "unknown MidwayInput method",
+            "MidwayInput only exposes IsActionDown(action) and IsKeyDown(name). "
+            "Replace with one of those (e.g. MidwayInput.IsActionDown(\"fire\")).",
+        ),
         # C16: require() referencing a wrapper or non-existent attraction file.
         # Attractions are loaded by AttractionManager, not via Lua require().
         (
