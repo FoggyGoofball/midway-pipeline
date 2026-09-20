@@ -40,6 +40,7 @@ from pipeline import (
     _normalize_fix_fingerprint, check_insanity_similarity,
     REVIEWER_MODEL as _REVIEWER_MODEL,
     EXECUTION_MODEL as _EXECUTION_MODEL,
+    CODER_MODEL,
 )
 from _helpers_exec import compile_project
 from ollama_client import is_fatal_ollama_error as _is_fatal_ollama
@@ -1005,7 +1006,12 @@ def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
 
 
 _TARGETED_FIX_MAX = 6                # max one-error-one-fix coder calls per stage
-_TARGETED_CRITIC_MODEL = "phi3:14b"  # fresh-eyes critic, used only as a fallback
+# Fresh-eyes critic = the SAME 9B coder at higher temperature.  phi3:14b was
+# CPU-only (106s TTFT), ignored the SEARCH/REPLACE format (emitted
+# <<<SEARCH>>> + prose + hallucinated APIs), and is rarely reached anyway — the
+# warm-9B pass gives fresh eyes via sampling without a costly model swap.
+_TARGETED_CRITIC_MODEL = CODER_MODEL
+_TARGETED_CRITIC_TEMP = 0.7
 
 _FIX_TEMP_BASE = 0.4
 _FIX_TEMP_STEP = 0.1
@@ -1108,8 +1114,9 @@ def _run_critic_pass(ctx, file_text: str, errors: list[str]) -> str:
         f"## Current file\n```lua\n{file_text}\n```\n"
     )
     try:
-        return call_ollama(_sys, _user, "Critic Pass (14B)", _TARGETED_CRITIC_MODEL,
-                           params={"num_predict": 2048}, skip_pre_summarizer=True)
+        return call_ollama(_sys, _user, "Critic Pass (warm 9B)", _TARGETED_CRITIC_MODEL,
+                           params={"num_predict": 2048, "temperature": _TARGETED_CRITIC_TEMP},
+                           skip_pre_summarizer=True)
     except Exception as _e:
         print(f"  [Critic Pass] ⚠ call failed: {_e}")
         return ""
