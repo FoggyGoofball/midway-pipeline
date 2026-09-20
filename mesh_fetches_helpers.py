@@ -601,7 +601,26 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
         )
 
         print(f"  [Blueprint Enricher] Attempt {_attempt}/3: sending {_expected_count} flat task(s)...")
-        raw_output = call_ollama(DIRECTOR_SYSTEM, enrich_prompt, "Blueprint Enricher", DIRECTOR_MODEL)
+        if _enrich_scope_mode == "NEW_ATTRACTION" and _enrich_canonical_file:
+            # Deterministic enrichment: the 8B enricher word-salads the metadata
+            # (thesaurus titles, slash-separated Input/Output soup) and drops
+            # tasks.  For NEW_ATTRACTION every field is forced (domain=Lua,
+            # File=canonical), so skip the LLM and emit the exact headers the
+            # parser expects, straight from the flat blueprint list.  This also
+            # feeds the downstream semantic anchor matcher the CLEAN blueprint
+            # title instead of the 8B's synonym dump.
+            print("  [Blueprint Enricher] NEW_ATTRACTION → deterministic enrichment (no LLM).")
+            raw_output = "\n".join(
+                f"### Task {_i}: [Lua] - {_title}\n"
+                f"DependsOn: {'None' if _i == 1 else _i - 1}\n"
+                f"Inputs: None\n"
+                f"Outputs: None\n"
+                f"Hooks: None\n"
+                f"File: {_enrich_canonical_file}\n"
+                for _i, _title in enumerate(flat_tasks, start=1)
+            )
+        else:
+            raw_output = call_ollama(DIRECTOR_SYSTEM, enrich_prompt, "Blueprint Enricher", DIRECTOR_MODEL)
 
         # Parse the enriched output.  The llama3.1:8b enricher routinely OMITS
         # the "- <title>" suffix, puts DependsOn on its OWN line, and appends
