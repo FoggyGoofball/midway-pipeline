@@ -410,6 +410,7 @@ def _run_preflight_checks(ctx: PipelineContext) -> PipelineContext:
             )
             print(f"  [Coverage Check] 📋 {len(_gaps)} design checklist item(s) appear missing.")
         else:
+            ctx.coverage_gaps = []  # reset stale gap list when fully covered
             print("  [Coverage Check] ✅ All design checklist items appear covered.")
 
     # Platform-aware compilation check

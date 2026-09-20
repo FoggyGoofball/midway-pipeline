@@ -243,9 +243,14 @@ def _prune_fix_context(
                     _hi = min(len(_live_lines), _anchor_idx + 20)
                     _stripped = "\n".join(_live_lines[_lo:_hi])
                 else:
-                    _stripped = _strip_todo_stubs(_strip_lifecycle(last_good_output))
+                    _bucket = _task_lifecycle_bucket(task_obj)
+                    _stripped = _strip_todo_stubs(_slice_lifecycle_function(last_good_output, _bucket))
             else:
-                _stripped = _strip_todo_stubs(_strip_lifecycle(last_good_output))
+                # Anchor consumed/missing — slice the enclosing lifecycle function
+                # (a bounded window) instead of the whole file, so the coder can't
+                # echo the skeleton back (the task_9 whole-file echo deadlock).
+                _bucket = _task_lifecycle_bucket(task_obj)
+                _stripped = _strip_todo_stubs(_slice_lifecycle_function(last_good_output, _bucket))
             # Root-cause fix (task_9 death-spiral): collapsing the live file here
             # produced <VRAM_STUB> placeholders which the fix agent copied verbatim
             # into the SEARCH half of its patch. Those tags never exist in the real
@@ -610,5 +615,63 @@ def _strip_todo_stubs(content: str) -> str:
     content = re.sub(r'^[ \t]*--\s*TODO\b.*$', '', content, flags=re.MULTILINE)
     content = re.sub(r'\n{3,}', '\n\n', content)
     return content.strip()
+
+
+def _task_lifecycle_bucket(task_obj) -> str:
+    """Map a task to its lifecycle bucket (module/onloadstatic/onload/onstep/
+    onunload) from its anchor marker, falling back to the canonical task-number
+    layout.  Extra anchors (TASK_12+) default to 'onstep' where game logic lives.
+    """
+    _marker = getattr(task_obj, 'anchor_marker', None) or ""
+    if not _marker and isinstance(task_obj, dict):
+        _marker = task_obj.get("anchor_marker") or ""
+    try:
+        from _anchors import CANONICAL_ANCHORS
+        for _b, _loc, _m in CANONICAL_ANCHORS:
+            if _m.strip() == _marker.strip():
+                return _b
+    except Exception:
+        pass
+    _tid = str(getattr(task_obj, 'task_id', '') or '')
+    _m = re.search(r'(\d+)', _tid)
+    if _m:
+        _n = int(_m.group(1))
+        if _n <= 2:
+            return "module"
+        if _n == 3:
+            return "onloadstatic"
+        if _n <= 6:
+            return "onload"
+        if _n <= 10:
+            return "onstep"
+        if _n == 11:
+            return "onunload"
+        return "onstep"
+    return "onstep"
+
+
+_LIFECYCLE_FN_RE = {
+    "onloadstatic": re.compile(r'function\s+OnLoadStatic\s*\(.*?\nend\s*\n?', re.DOTALL),
+    "onload": re.compile(r'function\s+OnLoad\s*\(.*?\nend\s*\n?', re.DOTALL),
+    "onunload": re.compile(r'function\s+OnUnload\s*\(.*?\nend\s*\n?', re.DOTALL),
+    "onstep": re.compile(r'MidwayPhysics\.OnStep\s*\(\s*function\s*\(.*?\n\s*end\s*\)', re.DOTALL),
+}
+
+
+def _slice_lifecycle_function(content: str, bucket: str) -> str:
+    """Slice the lifecycle function for *bucket* out of Lua source.  Returns the
+    function text (a bounded window) so the fix coder sees a targeted region,
+    not a whole file to echo back.  Returns the full content when nothing matches.
+    """
+    if not content:
+        return content
+    if bucket == "module":
+        _m = re.search(r'\nfunction\s+', content)
+        return content[:_m.start()] if _m else content
+    _pat = _LIFECYCLE_FN_RE.get(bucket)
+    if not _pat:
+        return content
+    _m = _pat.search(content)
+    return _m.group(0) if _m else content
 
 
