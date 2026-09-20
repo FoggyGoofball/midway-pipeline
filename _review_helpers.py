@@ -224,9 +224,28 @@ def _prune_fix_context(
                 + isolated_context
             )
         else:
-            # Fallback: strip lifecycle invariants so the model sees only the
-            # game-specific logic sections.
-            _stripped = _strip_todo_stubs(_strip_lifecycle(last_good_output))
+            # Prefer a surgical ~28-line slice around the task's anchor so the
+            # coder sees a targeted SEARCH target, not a whole skeleton to echo
+            # back (the whole-file echo deadlock that tripped the task_9 circuit
+            # breaker).  Fall back to the stripped whole file when the anchor is
+            # absent or already consumed by a prior task.
+            _fix_anchor = getattr(task_obj, 'anchor_marker', None) or ""
+            if not _fix_anchor and isinstance(task_obj, dict):
+                _fix_anchor = task_obj.get("anchor_marker") or ""
+            if _fix_anchor and _fix_anchor in last_good_output:
+                _live_lines = last_good_output.splitlines()
+                _anchor_idx = next(
+                    (_i for _i, _ln in enumerate(_live_lines) if _fix_anchor in _ln),
+                    None,
+                )
+                if _anchor_idx is not None:
+                    _lo = max(0, _anchor_idx - 8)
+                    _hi = min(len(_live_lines), _anchor_idx + 20)
+                    _stripped = "\n".join(_live_lines[_lo:_hi])
+                else:
+                    _stripped = _strip_todo_stubs(_strip_lifecycle(last_good_output))
+            else:
+                _stripped = _strip_todo_stubs(_strip_lifecycle(last_good_output))
             # Root-cause fix (task_9 death-spiral): collapsing the live file here
             # produced <VRAM_STUB> placeholders which the fix agent copied verbatim
             # into the SEARCH half of its patch. Those tags never exist in the real

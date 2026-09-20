@@ -1070,6 +1070,63 @@ def _enforce_one_anchor_per_task(ctx: PipelineContext) -> None:
     if not _lua_tasks:
         return
 
+    # ── Feature-coverage expansion ──────────────────────────────────────────
+    # The Architect's feature_checklist may name mechanics the blueprint folded
+    # together or dropped entirely (e.g. "Shock Plates hazard", "Sound Dampeners
+    # audio mute").  Deterministically append ONE task per uncovered checklist
+    # feature so every feature gets its own anchor and is actually generated —
+    # closing the gap between the checklist (coverage gate) and the task list.
+    _design_exp = getattr(ctx, 'attraction_design', None)
+    _checklist = getattr(_design_exp, 'feature_checklist', None) if _design_exp is not None else None
+    if _checklist:
+        _stop = {'must', 'should', 'that', 'with', 'this', 'from', 'have', 'when',
+                 'been', 'into', 'each', 'using', 'every', 'only', 'per'}
+        _existing_titles = "\n".join(
+            str(t.get("title") or "").lower() for t in _lua_tasks
+        )
+        _tf_default = _lua_tasks[0].get("target_file") or ""
+        _existing_ids = [int(t.get("id")) for t in (ctx.tasks_list or [])
+                         if str(t.get("id") or "").isdigit()]
+        _next_id = (max(_existing_ids) + 1) if _existing_ids else (len(CANONICAL_ANCHORS) + 1)
+        _added_exp = 0
+        for _feat in _checklist:
+            _feat_s = str(_feat)
+            _kws = [w for w in _re_enf.findall(r'\b\w{4,}\b', _feat_s.lower()) if w not in _stop]
+            _covered = bool(_kws) and any(kw in _existing_titles for kw in _kws[:3])
+            if _covered:
+                continue
+            _new_id = str(_next_id + _added_exp)
+            _new_task = {
+                "id": _new_id,
+                "domain": "Lua",
+                "title": _feat_s,
+                "depends_on": [],
+                "inputs": [],
+                "outputs": [],
+                "hooks": ["onstep"],
+                "target_file": _tf_default,
+                "anchor_marker": None,
+                "_anchor_marker": None,
+            }
+            _lua_tasks.append(_new_task)
+            ctx.tasks_list.append(_new_task)
+            try:
+                _tobj = Task(
+                    agent="Lua",
+                    spec=_feat_s,
+                    task_id=f"task_{_new_id}",
+                    parent=None,
+                    target_file=_tf_default,
+                    anchor_marker=None,
+                )
+                ctx.task_map[f"task_{_new_id}"] = _tobj
+            except Exception:
+                pass
+            _added_exp += 1
+        if _added_exp:
+            print(f"  [Anchor Invariant] ✓ Appended {_added_exp} feature-coverage task(s) "
+                  f"(checklist features missing from the blueprint).")
+
     # Canonical markers keyed by marker string → bucket (single source of truth).
     _marker_bucket = {_m.strip(): _b for (_b, _loc, _m) in CANONICAL_ANCHORS}
     _canonical_markers = list(_marker_bucket.keys())
