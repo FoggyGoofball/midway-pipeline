@@ -579,6 +579,21 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
             f"6. You MUST output exactly {_expected_count} task headers — one per flat task.\n"
             f"   Do NOT merge multiple flat tasks into one header, and do NOT split one\n"
             f"   flat task into multiple headers. 1 flat task = 1 header.\n"
+            f"7. EXACT FORMAT — each task MUST be exactly these 6 lines, nothing else.\n"
+            f"   Do NOT add tags like [MATH_HEAVY] or [QUERY:...], and do NOT write prose:\n"
+            f"### Task <N>: [Lua] - <title>\n"
+            f"DependsOn: <Task IDs comma-separated, or None>\n"
+            f"Inputs: <comma list or None>\n"
+            f"Outputs: <comma list or None>\n"
+            f"Hooks: <hook name or None>\n"
+            f"File: attractions/strongman/strongman.lua\n"
+            f"Example:\n"
+            f"### Task 1: [Lua] - Define module-level constants\n"
+            f"DependsOn: None\n"
+            f"Inputs: None\n"
+            f"Outputs: None\n"
+            f"Hooks: None\n"
+            f"File: attractions/strongman/strongman.lua\n"
             f"{_enrich_scope_rule}"
             f"{_enrich_ref_template}"
             f"FLAT BLUEPRINT TASKS:\n" +
@@ -588,36 +603,58 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
         print(f"  [Blueprint Enricher] Attempt {_attempt}/3: sending {_expected_count} flat task(s)...")
         raw_output = call_ollama(DIRECTOR_SYSTEM, enrich_prompt, "Blueprint Enricher", DIRECTOR_MODEL)
 
-        # Parse the enriched output using the same task_regex the Director uses
-        task_regex = r"### Task ([a-zA-Z0-9]+):\s*\[([^\]]+)\]\s*[-—–]\s*(.+?)(?:\s*\(DependsOn:\s*(.+?)\))?\s*$"
+        # Parse the enriched output.  The llama3.1:8b enricher routinely OMITS
+        # the "- <title>" suffix, puts DependsOn on its OWN line, and appends
+        # stray tags ([MATH_HEAVY], [QUERY:DOC:...]).  Match only the stable
+        # "### Task <id>: [<domain>]" prefix and recover title/depends from the
+        # following lines and the flat blueprint task list below.
+        task_regex = re.compile(r"### Task ([a-zA-Z0-9]+):\s*\[([^\]]+)\]")
         enriched = []
         lines = raw_output.splitlines()
+        # Flat task titles keyed by numeric index, for title backfill when the
+        # model drops the "- <title>" suffix from the header line.
+        _flat_titles: dict = {}
+        for _fi, _ft in enumerate(flat_tasks, start=1):
+            _t = re.sub(r"^(?:Task\s+)?\d+\s*:\s*", "", _ft).strip()
+            if _t:
+                _flat_titles[_fi] = _t
         for idx, line in enumerate(lines):
-            match = re.match(task_regex, line.strip())
+            match = task_regex.match(line.strip())
             if not match:
                 continue
             task_id = match.group(1)
             domain = match.group(2).strip()
-            title = match.group(3).strip()
-            depends_on_str = match.group(4)
+            title = ""
             depends_on = []
-            if depends_on_str and depends_on_str.strip().lower() != "none":
-                for dep in re.split(r',\s*', depends_on_str.strip()):
-                    dep_match = re.search(r'Task\s*([a-zA-Z0-9]+)', dep, re.IGNORECASE)
-                    if dep_match:
-                        depends_on.append(dep_match.group(1))
 
-            # Extract Inputs/Outputs/Hooks/File from following lines
+            # Extract DependsOn/Inputs/Outputs/Hooks/File from following lines
             inputs = []
             outputs = []
             hooks = []
             target_file = None
-            for offset in range(1, 6):
+            for offset in range(1, 8):
                 scan_idx = idx + offset
                 if scan_idx >= len(lines):
                     break
                 sl = lines[scan_idx].strip()
-                if re.match(r"Inputs\s*:", sl, re.IGNORECASE):
+                if re.match(r"DependsOn\s*:", sl, re.IGNORECASE):
+                    raw_d = re.sub(r"DependsOn\s*:\s*", "", sl, flags=re.IGNORECASE).strip()
+                    if raw_d and raw_d.lower() != "none":
+                        for dep in re.split(r',\s*', raw_d):
+                            dep = dep.strip()
+                            if not dep:
+                                continue
+                            dep_match = re.search(r'Task\s*([a-zA-Z0-9]+)', dep, re.IGNORECASE)
+                            if dep_match:
+                                dep_id = dep_match.group(1)
+                            else:
+                                # The model emits bare numbers ("DependsOn: 1,2")
+                                # far more often than "Task 1, Task 2".  Accept both.
+                                _m2 = re.fullmatch(r'([a-zA-Z0-9]+)', dep)
+                                dep_id = _m2.group(1) if _m2 else ""
+                            if dep_id and dep_id not in depends_on:
+                                depends_on.append(dep_id)
+                elif re.match(r"Inputs\s*:", sl, re.IGNORECASE):
                     raw = re.sub(r"Inputs\s*:\s*", "", sl, flags=re.IGNORECASE)
                     if raw.strip().lower() != "none":
                         inputs = [v.strip() for v in raw.split(",") if v.strip()]
@@ -643,6 +680,14 @@ def _enrich_blueprint_tasks(ctx, blueprint_path) -> list:
                         target_file = raw
                 if inputs and outputs and hooks and target_file is not None:
                     break
+
+            # -- Title backfill: the enricher often drops the "- <title>" suffix --
+            if not title:
+                try:
+                    _title_idx = int(task_id)
+                except (TypeError, ValueError):
+                    _title_idx = 0
+                title = _flat_titles.get(_title_idx, "")
 
             # -- Canonical target_file backfill (monolithic collapse enabler) --
             # The enricher model frequently emits "Outputs: strongman.lua" instead
