@@ -427,6 +427,26 @@ def _add_midwayphysics_prefix(content: str) -> str:
             modifications += count
             content = new_content
 
+    # Data-driven prefixing for the OTHER flat bridge namespaces.  The coder
+    # writes bare `IsActionDown("fire")` / `AwardTickets(n)` which are global
+    # nils in the runtime sandbox.  Add one dict entry per future namespace.
+    _namespace_bare_symbols = {
+        "MidwayInput": frozenset({"IsActionDown", "IsKeyDown"}),
+        "Engine": frozenset({"AwardTickets", "AwardTokens",
+                             "GetTickets", "GetTokens", "GetStreak"}),
+    }
+    for _ns, _ns_symbols in _namespace_bare_symbols.items():
+        for _sym in sorted(_ns_symbols, key=len, reverse=True):
+            _ns_pat = re.compile(
+                r'(?<!' + re.escape(_ns) + r'\.)(?<!\.)(?<![\w.])'
+                r'(?<!function\s)(?<!local\s)\b'
+                + re.escape(_sym) + r'\s*\('
+            )
+            _new, _n = _ns_pat.subn(f'{_ns}.{_sym}(', content)
+            if _n:
+                content = _new
+                print(f"  [Post-Process Fix #6] Added {_ns}. prefix to {_n} bare call(s)")
+
     if modifications:
         print(f"  [Post-Process Fix #6] Added MidwayPhysics. prefix to {modifications} call(s) (from {len(symbols)} contract symbols)")
     return content

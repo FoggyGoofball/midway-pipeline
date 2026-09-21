@@ -365,6 +365,44 @@ end
         result = _add_midwayphysics_prefix(src)
         assert result == src
 
+    def test_prefixes_bare_midwayinput(self):
+        src = """function OnLoad()
+    MidwayPhysics.OnStep(function(dt)
+        if IsActionDown("fire") then
+            print("swing")
+        end
+        if IsKeyDown("space") then
+            print("jump")
+        end
+    end)
+end
+"""
+        result = _add_midwayphysics_prefix(src)
+        assert "MidwayInput.IsActionDown(\"fire\")" in result
+        assert "MidwayInput.IsKeyDown(\"space\")" in result
+
+    def test_does_not_double_prefix_midwayinput(self):
+        src = """function OnLoad()
+    MidwayPhysics.OnStep(function(dt)
+        MidwayInput.IsActionDown("fire")
+    end)
+end
+"""
+        result = _add_midwayphysics_prefix(src)
+        assert result.count("MidwayInput.IsActionDown") == 1
+
+    def test_prefixes_bare_engine_economy(self):
+        src = """function OnStep(dt)
+    AwardTickets(1)
+    AwardTokens(2)
+    local s = GetStreak()
+end
+"""
+        result = _add_midwayphysics_prefix(src)
+        assert "Engine.AwardTickets(1)" in result
+        assert "Engine.AwardTokens(2)" in result
+        assert "Engine.GetStreak()" in result
+
 
 # ==============================================================================
 #  Fix #7: SEARCH-exactly-once gate
