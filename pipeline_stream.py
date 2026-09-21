@@ -101,7 +101,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
     import ollama_client as _ollama_client
     _original_call_streamed = getattr(_ollama_client, 'call_ollama_streamed', None)
 
-    def _instrumented_call_streamed(system: str, user: str, label: str, model=None, params=None):
+    def _instrumented_call_streamed(system: str, user: str, label: str, model=None, params=None, messages=None):
         telemetry.start_time = time.time()
         telemetry.first_token_time = None
         telemetry.token_count = 0
@@ -110,7 +110,7 @@ def _run_pipeline_worker(prompt: str, checkpoint_id: str,
         _status.set_current_call(telemetry.model_name, telemetry.label)
 
         try:
-            gen = _original_call_streamed(system, user, label, model, params)
+            gen = _original_call_streamed(system, user, label, model, params, messages=messages)
             for tok in gen:
                 yield tok
         finally:
