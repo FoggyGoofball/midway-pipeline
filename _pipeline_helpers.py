@@ -53,6 +53,8 @@ from _helpers_io import (
     find_relevant_files,
     search_memory,
     build_blueprint_context_pack,
+    get_planning_docs,
+    save_chat_plan,
     AGENT_FILE_TOOLS_PROMPT,
     _read_single_file,
     handle_file_read,
@@ -160,6 +162,8 @@ __all__ = [
     "find_relevant_files",
     "search_memory",
     "build_blueprint_context_pack",
+    "get_planning_docs",
+    "save_chat_plan",
 
     # File tools
     "AGENT_FILE_TOOLS_PROMPT",

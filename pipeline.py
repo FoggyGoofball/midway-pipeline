@@ -211,6 +211,7 @@ from _pipeline_helpers import (
     recursive_librarian, get_project_state,
     get_available_domains_text, get_unavailable_domains_text,
     build_director_prompt, curate_project_structure,
+    get_planning_docs, save_chat_plan,
     AGENT_FILE_TOOLS_PROMPT, handle_file_read, handle_file_list,
     find_relevant_files, format_file_context,
     generate_failure_report,
@@ -551,9 +552,25 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
                 )
         except Exception:
             pass
+        try:
+            _plan_docs_chat = get_planning_docs(PROJECT_ROOT)
+            if _plan_docs_chat.strip():
+                chat_context_parts.append(
+                    "The following user-authored planning docs exist. "
+                    "Reference them when relevant to the user's request.\n\n"
+                    + _plan_docs_chat
+                )
+        except Exception:
+            pass
         enriched_input = "\n\n---\n\n".join(chat_context_parts)
 
         response = call_ollama(CHAT_SYSTEM, enriched_input, "Chat", CHAT_MODEL)
+        # Persist planning-oriented chat answers so a later build run can
+        # carry them out systematically.
+        try:
+            save_chat_plan(user_prompt, response, PROJECT_ROOT)
+        except Exception:
+            pass
         ctx.final_output = response
         return response
 
@@ -594,6 +611,14 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
                 analyst_context_parts.append(
                     "## Project Structure\n" + structure
                 )
+        except Exception:
+            pass
+
+        # 4. User-authored planning docs
+        try:
+            _plan_docs_analyst = get_planning_docs(PROJECT_ROOT)
+            if _plan_docs_analyst.strip():
+                analyst_context_parts.append(_plan_docs_analyst)
         except Exception:
             pass
 

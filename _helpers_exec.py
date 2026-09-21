@@ -2247,4 +2247,21 @@ def build_director_prompt(all_domains: dict = None, user_prompt: str = "", proje
             except Exception:
                 pass
 
+    # -- User-authored planning docs ------------------------------------
+    # A feature planned conversationally (saved by save_chat_plan) must be
+    # visible to the Director so it decomposes THAT plan, not a fresh guess.
+    if project_root:
+        try:
+            from _helpers_io import get_planning_docs as _gpd_exec
+            _plan_block_exec = _gpd_exec(project_root)
+            if _plan_block_exec:
+                prompt += (
+                    "\n\n## USER-AUTHORED PLAN (carry this out systematically)\n"
+                    "The following plan was saved from a prior planning conversation. "
+                    "Decompose THIS plan into tasks; do not invent a different scope.\n"
+                    + _plan_block_exec
+                )
+        except Exception:
+            pass
+
     return prompt

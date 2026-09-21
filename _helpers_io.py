@@ -826,6 +826,100 @@ def search_memory(query: str = "", project_root: Path = None) -> str:
     return "\n\n".join(results)
 
 
+# -- User-Authored Planning Docs -------------------------------------------
+# The conversational planning path ("plan feature X") persists its answer via
+# save_chat_plan() and every agent entry point reads it back via
+# get_planning_docs() so a saved plan is carried out systematically.
+
+_PLANNING_DIR = "plans"
+
+_PLANNING_INTENT_PATTERNS = [
+    r'\bplan\b', r'\bdesign\b', r'\broadmap\b', r'\bstrategy\b',
+    r'\bblueprint\b', r'\bspec\b', r'\barchitecture\b', r'\bbreakdown\b',
+    r'\bapproach\b', r'\bscaffold\b',
+]
+
+
+def _planning_slug(user_prompt: str) -> str:
+    """Derive a filesystem-safe slug from a planning prompt."""
+    _stop = {
+        "plan", "design", "roadmap", "strategy", "blueprint", "spec",
+        "architecture", "breakdown", "approach", "scaffold", "feature",
+        "attraction", "booth", "game", "create", "build", "make", "write",
+        "help", "with", "the", "this", "that", "for", "and", "out", "your",
+        "new", "me", "us", "please", "refer", "carry",
+    }
+    _nouns = [w for w in re.findall(r'\b[a-z]{4,}\b', (user_prompt or "").lower())
+              if w not in _stop]
+    if not _nouns:
+        return "feature_plan"
+    return re.sub(r'[^\w]+', '_', "_".join(_nouns[:3])).strip('_') or "feature_plan"
+
+
+def save_chat_plan(user_prompt: str, response: str, project_root: Path = None) -> str:
+    """Persist a planning-oriented chat answer as a planning doc.
+
+    Returns the saved path ("" when the prompt is not a planning request or
+    the answer is too short to be a real plan).
+    """
+    if not project_root or not response or not response.strip() or not user_prompt:
+        return ""
+    pl = user_prompt.lower().strip()
+    if pl.endswith("?"):
+        return ""
+    if not any(re.search(p, pl) for p in _PLANNING_INTENT_PATTERNS):
+        return ""
+    if len(response.strip()) < 200:
+        return ""
+    from datetime import datetime as _dt
+    _slug = _planning_slug(user_prompt)
+    plans_dir = Path(project_root) / "docs" / _PLANNING_DIR
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    _path = plans_dir / f"{_slug}_PLAN.md"
+    _header = (
+        f"<!-- Saved from planning conversation, {_dt.now().strftime('%Y-%m-%d')}. -->\n"
+        f"# Plan: {user_prompt.strip()[:160]}\n\n"
+    )
+    atomic_write_text(_path, _header + response.strip() + "\n")
+    print(f"  [Planning] \U0001f4be Saved plan: {_path}")
+    return str(_path)
+
+
+def get_planning_docs(project_root: Path = None, max_chars: int = 6000) -> str:
+    """Collect user-authored planning docs (docs/plans/*.md) into one block.
+
+    Returns "" when none exist.  Used by the blueprint, director, analyst and
+    chat entry points so a saved plan is visible across every build path
+    (NEW_ATTRACTION, MODIFY_ATTRACTION, and GENERAL).
+    """
+    if not project_root:
+        return ""
+    plans_dir = Path(project_root) / "docs" / _PLANNING_DIR
+    if not plans_dir.is_dir():
+        return ""
+    _files = sorted(plans_dir.glob("*.md"), key=lambda p: p.name.lower())
+    if not _files:
+        return ""
+    _blocks: list[str] = []
+    _budget = max_chars
+    for _p in _files:
+        try:
+            _text = _p.read_text(encoding="utf-8", errors="replace").strip()
+        except Exception:
+            continue
+        if not _text:
+            continue
+        if _budget <= 0:
+            break
+        if len(_text) > _budget:
+            _text = _text[:_budget] + "\n[... plan truncated ...]"
+        _blocks.append(f"### {_p.name}\n{_text}")
+        _budget -= len(_text)
+    if not _blocks:
+        return ""
+    return "## Planning Docs (user-authored)\n" + "\n\n".join(_blocks)
+
+
 # -- Blueprint Context Pack -------------------------------------------------
 
 def build_blueprint_context_pack(
@@ -887,6 +981,10 @@ def build_blueprint_context_pack(
             parts.append(ast_snip)
         else:
             parts.append(ast_summary)
+
+    _plan_docs = get_planning_docs(project_root)
+    if _plan_docs:
+        parts.append(_plan_docs)
 
     return "\n\n".join(parts) if parts else "(no project context available)"
 
