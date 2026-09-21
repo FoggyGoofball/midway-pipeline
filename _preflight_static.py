@@ -41,6 +41,15 @@ def _balanced_spawn_args(text: str, start_pos: int) -> str:
 # Spawn-only pass could never catch.
 _ARITY_SIGS = {**_SPAWN_SIGS, **_BODY_SIGS}
 
+# Body APIs whose trailing arguments default safely to 0 when the coder
+# under-supplies them (e.g. the recurring 3-arg `ApplyImpulse(handle, ix, iy)`
+# is missing iz).  Spawn* is deliberately excluded — missing geometry is not
+# 0-safe, and GetPosition/GetVelocity take a single handle arg.
+_PAD_SAFE_ARITY = frozenset({
+    "ApplyImpulse", "ApplyAngularImpulse",
+    "SetLinearVelocity", "AddLinearVelocity", "MoveKinematic",
+})
+
 
 def _fix_spawn_arities_in_text(text: str):
     """Deterministically truncate over-arg MidwayPhysics.* calls down to the
@@ -73,8 +82,8 @@ def _fix_spawn_arities_in_text(text: str):
         _actual = _commas + 1
         if _min_exp <= _actual <= _max_exp:
             continue
-        if _actual < _min_exp:
-            continue  # under-arg — leave for the LLM fix loop
+
+        # Parse top-level argument tokens once (shared by pad/truncate paths).
         _depth = 0
         _tokens = []
         _cur = ""
@@ -90,6 +99,24 @@ def _fix_spawn_arities_in_text(text: str):
             _cur += _ch
         if _cur.strip():
             _tokens.append(_cur.strip())
+
+        _bad_call = _m.group(0) + _args + ")"
+
+        if _actual < _min_exp:
+            # Under-arg: pad with `0` for BODY APIs whose trailing vector
+            # components / dt default safely to 0.  The coder repeatedly emits
+            # 3-arg ApplyImpulse(handle, ix, iy) and the LLM fix loop can't
+            # repair it — pad the missing iz so the arity gate clears
+            # deterministically (attempt 25).  Never pad Spawn* (not 0-safe).
+            if _fn not in _PAD_SAFE_ARITY:
+                continue
+            _tokens += ["0"] * (_min_exp - len(_tokens))
+            _good_call = f"MidwayPhysics.{_fn}({', '.join(_tokens)})"
+            if _bad_call in _fixed:
+                _fixed = _fixed.replace(_bad_call, _good_call, 1)
+                _count += 1
+            continue
+
         # Truncate over-arg calls to the MAX arity (not min), so optional args
         # (CreatePool's paramsTable, SpawnDynamic* mass) survive the repair.
         # Spawn* functions RETURN a handle and never TAKE one — the coder
@@ -103,7 +130,6 @@ def _fix_spawn_arities_in_text(text: str):
             _valid = _tokens[:_max_exp]
         if not _valid:
             continue
-        _bad_call = _m.group(0) + _args + ")"
         _good_call = f"MidwayPhysics.{_fn}({', '.join(_valid)})"
         if _bad_call in _fixed:
             _fixed = _fixed.replace(_bad_call, _good_call, 1)

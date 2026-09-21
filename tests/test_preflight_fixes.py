@@ -67,6 +67,26 @@ class TestFixSpawnArities:
         assert n == 1
         assert 'MidwayPhysics.SpawnStaticBox(0, 0, 0, 1, 1, 1)' in fixed
 
+    def test_applyimpulse_underarg_pads_to_4(self):
+        """3-arg ApplyImpulse is missing iz — pad deterministically to 4 args."""
+        src = 'MidwayPhysics.ApplyImpulse(bell_handle, 0, 1)'
+        fixed, n = _fix_spawn_arities_in_text(src)
+        assert n == 1
+        assert 'MidwayPhysics.ApplyImpulse(bell_handle, 0, 1, 0)' in fixed
+
+    def test_applyimpulse_bogus_numeric_first_still_pads(self):
+        src = 'MidwayPhysics.ApplyImpulse(0, 0.5, 0)'
+        fixed, n = _fix_spawn_arities_in_text(src)
+        assert n == 1
+        assert 'MidwayPhysics.ApplyImpulse(0, 0.5, 0, 0)' in fixed
+
+    def test_spawn_underarg_not_padded(self):
+        """Spawn* under-arg is NOT 0-safe — must remain untouched."""
+        src = 'MidwayPhysics.SpawnStaticBox(0, 0, 0)'
+        fixed, n = _fix_spawn_arities_in_text(src)
+        assert n == 0
+        assert fixed == src
+
 
 # ---------------------------------------------------------------------------
 # Line-aware anchor owner resolution

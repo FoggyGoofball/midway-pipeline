@@ -773,6 +773,42 @@ def _sanitize_modifier_keys(content: str) -> str:
 
     content = _ac_mod_dot_re.sub(_fix_ac_mod_dot, content)
 
+    # 5. Bare `mods.key` / `mods["key"]` alias -> MOD.<canonical>.  The coder
+    #    sometimes invents a lowercase `mods` table instead of the real MOD
+    #    upvalue, producing "mods is nil" runtime errors (attempt 25).
+    _mods_dot_re = re.compile(
+        r'\bmods\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)',
+        re.IGNORECASE,
+    )
+
+    def _fix_mods_dot(m):
+        nonlocal _rewrites, _neutralized
+        raw = m.group(1)
+        canon = _resolve_modifier_key(raw)
+        if canon is None:
+            _neutralized += 1
+            return "1.0"
+        _rewrites += 1
+        return f"MOD.{canon}"
+
+    content = _mods_dot_re.sub(_fix_mods_dot, content)
+
+    _mods_idx_re = re.compile(
+        r'\bmods\s*\[\s*(["\'])([A-Za-z_][A-Za-z0-9_]*)\1\s*\]',
+        re.IGNORECASE,
+    )
+
+    def _fix_mods_idx(m):
+        nonlocal _rewrites, _neutralized
+        canon = _resolve_modifier_key(m.group(2))
+        if canon is None:
+            _neutralized += 1
+            return "1.0"
+        _rewrites += 1
+        return f"MOD.{canon}"
+
+    content = _mods_idx_re.sub(_fix_mods_idx, content)
+
     if _rewrites or _neutralized:
         print(f"  [Post-Process Fix #9] Canonicalized {_rewrites} modifier key(s), "
               f"neutralized {_neutralized} unknown key(s) to 1.0")

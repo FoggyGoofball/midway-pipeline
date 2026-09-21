@@ -524,6 +524,42 @@ end
 
 
 # ==============================================================================
+#  Fix #9 extension: bare `mods.*` modifier alias -> MOD.*
+# ==============================================================================
+
+class TestModsAlias:
+    def test_mods_dot_and_index_become_mod(self):
+        src = """local SLOT_ID = BOOTH_SLOT_ID or -1
+
+function OnLoad()
+    MidwayPhysics.OnStep(function(dt)
+        local f = mods.heat
+        local g = mods["sleight_of_hand"]
+        local h = mods.unknown_key
+    end)
+end
+"""
+        result = post_process_lua(src)
+        assert "MOD.heat" in result
+        assert "MOD.sleight_of_hand" in result
+        # unknown key neutralized to 1.0; no `mods` reference survives
+        assert "mods" not in result
+
+    def test_legit_mod_untouched(self):
+        src = """local SLOT_ID = BOOTH_SLOT_ID or -1
+
+function OnLoad()
+    MidwayPhysics.OnStep(function(dt)
+        local MOD = AttractionConstants.modifiers
+        local f = MOD.friction
+    end)
+end
+"""
+        result = post_process_lua(src)
+        assert "MOD.friction" in result
+
+
+# ==============================================================================
 #  Fix #27: Structural stack-scan repair (unbalanced brackets/blocks)
 # ==============================================================================
 
