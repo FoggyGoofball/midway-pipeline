@@ -22,13 +22,8 @@ from planning import (
 def _mock_planner(responses):
     state = {"calls": []}
 
-    def call(sys_, usr_, lbl_):
-        state["calls"].append((sys_, usr_, lbl_))
-        return responses[min(state["i"] if "i" in state else 0, len(responses) - 1)]
-
-    # simpler: consume sequentially
-    def seq(sys_, usr_, lbl_):
-        state["calls"].append((sys_, usr_, lbl_))
+    def seq(msgs, lbl_):
+        state["calls"].append((msgs, lbl_))
         idx = len(state["calls"]) - 1
         return responses[min(idx, len(responses) - 1)]
 
@@ -87,7 +82,7 @@ class TestMultiTurn:
         # Seed a draft, then a short refinement continues it via the
         # single-active-draft fallback.
         run_planning_turn("plan out the echo strikes mechanic", "", tmp_path,
-                          call_func=lambda s, u, l: "## Plan\n- detect hits\n\n- How many strikes?\n")
+                          call_func=lambda msgs, lbl_: "## Plan\n- detect hits\n\n- How many strikes?\n")
         draft = resolve_active_draft(tmp_path, "", "three strikes please")
         assert draft is not None
         assert draft["slug"]

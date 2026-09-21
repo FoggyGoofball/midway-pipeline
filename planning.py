@@ -168,16 +168,20 @@ def resolve_active_draft(project_root, session_id: str, prompt: str) -> Optional
     return None
 
 
-def _build_transcript(draft: dict, context: str = "") -> str:
-    parts = []
+def _build_messages(draft: dict, context: str = "") -> list[dict]:
+    """Build the Ollama messages array for one planning turn.
+
+    True role separation: prior assistant turns are sent as assistant messages
+    (not flattened into user content), so the model sees a real dialogue.
+    """
+    msgs = [{"role": "system", "content": PLANNING_SYSTEM}]
     if context:
-        parts.append(f"## Project Context (already documented)\n{context}")
+        msgs.append({"role": "system", "content": f"## Project Context (already documented)\n{context}"})
     if draft.get("plan"):
-        parts.append(f"## Current Plan Draft (revise in place)\n{draft['plan']}")
+        msgs.append({"role": "system", "content": f"## Current Plan Draft (revise in place)\n{draft['plan']}"})
     for m in draft.get("history", [])[-20:]:
-        role = "User" if m.get("role") == "user" else "Assistant"
-        parts.append(f"### {role}\n{m.get('content', '')}")
-    return "\n\n".join(parts)
+        msgs.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+    return msgs
 
 
 def publish_plan(project_root, slug: str, plan_text: str) -> str:
@@ -200,17 +204,20 @@ def run_planning_turn(
     user_prompt: str,
     session_id: str,
     project_root,
-    call_func: Optional[Callable[[str, str, str], str]] = None,
+    call_func: Optional[Callable[[list, str], str]] = None,
     context: str = "",
 ):
     """Run one turn of the planning conversation.
+
+    ``call_func`` receives (messages_array, label) and returns the response
+    text — default is call_ollama_with_messages with CHAT_MODEL.
 
     Returns (response_text, finalized).  On finalize the plan is published to
     docs/plans/ and the draft is removed.
     """
     if call_func is None:
-        from ollama_client import call_ollama as _co, CHAT_MODEL as _cm
-        call_func = lambda sys_, usr_, lbl_: _co(sys_, usr_, lbl_, _cm)
+        from ollama_client import call_ollama_with_messages as _cowm, CHAT_MODEL as _cm
+        call_func = lambda msgs, lbl_: _cowm(msgs, lbl_, _cm)
 
     slug = _slugify(user_prompt)
     if is_planning_intent(user_prompt):
@@ -228,8 +235,8 @@ def run_planning_turn(
     first_turn = not draft.get("history")
     draft.setdefault("history", []).append({"role": "user", "content": user_prompt})
 
-    transcript = _build_transcript(draft, context if first_turn else "")
-    response = call_func(PLANNING_SYSTEM, transcript, "Planner (iterative)")
+    transcript = _build_messages(draft, context if first_turn else "")
+    response = call_func(transcript, "Planner (iterative)")
     if not response:
         response = "(planner returned an empty response)"
 

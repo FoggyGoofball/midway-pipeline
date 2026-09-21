@@ -489,7 +489,8 @@ def prepare_model(model: str) -> None:
 
 
 def call_ollama_streamed(
-    system: str, user: str, label: str, model: Optional[str] = None, params: Optional[dict] = None
+    system: str, user: str, label: str, model: Optional[str] = None,
+    params: Optional[dict] = None, messages: Optional[list[dict]] = None,
 ) -> Generator[str, None, None]:
     """Generator: call Ollama's /api/chat with streaming, yield tokens.
 
@@ -574,10 +575,13 @@ def call_ollama_streamed(
             "use_mmap": True,
             "kv_cache_type": "q8_0",    # Halves KV memory vs f16 default
         },
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "messages": (
+            messages if messages is not None
+            else [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ]
+        ),
 
     }
 
@@ -654,7 +658,7 @@ def call_ollama_streamed(
                             label=cycle_label,
                             model=use_model,
                             params=params,
-                            messages=paging.active_messages.to_payload() if paging.active_messages else None,
+                            messages=messages,
                             paging=paging,
                         )
 
@@ -675,7 +679,7 @@ def call_ollama_streamed(
                             label=cycle_label,
                             model=use_model,
                             params=params,
-                            messages=paging.active_messages.to_payload() if paging.active_messages else None,
+                            messages=messages,
                             paging=paging,
                         )
                         return
@@ -840,7 +844,7 @@ def call_ollama_streamed(
             _is_large_oom = _oom_ctx >= OLLAMA_NUM_CTX_LARGE
             if e.code == 500 and _is_large_oom:
                 print(f"\n  [OOM Fallback] {use_model} ran out of memory. Retrying with {FALLBACK_REVIEWER_MODEL}...")
-                yield from call_ollama_streamed(system, user, label, FALLBACK_REVIEWER_MODEL, params)
+                yield from call_ollama_streamed(system, user, label, FALLBACK_REVIEWER_MODEL, params, messages=messages)
                 return
             msg = f"[SYSTEM ERROR: HTTP {e.code}] Could not reach Ollama at {OLLAMA_HOST}: {e.reason}"
             print(msg)
@@ -956,6 +960,7 @@ def _is_repetition_loop(text: str) -> tuple[int, int] | None:
 
 def _stream_with_repetition_guard(
     system: str, user: str, label: str, model: str, params: dict | None,
+    messages: list[dict] | None = None,
 ) -> str:
     """Collect a full stream, discarding and warm-retrying on repetition loops.
 
@@ -971,7 +976,7 @@ def _stream_with_repetition_guard(
     for attempt in range(_LOOP_MAX_RETRIES + 1):
         acc_text = ""
         looped = False
-        for token in call_ollama_streamed(system, user, label, model, params=cur_params):
+        for token in call_ollama_streamed(system, user, label, model, params=cur_params, messages=messages):
             acc_text += token
             if _is_repetition_loop(acc_text):
                 looped = True
@@ -1194,24 +1199,26 @@ def call_ollama_with_messages(
     Returns:
         Full response text from the model.
     """
-    # Extract system and user for backward compat with streaming internals
+    # Extract the LAST system and user message for backward compat with the
+    # streaming internals (banner, context-collapse guard).  The FULL messages
+    # array is forwarded verbatim so multi-turn role separation is preserved.
     system_text = ""
     user_text = ""
-    for msg in messages:
+    _last_user_idx = -1
+    for _i, msg in enumerate(messages):
         if msg.get("role") == "system":
             system_text = msg.get("content", "")
         elif msg.get("role") == "user":
             user_text = msg.get("content", "")
+            _last_user_idx = _i
 
     if "Integration Review" in label or "Review" in label:
         try:
             from pipeline import _CTX
             if _CTX and getattr(_CTX, "pre_flight_errors", ""):
                 user_text += f"\n\n## ⚠ STATIC GUARD ERRORS ⚠\nThe following errors were detected by the static analyzer. You MUST issue a [VERDICT: FAIL] and cite these errors if they are not resolved in the code above:\n{_CTX.pre_flight_errors}\n"
-                # Update the message in the array
-                for msg in messages:
-                    if msg.get("role") == "user":
-                        msg["content"] = user_text
+                if _last_user_idx >= 0:
+                    messages[_last_user_idx]["content"] = user_text
         except Exception:
             pass
 
@@ -1255,6 +1262,8 @@ def call_ollama_with_messages(
             f"summary=\"Context overflow ({len(_b_overflow)} chars) from [{label}]\" "
             f"total_chars=\"{len(_b_overflow)}\" />"
         ) + _b_overflow_note
+        if _last_user_idx >= 0:
+            messages[_last_user_idx]["content"] = user_text
 
     # Inject num_ctx into params if not already present
     _b_params = dict(params or {})
@@ -1269,7 +1278,7 @@ def call_ollama_with_messages(
     print(f"  [VRAM Guard] num_ctx={_model_ctx}, user={len(user_text)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
-    result = _stream_with_repetition_guard(system_text, user_text, label, model, _b_params)
+    result = _stream_with_repetition_guard(system_text, user_text, label, model, _b_params, messages=messages)
     ts_end = datetime.now().strftime('%H:%M:%S')
     print(f"  [{ts_end}] {paint('[END]', 'green')} [{paint(label, 'blue')}] Execution complete.")
     sys.stdout.flush()
