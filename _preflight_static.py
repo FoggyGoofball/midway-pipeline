@@ -483,6 +483,26 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
                         ctx.all_results[_fp_i] = {"task_id": tid, "output": content}
                         break
 
+    # -- Known-member namespace validation (data-driven) ---------------------
+    # Any `Namespace.<Member>` not in the approved set is a phantom-API
+    # hallucination (e.g. Engine.Puck, ENGINE.ModifyPuckState, Engine.GetPuck).
+    # Adding a future phantom is a ONE-LINE change to this table.  MidwayInput
+    # is covered by C19 above; MidwayPhysics.* is validated by RuntimeSim's
+    # _MIDWAY_PHYSICS_API; sol.* is C7.
+    _KNOWN_NAMESPACE_MEMBERS = {
+        "Engine": ("AwardTickets", "AwardTokens", "GetTickets", "GetTokens", "GetStreak"),
+        "AttractionConstants": ("booth", "modifiers"),
+    }
+    for _ns, _members in _KNOWN_NAMESPACE_MEMBERS.items():
+        _alts = "|".join(sorted(_members))
+        _GUARDS.append((
+            "Lua",
+            re.compile(rf'\b{_ns}\.(?!{_alts}\b)[A-Za-z_]\w*', re.IGNORECASE),
+            f"unknown {_ns} member",
+            f"{_ns} only exposes: {', '.join(_members)}. "
+            f"Replace with one of those (or a bare local).",
+        ))
+
     for tid, content in list(ctx.all_results_dict.items()):
         if not content:
             continue
