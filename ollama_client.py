@@ -15,6 +15,7 @@ it left off.
 
 from __future__ import annotations
 import json
+import re
 import socket
 import sys
 import time
@@ -905,20 +906,12 @@ _LOOP_WARM_STEP = 0.2           # temperature increase per retry
 _LOOP_MIN_LINE_LEN = 8          # ignore trivial structural lines (end, }, ...)
 
 
-def _is_repetition_loop(text: str) -> tuple[int, int] | None:
-    """Detect a repeating unit at the tail of a generated stream.
-
-    Returns (unit_lines, repeat_count) if the last non-blank lines form a
-    repetition loop, else None.  Only substantive lines (len >= 8) count as
-    loop evidence so legitimate `end` / `)` runs don't false-trigger.
-    """
-    tail = text[-_LOOP_TAIL_CHARS:]
-    lines = [ln for ln in tail.splitlines() if ln.strip()]
-    if len(lines) < 6:
-        return None
-    lines = lines[-_LOOP_TAIL_LINES:]
+def _find_repeat_unit(lines: list[str], min_line: int, min_block: int) -> tuple[int, int] | None:
+    """Return (unit_lines, repeat_count) if the tail of *lines* is a repeated
+    unit, else None.  ``min_line``/``min_block`` are the repeat thresholds for
+    single-line vs multi-line units."""
     for unit in range(1, 17):
-        min_repeats = 6 if unit == 1 else 3
+        min_repeats = min_line if unit == 1 else min_block
         need = unit * min_repeats
         if len(lines) < need:
             continue
@@ -933,6 +926,32 @@ def _is_repetition_loop(text: str) -> tuple[int, int] | None:
         if ok:
             return (unit, min_repeats)
     return None
+
+
+def _is_repetition_loop(text: str) -> tuple[int, int] | None:
+    """Detect a repeating unit at the tail of a generated stream.
+
+    Returns (unit_lines, repeat_count) if the last non-blank lines form a
+    repetition loop, else None.  Only substantive lines (len >= 8) count as
+    loop evidence so legitimate `end` / `)` runs don't false-trigger.
+
+    Also catches NEAR-exact loops where a changing integer token is the only
+    difference (e.g. the "-- Task 23/30/37: ..." enumerated fake-task loop): the
+    detector is re-run on digit-normalized lines with higher thresholds.
+    """
+    tail = text[-_LOOP_TAIL_CHARS:]
+    lines = [ln for ln in tail.splitlines() if ln.strip()]
+    if len(lines) < 6:
+        return None
+    lines = lines[-_LOOP_TAIL_LINES:]
+    # Exact-repeat pass (lower thresholds).
+    _hit = _find_repeat_unit(lines, min_line=6, min_block=3)
+    if _hit:
+        return _hit
+    # Digit-normalized pass (higher thresholds, so legitimate code that merely
+    # increments numbers doesn't false-trigger).
+    _norm = [re.sub(r'\d+', '#', ln) for ln in lines]
+    return _find_repeat_unit(_norm, min_line=8, min_block=4)
 
 
 def _stream_with_repetition_guard(

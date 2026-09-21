@@ -1809,6 +1809,27 @@ def _strip_stray_closing_parens(content: str) -> str:
     return "\n".join(_out)
 
 
+def _repair_modifier_access(content: str) -> str:
+    """Fix #31: safe AttractionConstants.modifiers access.
+
+    The coder sometimes wraps modifiers in a local `CONST` clone (whose fields
+    are empty tables) or reads `.modifiers` without a nil fallback, producing
+    "attempt to index a nil value (global 'MOD')".  Normalize the access to the
+    real global and add an `or {}` guard so missing modifiers degrade safely.
+    """
+    if not content:
+        return content
+    content, _n = re.subn(
+        r'\blocal\s+(\w+)\s*=\s*(?:CONST|AttractionConstants)\.modifiers\b(?!\s*or\b)',
+        r'local \1 = AttractionConstants.modifiers or {}',
+        content,
+    )
+    if _n:
+        print(f"  [Post-Process Fix #31] Repaired {_n} modifier access(es) "
+              f"(AttractionConstants.modifiers or {{}})")
+    return content
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1834,6 +1855,7 @@ def post_process_lua(content: str) -> str:
     content = _fix_json_colon_tables(content)               # Fix #25 — JSON `"key":` -> Lua `key =`
     content = _strip_stray_closing_parens(content)          # Fix #26 — orphaned `)` line
     content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
+    content = _repair_modifier_access(content)         # Fix #31 — AttractionConstants.modifiers or {} guard
     content = _strip_duplicate_functions(content)      # Fix #1
     content = _add_midwayphysics_prefix(content)       # Fix #6
     content = _neutralize_method_calls(content)        # Fix #21 — handle.Method -> MidwayPhysics.Method(handle)
