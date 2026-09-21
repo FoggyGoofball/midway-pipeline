@@ -1830,6 +1830,104 @@ def _repair_modifier_access(content: str) -> str:
     return content
 
 
+def _hoist_cross_lifecycle_locals(content: str) -> str:
+    """Fix #32: hoist locals declared in OnLoad/OnLoadStatic but used in OnUnload
+    to module scope.
+
+    The coder declares body handles inside the spawn lifecycle function
+    (``local mallet = MidwayPhysics.SpawnDynamicBox(...)``) and then references
+    them from OnUnload, where they are nil — the exact condition preflight
+    guard C11 flags as ``local 'X' out-of-scope in OnUnload``.  Apply the same
+    repair C11's message prescribes, deterministically: drop the ``local``
+    keyword inside the spawn function (so it assigns the module-level upvalue)
+    and declare the name at the TOP of the file, above all functions.
+    """
+    if not content:
+        return content
+
+    # Reuse the exact function-body extraction preflight C11 uses.
+    _fn_re = re.compile(
+        r'^(?:local\s+)?function\s+(\w+)\s*\([^)]*\)(.*?)^end\b',
+        re.DOTALL | re.MULTILINE,
+    )
+    _matches = list(_fn_re.finditer(content))
+    _bodies = {m.group(1): m.group(2) for m in _matches}
+    _spans = {m.group(1): (m.start(2), m.end(2)) for m in _matches}
+    _body_spans = [(m.start(2), m.end(2)) for m in _matches]
+
+    _spawn_fns = ("OnLoad", "OnLoadStatic")
+    _cleanup_fns = ("OnUnload",)
+
+    # Names referenced inside any cleanup function body.
+    _cleanup_names: set[str] = set()
+    for _fn in _cleanup_fns:
+        _cleanup_names.update(re.findall(r'\b[A-Za-z_]\w*\b', _bodies.get(_fn, "")))
+
+    # Names already declared at module level (outside every function body).
+    _module_locals: set[str] = set()
+    for _lm in re.finditer(r'^\s*local\s+([A-Za-z_]\w*)\b', content, re.MULTILINE):
+        _pos = _lm.start()
+        if not any(_s <= _pos < _e for _s, _e in _body_spans):
+            _module_locals.add(_lm.group(1))
+
+    # Names to hoist: declared with `local` in a spawn fn AND used in cleanup.
+    _strip_names: set[str] = set()
+    for _fn in _spawn_fns:
+        _body = _bodies.get(_fn, "")
+        for _dm in re.finditer(
+            r'\blocal\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*=(?!=)',
+            _body,
+        ):
+            _names = [n.strip() for n in _dm.group(1).split(',')]
+            if any(n in _cleanup_names for n in _names):
+                _strip_names.update(_names)
+
+    if not _strip_names:
+        return content
+
+    # 1) Drop `local` from those declarations — only inside spawn bodies, never
+    #    at module level.  Indentation sits outside the match and is preserved.
+    _decl_pat = re.compile(
+        r'\blocal\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*=(?!=)'
+    )
+
+    def _strip(m):
+        _names = [n.strip() for n in m.group(1).split(',')]
+        if any(n in _strip_names for n in _names):
+            return m.group(1) + ' ='
+        return m.group(0)
+
+    _edits: list[tuple[int, int, str]] = []
+    for _fn in _spawn_fns:
+        _span = _spans.get(_fn)
+        if not _span:
+            continue
+        _s, _e = _span
+        _new_body, _n = _decl_pat.subn(_strip, content[_s:_e])
+        if _n:
+            _edits.append((_s, _e, _new_body))
+    # Apply in reverse position order so earlier spans stay valid.
+    for _s, _e, _new_body in sorted(_edits, key=lambda t: t[0], reverse=True):
+        content = content[:_s] + _new_body + content[_e:]
+
+    # 2) Declare the hoisted names at module level (skip ones already there).
+    _declare_names = sorted(_strip_names - _module_locals)
+    if _declare_names:
+        _decl_lines = "\n".join(
+            f"local {n}  -- module-level (shared across lifecycle)"
+            for n in _declare_names
+        )
+        _slot_m = re.search(r'^local\s+SLOT_ID\s*=.*$', content, re.MULTILINE)
+        if _slot_m:
+            content = content[:_slot_m.end()] + "\n" + _decl_lines + "\n" + content[_slot_m.end():]
+        else:
+            content = _decl_lines + "\n\n" + content
+
+    print(f"  [Post-Process Fix #32] Hoisted {len(_strip_names)} cross-lifecycle local(s) "
+          f"to module scope: {', '.join(sorted(_strip_names))}")
+    return content
+
+
 def post_process_lua(content: str) -> str:
     """Apply all 9 deterministic fixes to a Lua attraction script.
 
@@ -1866,6 +1964,7 @@ def post_process_lua(content: str) -> str:
     content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
     content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
     content = _align_createpool_names(content)         # Fix #18 — CreatePool literal -> declared pool constant
+    content = _hoist_cross_lifecycle_locals(content)   # Fix #32 — hoist OnLoad/OnUnload-shared locals to module scope
     content = _localize_bare_assignments(content)      # Fix #20 — prefix `local` onto leaked globals
     content = _auto_declare_read_before_write(content) # Fix #19 — declare read-before-write scalars
     content = _dedupe_onstep_registrations(content)    # Fix #12 — one OnStep callback only
@@ -1928,6 +2027,7 @@ def post_process_surgery(content: str) -> str:
     content = _dedupe_spawn_shared_booth(content)         # Fix #17
     content = _normalize_pool_name_arguments(content)     # Fix #14
     content = _align_createpool_names(content)            # Fix #18
+    content = _hoist_cross_lifecycle_locals(content)      # Fix #32 — hoist OnLoad/OnUnload-shared locals to module scope
     content = _localize_bare_assignments(content)         # Fix #20
     content = _auto_declare_read_before_write(content)    # Fix #19
     content = _dedupe_onstep_registrations(content)       # Fix #12

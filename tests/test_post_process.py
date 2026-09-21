@@ -464,6 +464,66 @@ end
 
 
 # ==============================================================================
+#  Fix #32: Hoist cross-lifecycle locals to module scope
+# ==============================================================================
+
+class TestHoistCrossLifecycleLocals:
+    def test_hoists_onload_local_used_in_onunload(self):
+        src = """local SLOT_ID = BOOTH_SLOT_ID or -1
+
+function OnLoad()
+    local mallet = MidwayPhysics.SpawnDynamicBox(0, 0, 0, 1, 1, 1, 5)
+    local puck = MidwayPhysics.SpawnDynamicSphere(0, 0, 2, 0.2, 1)
+end
+
+function OnUnload()
+    MidwayPhysics.DestroyBody(mallet)
+end
+"""
+        result = post_process_lua(src)
+        # module-level declaration added
+        assert "local mallet  -- module-level (shared across lifecycle)" in result
+        # `local` stripped inside OnLoad for the hoisted name
+        assert "local mallet = MidwayPhysics" not in result
+        assert "mallet = MidwayPhysics.SpawnDynamicBox" in result
+        # puck is NOT referenced in OnUnload -> stays local inside OnLoad
+        assert "local puck = MidwayPhysics.SpawnDynamicSphere" in result
+
+    def test_already_module_level_not_duplicated(self):
+        src = """local SLOT_ID = BOOTH_SLOT_ID or -1
+local mallet
+
+function OnLoad()
+    local mallet = MidwayPhysics.SpawnDynamicBox(0, 0, 0, 1, 1, 1, 5)
+end
+
+function OnUnload()
+    MidwayPhysics.DestroyBody(mallet)
+end
+"""
+        result = post_process_lua(src)
+        # the pre-existing module-level declaration is NOT duplicated
+        assert result.count("local mallet") == 1
+        assert "local mallet\n" in result
+        assert "mallet = MidwayPhysics.SpawnDynamicBox" in result
+
+    def test_no_cleanup_reference_no_change(self):
+        src = """local SLOT_ID = BOOTH_SLOT_ID or -1
+
+function OnLoad()
+    local mallet = MidwayPhysics.SpawnDynamicBox(0, 0, 0, 1, 1, 1, 5)
+end
+
+function OnUnload()
+    print("cleanup")
+end
+"""
+        result = post_process_lua(src)
+        assert "local mallet = MidwayPhysics.SpawnDynamicBox" in result
+        assert "local mallet  -- module-level" not in result
+
+
+# ==============================================================================
 #  Fix #27: Structural stack-scan repair (unbalanced brackets/blocks)
 # ==============================================================================
 
