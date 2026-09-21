@@ -510,7 +510,32 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         print(f"  [Resurrection] Skipping Phases 0.5-3. Resuming from Phases 4-8.")
 
     # Intent Classification
-    if getattr(ctx, 'resumed_blocked', False):
+    # -- Multi-turn planning conversation continuity ---------------------
+    # A reply to an active planning conversation must stay in the planner
+    # even if it reads like a chat or build prompt ("make it 3 lanes").
+    _planning_mode = False
+    _planning_ctx = ""
+    try:
+        from planning import is_planning_intent as _is_plan, resolve_active_draft as _rad
+        _psid = session_mgr.session_id if session_mgr else ""
+        _planning_mode = bool(_is_plan(user_prompt) or _rad(PROJECT_ROOT, _psid, user_prompt))
+        if _planning_mode:
+            try:
+                _planning_ctx = "\n\n".join(
+                    x for x in (
+                        get_project_state(PROJECT_ROOT, domain_registry.ALL_DOMAINS),
+                        get_planning_docs(PROJECT_ROOT),
+                    ) if x and x.strip()
+                )
+            except Exception:
+                _planning_ctx = ""
+    except Exception:
+        _planning_mode = False
+
+    if _planning_mode:
+        ctx.is_chat = True
+        ctx._planning_mode = True
+    elif getattr(ctx, 'resumed_blocked', False):
         print("  [Routing] Resurrection active. Bypassing intent classification for manual fix.")
         ctx.is_chat = False
         intent = "EXECUTE"
@@ -524,6 +549,15 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         ctx.is_chat = (intent == "CHAT")
 
     if ctx.is_chat:
+        if getattr(ctx, '_planning_mode', False):
+            from planning import run_planning_turn
+            _psid = session_mgr.session_id if session_mgr else ""
+            _resp, _finalized = run_planning_turn(
+                user_prompt, _psid, PROJECT_ROOT, context=_planning_ctx,
+            )
+            ctx.final_output = _resp or "(planner produced no output)"
+            return ctx.final_output
+
         _ts = datetime.now().strftime('%H:%M:%S')
         print(f"\n{'='*70}")
         print(f"  [{_ts}] Chat Mode Detected  Direct Response (bypassing pipeline)")
@@ -565,12 +599,6 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
         enriched_input = "\n\n---\n\n".join(chat_context_parts)
 
         response = call_ollama(CHAT_SYSTEM, enriched_input, "Chat", CHAT_MODEL)
-        # Persist planning-oriented chat answers so a later build run can
-        # carry them out systematically.
-        try:
-            save_chat_plan(user_prompt, response, PROJECT_ROOT)
-        except Exception:
-            pass
         ctx.final_output = response
         return response
 
