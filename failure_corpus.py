@@ -25,6 +25,7 @@ import difflib
 import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import List, Tuple
@@ -34,12 +35,31 @@ from typing import List, Tuple
 _ENABLE_ENV = "MIDWAY_FAILURE_CORPUS"
 _PATH_ENV = "MIDWAY_FAILURE_CORPUS_PATH"
 
-_DEFAULT_CORPUS_PATH = (
-    Path(__file__).resolve().parent / "lora generator" / "failure_corpus.jsonl"
-)
+_DEFAULT_CORPUS_DIR = Path(__file__).resolve().parent / "lora generator"
+
+#: Corpus sources.  "initial" = deterministic/synthetic bootstrap (seeders,
+#: contract generator); "genuine" = live-observed + user-driven (the runtime
+#: post-processor with MIDWAY_FAILURE_CORPUS=1).  Keeping them separate lets a
+#: retrain fold genuine data on top of the initial bootstrap.
+SOURCES = ("initial", "genuine")
 
 #: Do not grow the in-memory dedupe set unboundedly across a long run.
 _MAX_SEEN_KEYS = 50_000
+
+#: Known-bad output patterns.  A record whose "after" (the fixer's claimed
+#: correct output) matches one of these is POISON — it would teach the model to
+#: emit broken code.  Historical example: the old Fix #31 bug emitted
+#: ``AttractionConstants.modifiers or {}.luck`` (missing parens around ``or {}``).
+POISON_PATTERNS = [
+    re.compile(r"\{\}\s*[.\[]"),   # `or {}.field` / `or {}[idx]`
+]
+
+
+def looks_poisoned(text: str) -> bool:
+    """True when *text* matches a known-bad output pattern."""
+    if not text:
+        return False
+    return any(p.search(text) for p in POISON_PATTERNS)
 
 
 def is_enabled() -> bool:
@@ -47,9 +67,18 @@ def is_enabled() -> bool:
     return os.environ.get(_ENABLE_ENV, "0").strip().lower() in ("1", "true", "yes")
 
 
-def corpus_path() -> Path:
-    """Resolve the corpus file path (env-overridable)."""
-    return Path(os.environ.get(_PATH_ENV, _DEFAULT_CORPUS_PATH))
+def corpus_path(source: str = "genuine") -> Path:
+    """Resolve the corpus file path for a source.
+
+    ``MIDWAY_FAILURE_CORPUS_PATH`` (a full path) overrides everything for
+    backward compatibility.  Otherwise the path is
+    ``lora generator/failure_corpus.<source>.jsonl``.
+    """
+    if _PATH_ENV in os.environ:
+        return Path(os.environ[_PATH_ENV])
+    if source not in SOURCES:
+        source = "genuine"
+    return _DEFAULT_CORPUS_DIR / f"failure_corpus.{source}.jsonl"
 
 
 # -- Diff extraction ----------------------------------------------------------
@@ -91,41 +120,42 @@ def _dedup_key(fix_id: str, before_snippet: str) -> str:
 
 # -- In-process dedupe state --------------------------------------------------
 
-_seen_keys: set = set()
-_keys_loaded: bool = False
+_seen_keys_by_source: dict = {}
 
 
-def _load_existing_keys() -> None:
-    """Load dedup keys from the existing corpus once per process (bounded)."""
-    global _keys_loaded
-    if _keys_loaded:
-        return
-    _keys_loaded = True
-    path = corpus_path()
-    if not path.is_file():
-        return
-    try:
-        # Scan a bounded window (most recent 200k lines) to avoid a full read.
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                key = rec.get("dedup_key")
-                if key:
-                    _seen_keys.add(key)
-                    if len(_seen_keys) >= _MAX_SEEN_KEYS:
-                        break
-    except OSError:
-        pass
+def _load_existing_keys(source: str) -> set:
+    """Load dedup keys for one corpus source (bounded, cached per process)."""
+    keys = _seen_keys_by_source.get(source)
+    if keys is not None:
+        return keys
+    keys = set()
+    path = corpus_path(source)
+    if path.is_file():
+        try:
+            # Scan a bounded window (most recent 200k lines) to avoid a full read.
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    key = rec.get("dedup_key")
+                    if key:
+                        keys.add(key)
+                        if len(keys) >= _MAX_SEEN_KEYS:
+                            break
+        except OSError:
+            pass
+    _seen_keys_by_source[source] = keys
+    return keys
 
 
 # -- Recording ----------------------------------------------------------------
 
 def record_fix(fix_id: str, invariant_id: str,
                before: str, after: str,
-               file_relpath: str = "", language: str = "lua") -> bool:
+               file_relpath: str = "", language: str = "lua",
+               source: str = "genuine") -> bool:
     """Record one applied fix to the corpus (no-op when disabled).
 
     Args:
@@ -134,6 +164,8 @@ def record_fix(fix_id: str, invariant_id: str,
         before/after: whole-file content before/after this one fix.
         file_relpath: owning file, e.g. ``attractions/strongman/strongman.lua``.
         language:     target language tag.
+        source:       ``"initial"`` (deterministic seeders) or ``"genuine"``
+                      (live runtime / user-driven).
 
     Returns:
         True when a NEW record was appended, False when skipped (disabled,
@@ -141,15 +173,21 @@ def record_fix(fix_id: str, invariant_id: str,
     """
     if not is_enabled():
         return False
-    _load_existing_keys()
+    if source not in SOURCES:
+        source = "genuine"
+    keys = _load_existing_keys(source)
 
     before_snip, after_snip = extract_diff(before, after)
     if not before_snip and not after_snip:
         return False
-    key = _dedup_key(fix_id, before_snip)
-    if key in _seen_keys:
+    # Never record a fix whose claimed-correct output is known-bad: it would
+    # poison the training set (the model would learn to emit broken code).
+    if looks_poisoned(after_snip):
         return False
-    _seen_keys.add(key)
+    key = _dedup_key(fix_id, before_snip)
+    if key in keys:
+        return False
+    keys.add(key)
 
     record = {
         "run_id": time.strftime("%Y%m%d_%H%M%S", time.localtime()),
@@ -159,9 +197,10 @@ def record_fix(fix_id: str, invariant_id: str,
         "file": file_relpath,
         "before": before_snip,
         "after": after_snip,
+        "source": source,
         "dedup_key": key,
     }
-    path = corpus_path()
+    path = corpus_path(source)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as fh:

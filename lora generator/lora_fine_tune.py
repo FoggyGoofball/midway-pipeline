@@ -219,6 +219,11 @@ def parse_args():
         default=None,
         help=f"Override SAVE_STEPS (default: {SAVE_STEPS})",
     )
+    parser.add_argument(
+        "--base-model",
+        default=None,
+        help=f"Override base model (default: {BASE_MODEL_NAME})",
+    )
     return parser.parse_args()
 
 
@@ -240,11 +245,12 @@ def main():
     num_epochs = args.epochs or int(os.environ.get("LORA_OVERRIDE_EPOCHS", NUM_EPOCHS))
     learning_rate = args.lr or float(os.environ.get("LORA_OVERRIDE_LR", LEARNING_RATE))
     save_steps = args.save_steps or int(os.environ.get("LORA_OVERRIDE_SAVE_STEPS", SAVE_STEPS))
+    base_model = args.base_model or os.environ.get("LORA_BASE_MODEL", BASE_MODEL_NAME)
 
     mode_name = "Cartridge API" if args.cartridge else "Paging Protocol"
     print("=" * 72)
     print(f"  {mode_name} - LoRA Fine-Tuning")
-    print("  Base Model: Qwen2.5-Coder-7B (4-bit QLoRA)")
+    print(f"  Base Model: {base_model} (4-bit QLoRA)")
     print(f"  Dataset:    {dataset_path}")
     print(f"  Output:     {output_dir}")
     print(f"  Epochs:     {num_epochs}")
@@ -290,7 +296,7 @@ def main():
     print(f"  Device: {device_name}")
 
     # Step 3: Load model with 4-bit QLoRA ---------------------------------
-    print(f"\n[3/5] Loading {BASE_MODEL_NAME} with 4-bit QLoRA...")
+    print(f"\n[3/5] Loading {base_model} with 4-bit QLoRA...")
     print("  (downloads ~4 GB on first run)")
 
     # -- Standard #3: dynamic max_seq_length -------------------------------
@@ -298,13 +304,13 @@ def main():
     # allocating the model's KV/activation buffers.  A hardcoded 4096/8192
     # window pads every sample with empty tokens that waste VRAM.
     print("  Loading tokenizer to compute dynamic max_seq_length...")
-    _measure_tokenizer = transformers.AutoTokenizer.from_pretrained(BASE_MODEL_NAME)
+    _measure_tokenizer = transformers.AutoTokenizer.from_pretrained(base_model)
     if _measure_tokenizer.pad_token is None:
         _measure_tokenizer.pad_token = _measure_tokenizer.eos_token
     max_seq_length = compute_dynamic_max_seq_length(samples, _measure_tokenizer)
 
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=BASE_MODEL_NAME,
+        model_name=base_model,
         max_seq_length=max_seq_length,
         dtype=None,
         load_in_4bit=LOAD_IN_4BIT,

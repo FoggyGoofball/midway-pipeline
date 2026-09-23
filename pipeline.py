@@ -176,6 +176,11 @@ INTENT_CLASSIFIER_MODEL = "llama3.2:1b"
 CHAT_MODEL = CODER_MODEL
 EXECUTION_MODEL = CODER_MODEL
 REASONING_MODEL = REVIEWER_MODEL
+# Supreme arbiter: a TRUE reasoning model (DeepSeek-R1-Distill-Qwen-7B) that
+# runs the appellate debate.  It swaps in/out with the coder on the Deck via
+# Ollama LRU eviction (it need not be co-resident).  Override with
+# MIDWAY_ARBITER_MODEL.
+ARBITER_MODEL = os.getenv("MIDWAY_ARBITER_MODEL", "deepseek-r1:7b")
 MODEL = EXECUTION_MODEL
 DIRECTOR_MODEL = "midway-reasoner-lora"
 

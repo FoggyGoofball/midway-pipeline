@@ -66,10 +66,14 @@ PAGING_DATASET = SCRIPT_DIR / "paging_lora_dataset.jsonl"
 CARTRIDGE_DATASET = SCRIPT_DIR / "midway_lora_dataset.jsonl"
 SEARCH_REPLACE_DATASET = SCRIPT_DIR / "search_replace_lora_dataset.jsonl"
 NEGATIVE_API_DATASET = SCRIPT_DIR / "negative_api_lora_dataset.jsonl"
-FAILURE_CORPUS_DATASET = SCRIPT_DIR / "failure_corpus_dataset.jsonl"
+FAILURE_CORPUS_DATASET = SCRIPT_DIR / "failure_corpus_dataset.jsonl"               # legacy mixed
+FAILURE_CORPUS_INITIAL_DATASET = SCRIPT_DIR / "failure_corpus_initial_dataset.jsonl"
+FAILURE_CORPUS_GENUINE_DATASET = SCRIPT_DIR / "failure_corpus_genuine_dataset.jsonl"
 SIGNALS_DATASET = SCRIPT_DIR / "signals_lora_dataset.jsonl"
 VERDICT_DATASET = SCRIPT_DIR / "verdict_lora_dataset.jsonl"
+ARBITER_DATASET = SCRIPT_DIR / "arbiter_lora_dataset.jsonl"       # deterministic debate data
 COMBINED_DATASET = SCRIPT_DIR / "combined_lora_dataset.jsonl"       # coder training set
+COMBINED_RETRAIN_DATASET = SCRIPT_DIR / "combined_retrain_lora_dataset.jsonl"
 REASONER_DATASET = SCRIPT_DIR / "reasoner_lora_dataset.jsonl"       # reasoner training set
 
 OUTPUT_DIR = SCRIPT_DIR / "lora_output"
@@ -90,6 +94,7 @@ DATASET_TRAIN_ON_INPUTS: Dict[str, bool] = {
     "failure_corpus": False, # observed fixes -> completion-only (SEARCH side is the broken code)
     "signals": False,
     "verdict": False,        # review/argumentation behavior -> completion-only
+    "arbiter": False,        # debate behavior -> completion-only
     "combined": False,       # coder mixed behavior+facts -> completion-only (safe default)
     "reasoner": False,       # reasoner mixed behavior -> completion-only
 }

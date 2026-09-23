@@ -370,7 +370,8 @@ def _run_tribunal_appeal(ctx: PipelineContext) -> str:
     parseable verdict, so the caller can fall back to its legacy logic.
     """
     try:
-        from pipeline import REASONING_MODEL
+        from pipeline import ARBITER_MODEL
+        from arbiter import strip_thinking
     except Exception:
         return ""
 
@@ -406,7 +407,7 @@ def _run_tribunal_appeal(ctx: PipelineContext) -> str:
 
     try:
         _out = call_ollama(
-            _tribunal_system, _tribunal_prompt, "Tribunal Appeal", REASONING_MODEL,
+            _tribunal_system, _tribunal_prompt, "Tribunal Appeal", ARBITER_MODEL,
             params={"num_predict": 512},
             skip_pre_summarizer=True,
         )
@@ -417,7 +418,8 @@ def _run_tribunal_appeal(ctx: PipelineContext) -> str:
     if _is_fatal_ollama(_out):
         print("  [Tribunal] ⚠ Tribunal unreachable — no appellate verdict rendered.")
         return ""
-    _out_preview = (_out or "").strip()
+    _out = strip_thinking(_out or "")
+    _out_preview = _out
     print(f"  [Tribunal] Raw verdict ({len(_out_preview)} chars): {_out_preview[:300]!r}")
     if re.search(r"\[MERGE[:\]]", _out, re.IGNORECASE) or re.search(r"\bMERGE\b", _out):
         return "PASS"
@@ -539,6 +541,34 @@ def _coder_defend_or_revise(ctx, objections, target_path, target_rel, current_co
     return _patched
 
 
+def _coder_answer_questions(ctx, questions, final_code):
+    """Ask the coder (CODER_MODEL) to answer the tribunal's design-intent
+    questions.  One batched call; returns plain text or None on failure."""
+    from pipeline import CODER_MODEL as _CM
+    _sys = (
+        "You are the CODER agent defending your implementation to the Tribunal. "
+        "Answer each question concisely and factually, citing line numbers where "
+        "possible. Do NOT rewrite code — explain your intent."
+    )
+    _qblock = "\n".join(f"{i}. {q}" for i, q in enumerate(questions, 1))
+    _user = (
+        "## Tribunal Questions\n" + _qblock
+        + "\n\n## Your Implementation\n```\n" + (final_code or "")[:8000]
+        + "\n```\n\nAnswer each question now."
+    )
+    try:
+        _out = call_ollama(
+            _sys, _user, "Tribunal Debate — Coder Clarification", _CM,
+            params={"num_predict": 768}, skip_pre_summarizer=True,
+        )
+    except Exception as _e:
+        print(f"  [Tribunal Debate] ⚠ coder clarification failed: {_e}")
+        return None
+    if _is_fatal_ollama(_out):
+        return None
+    return (_out or "").strip()
+
+
 def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str:
     """Bounded appellate debate: the TRIBUNAL argues with the coder until consensus.
 
@@ -556,7 +586,8 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
     appeal).
     """
     try:
-        from pipeline import REASONING_MODEL as _RM
+        from pipeline import ARBITER_MODEL as _RM, CODER_MODEL as _CODER
+        from arbiter import extract_questions, answer_oracle_question, build_clarification_block, strip_thinking
     except Exception:
         return ""
 
@@ -583,14 +614,22 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
     _tribunal_system = (
         "You are the TRIBUNAL AGENT — a neutral appellate arbiter who ARGUES WITH THE CODER "
         "until the implementation is correct. You do NOT write code yourself.\n"
-        "Each turn, review the implementation against the open violations and render:\n"
+        "Each turn, review the implementation against the open violations and render ONE of:\n"
         "- [MERGE:Tribunal:<justification>] — the implementation is now acceptable.\n"
         "- [REJECT:Tribunal:<justification>] — followed by a numbered OBJECTIONS list of the "
         "specific, concrete defects the coder must still fix.\n"
-        "Be surgical: object only to issues that are visibly present and would break or "
-        "incomplete the implementation. Never invent missing APIs or rules."
+        "- [QUESTION:oracle:<factual question>] — ask the DETERMINISTIC oracle to verify a "
+        "fact: whether an API/global exists, a call's arity/signature, where a local is "
+        "declared (module vs function scope), or whether the file compiles. Ask several in "
+        "one turn if needed.\n"
+        "- [QUESTION:coder:<design-intent question>] — ask the coder to explain its intent "
+        "(e.g. why it chose a given structure or value).\n"
+        "Use QUESTION turns to interrogate the code BEFORE you render MERGE/REJECT. When "
+        "unsure whether a symbol exists, ASK the oracle instead of assuming. Be surgical: "
+        "object only to visible, breaking defects."
     )
 
+    _clarification_log: list[tuple[str, str]] = []
     for _round in range(1, max_rounds + 1):
         print(f"\n  [Tribunal Debate] Round {_round}/{max_rounds}")
 
@@ -604,10 +643,13 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
             + "\n".join(f"  {e}" for e in (getattr(ctx, 'runtime_errors', None) or []))
         ).strip() or "(no open violations recorded)"
 
+        _clar_block = build_clarification_block(_clarification_log)
         _trib_prompt = (
             "## Open Violations (must be satisfied)\n" + _issues_block
             + "\n\n## Implementation Under Review\n```\n" + _final_code[:8000]
-            + "\n```\n\nRender your verdict now: [MERGE] or [REJECT] + a numbered OBJECTIONS list."
+            + "\n```\n"
+            + ("\n" + _clar_block + "\n" if _clar_block else "")
+            + "\nRender your next move: [MERGE], [REJECT] + OBJECTIONS, or [QUESTION:...]."
         )
 
         try:
@@ -622,8 +664,28 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
             print("  [Tribunal Debate] ⚠ tribunal unreachable.")
             return ""
 
-        _trib_preview = (_trib_out or "").strip()
+        _trib_out = strip_thinking(_trib_out or "")
+        _trib_preview = _trib_out
         print(f"  [Tribunal Debate] Tribunal ({len(_trib_preview)} chars): {_trib_preview[:240]!r}")
+
+        # -- Clarification questions take precedence this round ------------
+        _questions = extract_questions(_trib_out)
+        if _questions:
+            _oracle_qs = [q for t, q in _questions if t == "oracle"]
+            _coder_qs = [q for t, q in _questions if t == "coder"]
+            for _q in _oracle_qs:
+                _ok, _ans = answer_oracle_question(_q, _final_code)
+                if _ok:
+                    _clarification_log.append((_q, _ans))
+                    print(f"  [Tribunal Debate] oracle: {_q[:70]!r} -> {_ans[:90]!r}")
+                else:
+                    _coder_qs.append(_q)  # oracle could not answer deterministically
+            if _coder_qs:
+                _ans = _coder_answer_questions(ctx, _coder_qs, _final_code)
+                if _ans:
+                    _clarification_log.append((" | ".join(_coder_qs), _ans))
+            print(f"  [Tribunal Debate] answered {len(_oracle_qs)} oracle + {len(_coder_qs)} coder question(s); continuing.")
+            continue
 
         _is_merge = bool(re.search(r"\[MERGE[:\]]", _trib_out, re.IGNORECASE)
                          or re.search(r"\bMERGE\b", _trib_out))
@@ -636,7 +698,7 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
                 return "PASS"
             print("  [Tribunal Debate] Tribunal MERGE'd but deterministic verdict still FAILs — continuing.")
         elif _is_reject:
-            _revised = _coder_defend_or_revise(ctx, _trib_out, _target_path, _target_rel, _final_code, _RM)
+            _revised = _coder_defend_or_revise(ctx, _trib_out, _target_path, _target_rel, _final_code, _CODER)
             if _revised:
                 _dv, _ = _deterministic_verdict(ctx)
                 if _dv == "PASS":

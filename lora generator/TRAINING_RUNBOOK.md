@@ -108,3 +108,24 @@ set MIDWAY_SCAFFOLD_MODEL=midway-coder-lora        # scaffold rides the coder
 - Every feed line is valid JSONL with a `messages` key.
 - Every emitted bracket tag parses via `signals.py::extract_signals()` (0 failures).
 - The combined file's turn-count distribution shows single-turn + round-trip samples.
+
+## Initial vs Genuine data (the retrain loop)
+
+The failure corpus is split by SOURCE so a retrain can fold real, user-driven
+data on top of the deterministic bootstrap:
+
+- `failure_corpus.initial.jsonl` — deterministic seeders (`failure_mode_seeder.py`,
+  `contract_failure_generator.py`). Regenerated on demand, reproducible.
+- `failure_corpus.genuine.jsonl` — live runtime captures (`post_process_lua_observed`
+  defaults to `source="genuine"`) plus any hand-written user corrections. Grows
+  only from real behaviour.
+
+Convert either with `failure_corpus_to_dataset.py --source initial|genuine`, then
+combine with the matching preset:
+
+- `--preset coder`          -> `combined_lora_dataset.jsonl`         (bootstrap: initial only)
+- `--preset coder-retrain`  -> `combined_retrain_lora_dataset.jsonl` (initial + genuine)
+
+Flow: train v1 on `coder` → run the pipeline with `MIDWAY_FAILURE_CORPUS=1` →
+the genuine corpus fills from real fixes → retrain v2 on `coder-retrain`.
+

@@ -2165,18 +2165,20 @@ def post_process_lua(content: str) -> str:
     return content
 
 
-def post_process_lua_observed(content: str, file_relpath: str = "") -> str:
+def post_process_lua_observed(content: str, file_relpath: str = "",
+                              source: str = "genuine") -> str:
     """Run ``post_process_lua`` and record every applied fix to the corpus.
 
     Identical output to ``post_process_lua``; additionally appends one record
     per fix that changed the file, gated behind ``MIDWAY_FAILURE_CORPUS=1``
-    (see ``failure_corpus.record_fix``).  With the flag off this is a
-    zero-cost pass, so it is safe to wire into the production path.
+    (see ``failure_corpus.record_fix``).  ``source`` tags the record as
+    "initial" (deterministic seeders) or "genuine" (live runtime), keeping
+    bootstrap data separate from user-driven data for retraining.
     """
     from failure_corpus import record_fix
 
     def _on_fix(label, invariant, before, after):
-        record_fix(label, invariant, before, after, file_relpath)
+        record_fix(label, invariant, before, after, file_relpath, source=source)
 
     had_trailing_newline = content.endswith('\n')
     content = _run_fix_sequence(content, on_fix=_on_fix)

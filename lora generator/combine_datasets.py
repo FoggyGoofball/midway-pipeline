@@ -26,11 +26,14 @@ from lora_config import (
     PAGING_DATASET,
     SEARCH_REPLACE_DATASET,
     NEGATIVE_API_DATASET,
-    FAILURE_CORPUS_DATASET,
+    FAILURE_CORPUS_INITIAL_DATASET,
+    FAILURE_CORPUS_GENUINE_DATASET,
     CARTRIDGE_DATASET,
     SIGNALS_DATASET,
     VERDICT_DATASET,
+    ARBITER_DATASET,
     COMBINED_DATASET,
+    COMBINED_RETRAIN_DATASET,
     REASONER_DATASET,
 )
 
@@ -38,14 +41,19 @@ from lora_config import (
 # SEPARATE on disk; the combiner is the only place they are joined.
 PRESETS = {
     "coder": {
-        "inputs": [PAGING_DATASET, SEARCH_REPLACE_DATASET, NEGATIVE_API_DATASET, FAILURE_CORPUS_DATASET, CARTRIDGE_DATASET, SIGNALS_DATASET],
+        "inputs": [PAGING_DATASET, SEARCH_REPLACE_DATASET, NEGATIVE_API_DATASET, FAILURE_CORPUS_INITIAL_DATASET, CARTRIDGE_DATASET, SIGNALS_DATASET],
         "output": COMBINED_DATASET,
-        "desc": "midway-coder-lora (patch format + API contract + negative API + observed failure corpus + paging + signals)",
+        "desc": "midway-coder-lora bootstrap (synthetic + deterministic INITIAL failure corpus)",
+    },
+    "coder-retrain": {
+        "inputs": [PAGING_DATASET, SEARCH_REPLACE_DATASET, NEGATIVE_API_DATASET, FAILURE_CORPUS_INITIAL_DATASET, FAILURE_CORPUS_GENUINE_DATASET, CARTRIDGE_DATASET, SIGNALS_DATASET],
+        "output": COMBINED_RETRAIN_DATASET,
+        "desc": "midway-coder-lora retrain (INITIAL bootstrap + GENUINE user-driven failure corpus)",
     },
     "reasoner": {
-        "inputs": [SIGNALS_DATASET, VERDICT_DATASET],
+        "inputs": [SIGNALS_DATASET, VERDICT_DATASET, ARBITER_DATASET],
         "output": REASONER_DATASET,
-        "desc": "midway-reasoner-lora (signals + review/arbitration/decomposition)",
+        "desc": "midway-reasoner-lora (signals + review/arbitration + deterministic debate)",
     },
 }
 

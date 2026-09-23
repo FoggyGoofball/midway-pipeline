@@ -36,7 +36,7 @@ _REPO_ROOT = SCRIPT_DIR.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from failure_corpus import read_corpus  # noqa: E402
+from failure_corpus import read_corpus, looks_poisoned  # noqa: E402
 
 #: Per-language code-fence tag.  A new language adds a profile here.
 LANGUAGE_FENCES = {
@@ -72,6 +72,8 @@ def corpus_to_samples(records, language: str = None) -> list[dict]:
         after = (rec.get("after") or "").strip()
         if not before or not after:
             continue
+        if looks_poisoned(before) or looks_poisoned(after):
+            continue  # skip poisoned records even if they slipped into the corpus
         key = (before, after)
         if key in seen:
             continue
@@ -99,15 +101,23 @@ def main():
     parser = argparse.ArgumentParser(description="Convert failure corpus to ChatML SEARCH/REPLACE dataset")
     parser.add_argument("--input", default=None, help="corpus JSONL (default: failure_corpus.jsonl)")
     parser.add_argument("--output", default=None, help="output JSONL (default: failure_corpus_dataset.jsonl)")
+    parser.add_argument("--source", choices=["initial", "genuine"], default=None,
+                        help="convert a specific corpus source (routes to "
+                             "failure_corpus.<source>.jsonl -> failure_corpus_<source>_dataset.jsonl)")
     parser.add_argument("--language", default=None, help="override the language tag")
     args = parser.parse_args()
 
-    input_path = Path(args.input) if args.input else (
-        _REPO_ROOT / "lora generator" / "failure_corpus.jsonl"
-    )
-    output_path = Path(args.output) if args.output else (
-        _REPO_ROOT / "lora generator" / "failure_corpus_dataset.jsonl"
-    )
+    if args.source:
+        from failure_corpus import corpus_path
+        input_path = corpus_path(args.source)
+        output_path = SCRIPT_DIR / f"failure_corpus_{args.source}_dataset.jsonl"
+    else:
+        input_path = Path(args.input) if args.input else (
+            _REPO_ROOT / "lora generator" / "failure_corpus.jsonl"
+        )
+        output_path = Path(args.output) if args.output else (
+            _REPO_ROOT / "lora generator" / "failure_corpus_dataset.jsonl"
+        )
 
     records = read_corpus(input_path)
     samples = corpus_to_samples(records, args.language)
