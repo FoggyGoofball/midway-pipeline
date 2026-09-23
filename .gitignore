@@ -62,3 +62,8 @@ Thumbs.db
 *.suo
 # ── 9. Liveness monitor runtime log ─────────────────────────────────────
 pipeline_status.log
+# Runtime server logs
+server_run_*.log
+
+# Vite dev cache
+/web/.vite/
