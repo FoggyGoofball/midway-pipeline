@@ -26,12 +26,12 @@ except ImportError:
 # These constants are referenced by domain configurations below.
 # Execution coder. qwen3.5:9b is the best SEARCH/REPLACE instruction-follower (6.1GB).
 # Override at runtime via MIDWAY_CODER_MODEL / MIDWAY_REVIEWER_MODEL (pipeline.py).
-EXECUTION_MODEL = "qwen3.5:9b"
-CODER_MODEL = "qwen3.5:9b"
-REVIEWER_MODEL = "qwen3.5:9b"
+EXECUTION_MODEL = "midway-coder-lora"
+CODER_MODEL = "midway-coder-lora"
+REVIEWER_MODEL = "midway-reasoner-lora"
 REASONING_MODEL = REVIEWER_MODEL
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
-LIBRARIAN_MODEL = EXECUTION_MODEL
+LIBRARIAN_MODEL = "midway-reasoner-lora"  # DOC/librarian rides the reasoner adapter
 
 # Ledger protocol injected into every agent system prompt (memory/oracle usage)
 LEDGER_PROTOCOL_RULE = (
@@ -458,7 +458,14 @@ def get_agent_system(agent_key: str, pro_mode: bool = False, lean: bool = False)
         # The mesh/ledger/virtual-memory protocols are LoRA-dependent and
         # unused by untrained models; the staging block carries the
         # SEARCH/REPLACE format instructions instead.
-        return base_prompt + sandbox_constraint
+        _arg_ext = ""
+        try:
+            import os as _os_arg
+            if _os_arg.environ.get("MIDWAY_ANCHOR_SIGNALS", "") == "1":
+                _arg_ext = _ANCHOR_ARGUMENTATION_EXTENSION
+        except Exception:
+            pass
+        return base_prompt + sandbox_constraint + _arg_ext
 
     return base_prompt + ledger_note + mesh_ext + sandbox_constraint + LEDGER_MEMORY_RULE + _CODING_MANDATES + VIRTUAL_MEMORY_PROTOCOL
 
@@ -484,7 +491,8 @@ MESH_AGENT_SYSTEM_EXTENSION: str = (
     "- [READ_OFFLOADED:block_id]: Restore previously offloaded context.\n"
     "- [EXTRACT_SKELETON:block_id]: (DOC Agent) Read an offloaded file and return only function signatures and class definitions, stripping implementation bodies.\n"
     "- [APPEAL:Agent:Defense]: Appeal a [VETO] against your work. Provide your defense of the correct implementation.\n"
-    "- [MERGE:Agent:Justification] / [REJECT:Agent:Justification]: Binding Tribunal verdict on an appeal.\n\n"
+    "- [MERGE:Agent:Justification] / [REJECT:Agent:Justification]: Binding Tribunal verdict on an appeal.\n"
+    "- [AMBIGUITY:Agent:Issue]: Flag that your task spec is underspecified or self-contradictory; you cannot proceed correctly without clarification.\n\n"
     "APPELLATE COURT PROTOCOL:\n"
     "If you receive a [VETO] from a Reviewer and believe your implementation is correct, "
     "you may counter with [APPEAL:Reviewer:<your defense>]. This triggers a blind-review by "
@@ -497,4 +505,23 @@ MESH_AGENT_SYSTEM_EXTENSION: str = (
     "Always end your output with a signal when appropriate.\n"
     "If you need the most recently fetched file content, use ## Double-Check section."
 
+)
+
+
+# -- Anchor-path code-first argumentation block -------------------------------
+# The lean (anchor) coder prompt strips the full mesh protocol (it caused
+# comment-monologue regressions on untrained models).  This curated, CODE-FIRST
+# subset restores argumentation without the free-form latitude: signals ride
+# ALONGSIDE a required SEARCH/REPLACE block, never in place of it.
+# Opt-in via MIDWAY_ANCHOR_SIGNALS=1 (default off).
+_ANCHOR_ARGUMENTATION_EXTENSION: str = (
+    "\n\n---\n"
+    "DISAGREEMENT PROTOCOL (optional, code-first):\n"
+    "You may append ONE signal to your SEARCH/REPLACE output when the task is "
+    "wrong, underspecified, or you disagree. NEVER emit a signal instead of the "
+    "required code block — the code always comes first.\n"
+    "- [OBJECT:Agent:Reason] — the instruction contradicts the engine contract.\n"
+    "- [APPEAL:Agent:Defense] — defend your code against an objection you believe is wrong.\n"
+    "- [CONSULT:Agent:Question] — ask a technical question when the contract is genuinely ambiguous.\n"
+    "- [AMBIGUITY:Agent:Issue] — the task spec is underspecified/self-contradictory and blocks correct completion.\n"
 )

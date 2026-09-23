@@ -27,7 +27,7 @@ def test_constants_exist():
     import pipeline
     assert pipeline.OLLAMA_HOST == "http://192.168.0.16:11434"
     import os
-    assert pipeline.CODER_MODEL == os.getenv("MIDWAY_CODER_MODEL", "qwen3.5:9b")
+    assert pipeline.CODER_MODEL == os.getenv("MIDWAY_CODER_MODEL", "midway-coder-lora")
     # PROJECT_ROOT is set at import time from where pipeline.py lives
     assert isinstance(pipeline.PROJECT_ROOT, Path)
     assert pipeline.MAX_ITERATIONS == 3
@@ -51,3 +51,24 @@ def test_signal_patterns_exist():
     ]
     for key in expected_keys:
         assert key in pipeline.SIGNAL_PATTERNS, f"Missing SIGNAL_PATTERNS key: {key}"
+
+
+def test_help_command_detection():
+    """!help (and aliases) must be detected case-insensitively."""
+    import pipeline
+    for prompt in ("!help", "!HELP", "help!", "/help", "?help", "help-me"):
+        assert pipeline.is_help_command(prompt), f"should detect {prompt!r}"
+    for prompt in ("", "help me build the strongman", "!plan the barker", "hello"):
+        assert not pipeline.is_help_command(prompt), f"should NOT detect {prompt!r}"
+
+
+def test_help_text_lists_capabilities():
+    """The static help reference must mention every user-facing capability."""
+    import pipeline
+    text = pipeline.get_help_text()
+    assert "!help" in text
+    for section in ("Build / implement", "Plan a feature", "read-only analyst",
+                    "Chat", "Resume / recover", "Inter-persona signals"):
+        assert section in text, f"missing section: {section}"
+    assert "docs/SIGNAL_TAGS_REFERENCE.md" in text
+

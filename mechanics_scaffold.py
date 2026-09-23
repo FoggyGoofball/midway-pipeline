@@ -5,8 +5,8 @@ mechanics_scaffold.py -- Mechanics Scaffold (between Architect JSON and coder)
 Design doc: docs/MECHANICS_SCAFFOLD_PLAN.md
 
 Premise: the coder fails because it invents game logic AND API usage
-simultaneously.  This stage asks the already-resident reasoning model to reason
-each mechanic in a bounded, annotated, machine-checkable 3-field template
+simultaneously.  This stage asks the already-resident coder model (SCAFFOLD_MODEL)
+to reason each mechanic in a bounded, annotated, machine-checkable 3-field template
 (INTENT + PSEUDO + API) and bind it to an exact approved bridge signature.
 The coder then *translates* a known shape instead of inventing from blank.
 
@@ -370,7 +370,7 @@ def _generate_scaffold_for_task(
     handle_names: set,
 ) -> Optional[MechanicScaffold]:
     """Generate + validate one scaffold, re-prompting once on failure."""
-    from pipeline import REASONING_MODEL, call_ollama
+    from pipeline import SCAFFOLD_MODEL, call_ollama
     from ollama_extras import is_fatal_ollama_error
 
     _prompt = _build_scaffold_prompt(task, design_block, approved_apis)
@@ -381,7 +381,7 @@ def _generate_scaffold_for_task(
                 SCAFFOLD_SYSTEM,
                 _prompt,
                 f"Mechanics Scaffold (task {task_id}, attempt {_attempt})",
-                REASONING_MODEL,
+                SCAFFOLD_MODEL,
                 params={"num_predict": 1024},
                 skip_pre_summarizer=True,
             )

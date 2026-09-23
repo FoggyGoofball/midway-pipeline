@@ -1009,6 +1009,20 @@ def _process_task_signals(ctx: PipelineContext, task, work_queue: deque) -> None
         elif stype == "REJECT":
             ctx.tribunal_verdicts[task.agent] = f"REJECT:{signal['content']}"
 
+        elif stype == "AMBIGUITY":
+            # Inter-persona argumentation: an agent flags that its task spec is
+            # underspecified or self-contradictory.  Record-only (no forced
+            # re-prompt) — TraceGate consumes this later per
+            # docs/SPEC_TRACE_GATE_PLAN.md.
+            ctx.ambiguity_signals.append({
+                "from": task.agent,
+                "target": signal["target"],
+                "issue": signal["content"],
+                "task_id": task.task_id,
+                "task_spec": getattr(task, "spec", ""),
+            })
+            print(f"  [Signal] \u26a0 AMBIGUITY from {task.agent}: {signal['content'][:120]}")
+
         # Directive C: Legacy signal handlers MATH_EVAL, FETCH, READ_OFFLOADED,
         # and EXTRACT_SKELETON have been PURGED. They are entirely superseded
         # by the <invoke_kernel> XML schema in the PagingKernel.

@@ -2,7 +2,7 @@
 
 > Single map of the pipeline's planning documents: what each covers, which track it
 > belongs to, how they compose, and what is implemented vs. still a plan.
-> Updated: 2026-09-17.
+> Updated: 2026-09-21.
 
 ---
 
@@ -40,11 +40,15 @@ The chain reads left-to-right as **one narrative**:
 |---|---|---|
 | `docs/MECHANICS_SCAFFOLD_PLAN.md` | Bounded intent→pseudocode→API scaffold between Architect JSON and anchor code | 📄 Plan |
 | `docs/SPEC_TRACE_GATE_PLAN.md` | Trace a request/code/doc; score sufficiency + detect contradictions | 📄 Plan |
-| `docs/MESH_SIGNAL_ARGUMENTATION_PLAN.md` | How agents emit/argue via signals (4-point wiring + `AMBIGUITY`) | 📄 Plan |
+| `docs/MESH_SIGNAL_ARGUMENTATION_PLAN.md` | How agents emit/argue via signals (4-point wiring + `AMBIGUITY`) | ⚠️ Partial (Phase 0+1 shipped) |
 
 > **Note:** while these three are *plans*, the session that produced them also shipped
 > supporting code: deterministic post-process fixes #17–#26, the tribunal↔coder debate loop,
-> full-path luac resolution, and the prompt changes in `cartridges/midway_data.py`.
+> full-path luac resolution, the prompt changes in `cartridges/midway_data.py`, and — most
+> recently — the AMBIGUITY four-point wiring (`SignalType.AMBIGUITY`,
+> `PipelineContext.ambiguity_signals`, the parser regex, the `_process_task_signals` handler)
+> plus the anchor-path `_ANCHOR_ARGUMENTATION_EXTENSION` (gated `MIDWAY_ANCHOR_SIGNALS=1`).
+> `SPEC_TRACE_GATE_PLAN.md` itself (the stage that consumes AMBIGUITY) is still unbuilt.
 
 ## Track B — Portability (other projects / models / hardware)
 
@@ -52,6 +56,7 @@ The chain reads left-to-right as **one narrative**:
 |---|---|---|
 | `docs/CARTRIDGE_WIZARD_PLAN.md` | Autonomously build cartridges from a repo's headers/docs | 📄 Plan (cartridge architecture ✅, wizard ⚠️ stub) |
 | `docs/LORA_GENERATION_DESIGN.md` | Generate a LoRA adapter per (model × cartridge) from API knowledge | 📄 Plan |
+| `docs/SIGNAL_TAGS_REFERENCE.md` | Every inter-agent + inter-pipeline signal (16 mesh tags + paging + snapshots + checkpoints), with LoRA dataset samples | 📄 Reference |
 | `docs/ACQUISITION_PHASE_PLAN.md` | UE4 knowledge discovery + API scraping | 📄 Plan |
 | `wizard_roadmap.md` | The 5-stage acquisition design the Cartridge Wizard implements | 📄 Design only |
 
@@ -79,8 +84,8 @@ Track A first, in composition order:
    logic+API failure, and the other two compose around it.
 2. **Trace Gate** — validates the scaffold; the deterministic half (dangling refs, numeric
    conflicts, orphan units) reuses `_lua_symbol_table` already shipped.
-3. **Mesh Signals** — the `AMBIGUITY` four-point wiring (prompt → enum → parser → dispatcher);
-   small, and it closes the loop back to the Trace Gate.
+3. **Mesh Signals** — the `AMBIGUITY` four-point wiring (prompt → enum → parser → dispatcher)
+   is now shipped; the remaining piece is routing `ctx.ambiguity_signals` into the Trace Gate.
 
 Track B (Cartridge Wizard → LoRA) only after Track A proves out — they are the
 portability/long-term fixes, not the convergence fixes.

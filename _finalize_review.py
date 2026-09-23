@@ -815,7 +815,7 @@ def _gap_filler_surgery(ctx: PipelineContext, target_rel: str) -> bool:
 
     try:
         from _post_process_lua import post_process_surgery as _pp_surg
-        _fixed = _pp_surg(_src)
+        _fixed = _pp_surg(_src, inject_lifecycle=True)
     except Exception:
         return False
 
@@ -854,6 +854,45 @@ def _gap_filler_surgery(ctx: PipelineContext, target_rel: str) -> bool:
     print(f"  [Gap Fill] deterministic repair committed {target_rel} "
           f"({len(_fixed)} chars) - no LLM rewrite needed.")
     return True
+
+
+def _deterministic_convergence_repair(ctx: PipelineContext) -> int:
+    """Deterministically repair all shipped Lua files BEFORE the verdict.
+
+    The deterministic verdict (runtime sim + contract validator) flags bare
+    calls and duplicate OnStep registrations, but the LLM fix cycle cannot
+    deterministically prefix a namespace or dedupe a callback.  Those repairs
+    live in the deterministic post-processor (Fix #6/#12), which previously
+    only ran AFTER the loop had already tripped its convergence trip-wire.
+
+    Running the deterministic repair at the top of every cycle means the
+    verdict is computed on the POST-repair file, so these classes of error
+    converge deterministically instead of bouncing the trip-wire.
+
+    Reuses ``_gap_filler_surgery`` per file (post_process_surgery + luac +
+    commit + anchor update).  Returns the number of files repaired.
+    """
+    _owned: set[str] = set()
+    _mono = getattr(ctx, '_monolithic_lua_target', None)
+    if _mono and str(_mono).endswith('.lua'):
+        _owned.add(str(_mono))
+    for _t in (getattr(ctx, 'task_map', {}) or {}).values():
+        _tf = getattr(_t, 'target_file', None)
+        if _tf and str(_tf).endswith('.lua'):
+            _owned.add(str(_tf))
+    if not _owned:
+        return 0
+
+    _repaired = 0
+    for _rel in sorted(_owned):
+        try:
+            if _gap_filler_surgery(ctx, _rel):
+                _repaired += 1
+        except Exception as _e:
+            print(f"  [Convergence Repair] ⚠ {_rel}: {_e}")
+    if _repaired:
+        print(f"  [Convergence Repair] Deterministically repaired {_repaired} Lua file(s) before verdict.")
+    return _repaired
 
 
 def _whole_file_surgery(ctx: PipelineContext, target_rel: str) -> bool:
@@ -1318,6 +1357,17 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
         _reviewer_failed_parse = False
         print(f"\n  [Review-Fix] Cycle {ctx.review_cycle}/{_REVIEW_MAX_ITERATIONS}")
 
+        # -- Deterministic convergence repair ----------------------------
+        # Fix bare namespace calls, duplicate OnStep registrations, phantom
+        # APIs and block imbalance with NO model in the loop BEFORE the
+        # verdict is computed.  These are exactly the errors the LLM fix
+        # cycle cannot deterministically repair, and leaving them in place
+        # makes the convergence trip-wire fire on an unchanged signature.
+        try:
+            _deterministic_convergence_repair(ctx)
+        except Exception as _dcr_e:
+            print(f"  [Convergence Repair] ⚠ disabled ({_dcr_e}).")
+
         # -- Circuit Breaker: Check retry counts -------------------------
         # Only count real task IDs (task_N); skip synthetic merged: keys and
         # other pipeline-internal entries that should never trip the breaker.
@@ -1678,6 +1728,29 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
             )
             print(f"  [Review-Fix] Deterministic verdict: {_det_verdict}.")
 
+            # -- Convergence trip-wire: stop ghost-chasing -----------------
+            # If the deterministic errors are byte-identical (modulo line
+            # numbers) to a previous cycle, the last LLM fix made ZERO
+            # progress. Burn no more cycles + tribunal on a doomed file —
+            # trip to BLOCKED with a clear deterministic signal instead.
+            if _det_verdict == "FAIL":
+                try:
+                    from _convergence import error_signature, should_trip_on_stale
+                    _sig = error_signature(_det_issues)
+                    _hist = getattr(ctx, '_det_sig_history', [])
+                    if should_trip_on_stale(_hist, _sig):
+                        print(
+                            "  ⛔ [Convergence] Deterministic errors UNCHANGED across "
+                            f"cycles (signature seen {_hist.count(_sig) + 1}x) — no "
+                            "progress. Tripping to BLOCKED to avoid wasted cycles."
+                        )
+                        ctx.review_verdict = "BLOCKED"
+                        break
+                    _hist.append(_sig)
+                    ctx._det_sig_history = _hist
+                except Exception as _conv_e:
+                    print(f"  [Convergence] ⚠ trip-wire unavailable ({_conv_e}) — continuing.")
+
             # Record this cycle's proposal/try/verdict in the shared decision
             # log so later cycles and the tribunal can see what has been tried.
             try:
@@ -1890,6 +1963,26 @@ def _run_review_fix_loop(ctx: PipelineContext) -> PipelineContext:
                         + "\n\n## DETERMINISTIC ERRORS (resolve these EXACTLY — luac/RuntimeSim ground truth):\n"
                         + _det
                     )
+
+            # -- Tombstone ring buffer: concise negative constraints ---------
+            # Turn any failure signature already seen (preflight tombstone
+            # labels) into a bounded, deduped "do NOT repeat this approach"
+            # block. Specific + stable + bounded — never a growing essay.
+            try:
+                from _tombstones import (
+                    tombstone_lines_from_text,
+                    push_recent_tombstones,
+                    render_recent_tombstones,
+                )
+                _tomb_lines = tombstone_lines_from_text(
+                    (ctx.pre_flight_errors or "") + "\n" + issues_text
+                )
+                push_recent_tombstones(ctx, _tomb_lines)
+                _tomb_block = render_recent_tombstones(ctx)
+                if _tomb_block:
+                    issues_text = issues_text + "\n\n" + _tomb_block
+            except Exception:
+                pass
 
             print(f"  [Review-Fix] Review failed  routing critiques to original domain agents...")
             ctx.output_parts.append(

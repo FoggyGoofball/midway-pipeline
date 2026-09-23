@@ -316,6 +316,32 @@ def _inject_slot_id(content: str) -> str:
 
 
 # ==============================================================================
+#  Fix #34: Inject missing OnUnload()
+# ==============================================================================
+# The engine's teardown path calls OnUnload() when present. A module that
+# defines lifecycle hooks (OnLoad) but omits OnUnload would leave the unload
+# path with a nil global; inject a minimal stub so teardown is always safe.
+
+def _inject_onunload(content: str) -> str:
+    """Inject a minimal OnUnload() stub when the module lacks one."""
+    if re.search(r'\bfunction\s+OnUnload\s*\(', content):
+        return content  # already present
+
+    # Only whole lifecycle modules get a stub — never arbitrary code fragments.
+    if not re.search(r'\bfunction\s+OnLoad\s*\(', content):
+        return content
+
+    stub = (
+        "\n-- ─── OnUnload: teardown hook ────────────────────────────────\n"
+        "function OnUnload()\n"
+        "end\n"
+    )
+    result = content.rstrip() + "\n" + stub
+    print("  [Post-Process Fix #34] Injected missing OnUnload()")
+    return result
+
+
+# ==============================================================================
 #  Fix #6: Add MidwayPhysics. prefix to bare API calls
 # ==============================================================================
 # For known MidwayPhysics symbols called without the prefix, prepend it.
@@ -327,128 +353,74 @@ def _inject_slot_id(content: str) -> str:
 # function provided by the engine bridge, NOT a MidwayPhysics.* method.
 # The contract validator also omits it from bare_name_to_namespace.
 
-# Cache for the dynamically-built symbol set (built once per process)
-_KNOWN_BARE_SYMBOLS: frozenset[str] | None = None
-
-
 def _build_bare_symbols_from_contract() -> frozenset[str]:
-    """Return the bare symbols that need a ``MidwayPhysics.`` prefix.
+    """Return the bare MidwayPhysics symbols that need a namespace prefix.
 
-    Uses a static PascalCase set as the single source of truth.  The bridge
-    contract stores symbol names in LOWERCASE (both ``bare_name_to_namespace``
-    keys and ``approved_calls`` entries), so deriving canonical casing from it
-    is lossy — "spawnstaticbox" cannot be reliably re-cased to
-    "SpawnStaticBox" — which silently disabled the prefixer.
+    Reads from ``api_namespace_registry`` — the language-agnostic single
+    source of truth — instead of a duplicated static list.  The registry is
+    keyed by language, so porting this prefixer to another target language is
+    a registry entry, not a code change.
     """
-    global _KNOWN_BARE_SYMBOLS
-    if _KNOWN_BARE_SYMBOLS is not None:
-        return _KNOWN_BARE_SYMBOLS
-
-    _KNOWN_BARE_SYMBOLS = frozenset({
-        # Spawn functions
-        "SpawnDynamicMesh", "SpawnDynamicBox", "SpawnDynamicSphere",
-        "SpawnDynamicCapsule", "SpawnDynamicCylinder",
-        "SpawnDynamicBoxR", "SpawnDynamicSphereR",
-        "SpawnDynamicCapsuleR", "SpawnDynamicCylinderR",
-        "SpawnStaticMesh", "SpawnStaticBox", "SpawnStaticSphere",
-        "SpawnStaticCapsule", "SpawnStaticCylinder",
-        "SpawnStaticBoxR", "SpawnStaticSphereR",
-        "SpawnStaticCapsuleR", "SpawnStaticCylinderR",
-        "SpawnKinematicBox", "SpawnKinematicSphere",
-        "SpawnKinematicCapsule", "SpawnKinematicCylinder",
-        "SpawnKinematicBoxR",
-        "SpawnSensorBox", "SpawnSensorSphere",
-        # Pool operations
-        "CreatePool", "PoolAcquire", "PoolReturn",
-        "PoolCullBelow", "PoolFree", "PoolTotal",
-        # Physics manipulation
-        "ApplyImpulse", "ApplyAngularImpulse",
-        "SetLinearVelocity", "AddLinearVelocity",
-        "DestroyBody", "GetVelocity",
-        "SetVelocity", "MoveKinematic", "IsSensorTriggered",
-        "IsActive",
-        "GetPosition", "SetPosition", "GetRotation",
-        "SetFriction", "SetRestitution",
-        "SetGravityFactor", "SetMass",
-        "SetLinearDamping", "SetAngularDamping",
-        # Callback registration
-        "OnStep", "OnCollision", "OnSensorEnter", "OnSensorExit",
-        # Query
-        "RayCast", "OverlapSphere", "OverlapBox",
-    })
-    return _KNOWN_BARE_SYMBOLS
+    from api_namespace_registry import get_namespaces
+    return frozenset(get_namespaces("lua").get("MidwayPhysics", frozenset()))
 
 
 def _add_midwayphysics_prefix(content: str) -> str:
-    """Add ``MidwayPhysics.`` prefix to bare calls to known API symbols.
+    """Add namespace prefixes to bare calls to known API symbols.
 
-    Uses the contract validator's symbol list dynamically so the set is
-    always in sync with the live bridge contract.
+    Fully data-driven from ``api_namespace_registry`` (keyed by language) so
+    the prefixer is language-agnostic: every namespace, its correctly-cased
+    symbols, hallucinated namespace aliases, and must-not-prefix globals come
+    from one place.
 
-    We need to be careful NOT to:
-      - Double-prefix already-prefixed calls (MidwayPhysics.SpawnXxx)
-      - Prefix calls inside string literals
-      - Prefix Lua built-in function names
-    Strategy: find all `WORD(` calls and check if WORD is in our known set
-    AND not already prefixed with MidwayPhysics.
+    Care is taken NOT to:
+      - Double-prefix already-prefixed calls (``MidwayPhysics.SpawnXxx``)
+      - Prefix a function DEFINITION (``function SetFriction(`` / ``local
+        function OnStep(``) — that would corrupt it
+      - Prefix Lua built-ins / stdlib (they are simply not in the registry)
     """
-    symbols = _build_bare_symbols_from_contract()
+    from api_namespace_registry import get_aliases, get_globals, get_namespaces
+
+    _aliases = get_aliases("lua")
+    _globals = get_globals("lua")
+    _namespaces = get_namespaces("lua")
     original = content
     modifications = 0
 
-    # The coder model occasionally hallucinates the shorter namespace
-    # `Physics.*` instead of `MidwayPhysics.*` (e.g. Physics.SpawnStaticBox).
-    # Rewrite deterministically — `Physics` is not a real namespace in this
-    # engine, so every `Physics.` occurrence means `MidwayPhysics.`.
-    _alias_pat = re.compile(r'\bPhysics\.')
-    _rewritten, _alias_count = _alias_pat.subn('MidwayPhysics.', content)
-    if _alias_count > 0:
-        content = _rewritten
-        print(f"  [Post-Process Fix #6] Rewrote {_alias_count} hallucinated 'Physics.' namespace(s) → 'MidwayPhysics.'")
+    # 1. Hallucinated / misspelled namespaces first, e.g. `Physics.` ->
+    #    `MidwayPhysics.`, `Engineer.` -> `Engine.`.  Rewriting the alias to
+    #    its canonical form before the bare-prefix pass lets the normal
+    #    lookbehind (`(?<!Engine\.)`) treat the corrected call as already
+    #    prefixed.
+    for _alias, _canonical in sorted(_aliases.items(), key=lambda kv: -len(kv[0])):
+        _alias_pat = re.compile(r'\b' + re.escape(_alias) + r'\.')
+        _rewritten, _count = _alias_pat.subn(_canonical + '.', content)
+        if _count > 0:
+            content = _rewritten
+            modifications += _count
+            print(f"  [Post-Process Fix #6] Rewrote {_count} hallucinated "
+                  f"'{_alias}.' namespace(s) → '{_canonical}.'")
 
-    # Match WORD( patterns where WORD is not already prefixed
-    # Negative lookbehind: not preceded by MidwayPhysics. or .
-    # Negative lookahead: not a Lua keyword or local function def
-    for symbol in sorted(symbols, key=len, reverse=True):
-        # Pattern: bare call like `SpawnDynamicSphere(lx, ly, lz, r)`
-        # Not preceded by MidwayPhysics., not part of a larger identifier, and
-        # NOT a function DEFINITION (`function SetFriction(` / `local function
-        # OnStep(`) — prefixing a definition corrupts it into
-        # `function MidwayPhysics.SetFriction(` which is never what we want.
-        pattern = re.compile(
-            r'(?<!MidwayPhysics\.)(?<!\.)(?<![\w.])'
-            r'(?<!function\s)(?<!local\s)\b'
-            + re.escape(symbol)
-            + r'\s*\('
-        )
-        # Use subn to get both the result and count of replacements
-        new_content, count = pattern.subn(f'MidwayPhysics.{symbol}(', content)
-        if count > 0:
-            modifications += count
-            content = new_content
-
-    # Data-driven prefixing for the OTHER flat bridge namespaces.  The coder
-    # writes bare `IsActionDown("fire")` / `AwardTickets(n)` which are global
-    # nils in the runtime sandbox.  Add one dict entry per future namespace.
-    _namespace_bare_symbols = {
-        "MidwayInput": frozenset({"IsActionDown", "IsKeyDown"}),
-        "Engine": frozenset({"AwardTickets", "AwardTokens",
-                             "GetTickets", "GetTokens", "GetStreak"}),
-    }
-    for _ns, _ns_symbols in _namespace_bare_symbols.items():
-        for _sym in sorted(_ns_symbols, key=len, reverse=True):
-            _ns_pat = re.compile(
+    # 2. Bare-call prefixing, one namespace at a time.  Symbols are matched
+    #    longest-first so a symbol that is a prefix of another can never win
+    #    a partial match.
+    for _ns, _syms in _namespaces.items():
+        for _sym in sorted(_syms, key=len, reverse=True):
+            if _sym in _globals:
+                continue
+            _pat = re.compile(
                 r'(?<!' + re.escape(_ns) + r'\.)(?<!\.)(?<![\w.])'
                 r'(?<!function\s)(?<!local\s)\b'
                 + re.escape(_sym) + r'\s*\('
             )
-            _new, _n = _ns_pat.subn(f'{_ns}.{_sym}(', content)
+            _new, _n = _pat.subn(f'{_ns}.{_sym}(', content)
             if _n:
                 content = _new
+                modifications += _n
                 print(f"  [Post-Process Fix #6] Added {_ns}. prefix to {_n} bare call(s)")
 
-    if modifications:
-        print(f"  [Post-Process Fix #6] Added MidwayPhysics. prefix to {modifications} call(s) (from {len(symbols)} contract symbols)")
+    if modifications and content != original:
+        print(f"  [Post-Process Fix #6] Namespace repair: {modifications} rewrite(s) total.")
     return content
 
 
@@ -914,12 +886,22 @@ def _dedupe_onstep_registrations(content: str) -> str:
         nxt = s[j] if j < len(s) else ' '
         return (not (prev.isalnum() or prev == '_')) and (not (nxt.isalnum() or nxt == '_'))
 
+    # Block keywords tracked inside the callback. `do` covers `for`/`while`/bare
+    # `do` (Lua `for`/`while` always require `do`), so counting `do` once avoids
+    # the classic for..do double count. `else`/`elseif`/`then` add no depth.
+    _BLOCK_KW = {'function': 8, 'if': 2, 'do': 2, 'repeat': 6, 'end': 3, 'until': 5}
+
     def _span_end(func_idx: int) -> int:
         """Return the exclusive end index of the OnStep registration whose
-        `function` keyword starts at func_idx (i.e. just past the closing `)`)."""
+        `function` keyword starts at func_idx (i.e. just past the closing `)`).
+
+        Tracks inner `if`/`do`/`repeat`/`function` blocks so the span is not
+        truncated at the first inner `end` (which previously left orphaned
+        `else`/`end` fragments behind and poisoned every subsequent cycle)."""
         n = len(content)
         i = func_idx + len('function')
-        depth = 1
+        fn_depth = 1   # the OnStep callback's own `function`
+        blk_depth = 0  # open inner blocks (if/do/repeat) inside the callback
         in_str = None
         in_lc = False
         while i < n:
@@ -946,22 +928,33 @@ def _dedupe_onstep_registrations(content: str) -> str:
                 in_str = c
                 i += 1
                 continue
-            if content.startswith('function', i) and _word_boundary(content, i, i + 8):
-                depth += 1
-                i += 8
+            matched = None
+            for kw, klen in _BLOCK_KW.items():
+                if content.startswith(kw, i) and _word_boundary(content, i, i + klen):
+                    matched = kw
+                    i += klen
+                    break
+            if matched is None:
+                i += 1
                 continue
-            if content.startswith('end', i) and _word_boundary(content, i, i + 3):
-                depth -= 1
-                i += 3
-                if depth == 0:
-                    j = i
-                    while j < n and content[j] in ' \t\r\n':
-                        j += 1
-                    if j < n and content[j] == ')':
-                        return j + 1
-                    return i
-                continue
-            i += 1
+            if matched == 'function':
+                fn_depth += 1
+            elif matched in ('if', 'do', 'repeat'):
+                blk_depth += 1
+            elif matched == 'until':
+                blk_depth = max(0, blk_depth - 1)
+            elif matched == 'end':
+                if blk_depth > 0:
+                    blk_depth -= 1
+                else:
+                    fn_depth -= 1
+                    if fn_depth == 0:
+                        j = i
+                        while j < n and content[j] in ' \t\r\n':
+                            j += 1
+                        if j < n and content[j] == ')':
+                            return j + 1
+                        return i
         return n
 
     # Compute the span (start of `MidwayPhysics`, exclusive end) of each
@@ -992,6 +985,58 @@ def _dedupe_onstep_registrations(content: str) -> str:
     if _removed:
         print(f"  [Post-Process Fix #12] Removed {_removed} nested/duplicate OnStep registration(s)")
     return content
+
+
+def _neutralize_orphaned_else(content: str) -> str:
+    """Comment out orphaned `else`/`elseif` clauses (Fix #33).
+
+    A `else`/`elseif` with no still-open `if...then` block in scope is invalid
+    Lua. It is the residue left when the coder emits a dangling else, or when an
+    earlier pass removes the `if` header. Deterministically comment the keyword
+    out; the now-surplus trailing `end` is blanked by the Fix #27 re-balance
+    that follows this pass.
+    """
+    if not content:
+        return content
+    try:
+        from _lua_balancer import _mask_noise as _mn
+        masked = _mn(content)
+    except Exception:
+        return content
+
+    _kw_re = re.compile(
+        r'\bfunction\b|\bif\b|\bdo\b|\brepeat\b|\bend\b|\buntil\b|\belseif\b|\belse\b'
+    )
+    stack: list[str] = []
+    orphans: list[int] = []
+    for m in _kw_re.finditer(masked):
+        tok = m.group(0)
+        if tok == 'function':
+            stack.append('function')
+        elif tok == 'if':
+            stack.append('if')
+        elif tok == 'do':
+            stack.append('do')
+        elif tok == 'repeat':
+            stack.append('repeat')
+        elif tok == 'until':
+            if stack and stack[-1] == 'repeat':
+                stack.pop()
+        elif tok == 'end':
+            if stack and stack[-1] != 'repeat':
+                stack.pop()
+        else:  # else / elseif
+            if not stack or stack[-1] != 'if':
+                orphans.append(m.start())
+
+    if not orphans:
+        return content
+
+    out = list(content)
+    for pos in reversed(orphans):
+        out.insert(pos, '-- [orphaned else/elseif removed] ')
+    print(f"  [Post-Process Fix #33] Commented {len(orphans)} orphaned else/elseif clause(s)")
+    return ''.join(out)
 
 
 def _repair_duplicate_underscore_locals(content: str) -> str:
@@ -1424,6 +1469,12 @@ def _lua_symbol_table(content: str):
     return declared, assigned, read
 
 
+# Upper bound on how many read-before-write scalars Fix #19 will auto-declare.
+# Above this, the content is almost certainly prose/marker contamination; the
+# fix is skipped rather than amplifying it into hundreds of `local <word> = nil`.
+_MAX_RW_AUTO_DECLARATIONS = 25
+
+
 def _auto_declare_read_before_write(content: str) -> str:
     """Declare read-before-write scalars (Fix #19).
 
@@ -1437,12 +1488,35 @@ def _auto_declare_read_before_write(content: str) -> str:
     declared, assigned, read = _lua_symbol_table(content)
     handles = _handle_identifiers(content)
 
+    # Keyword-concatenation artifacts (`endendend`, `thenif`, ...) arise when the
+    # model crams block closers together; they are never real identifiers.
+    _keyword_concat_re = re.compile(
+        r'^(?:and|break|do|else|elseif|end|false|for|function|goto|if|in|'
+        r'local|nil|not|or|repeat|return|then|true|until|while)\w*$'
+    )
     rw_names = sorted(
-        (n for n in read if n not in declared and n not in assigned and n not in handles),
+        (
+            n for n in read
+            if n not in declared and n not in assigned and n not in handles
+            and not _keyword_concat_re.match(n)
+        ),
         key=len,
         reverse=True,
     )
     if not rw_names:
+        return content
+
+    # Prose-contamination guard: a healthy Lua module has a handful of
+    # read-before-write scalars. A large count means English prose or marker
+    # residue leaked into the file and the symbol table is misreading every
+    # word as an identifier — auto-declaring hundreds of words is strictly
+    # worse than skipping the fix. Fail closed (skip) rather than amplify it.
+    if len(rw_names) > _MAX_RW_AUTO_DECLARATIONS:
+        print(
+            f"  [Post-Process Fix #19] SKIPPED: {len(rw_names)} read-before-write "
+            f"identifiers detected (prose/marker contamination suspected — cap "
+            f"{_MAX_RW_AUTO_DECLARATIONS})."
+        )
         return content
 
     decl_lines: list[str] = []
@@ -1984,73 +2058,146 @@ def _hoist_cross_lifecycle_locals(content: str) -> str:
     return content
 
 
+def _fix_call_arities(content: str) -> str:
+    """Fix G2: shrink over-arg MidwayPhysics.* calls to the min arity.
+
+    Lazily imports from ``_preflight_static`` to avoid a module-level import
+    cycle.  Only truncates OVER-arg calls; never pads under-arg calls (padding
+    would invent values, which is worse than leaving the reviewer's I5 finding
+    for the fix loop / training data).
+    """
+    try:
+        from _preflight_static import _fix_spawn_arities_in_text
+        _fixed, _n = _fix_spawn_arities_in_text(content)
+        if _n:
+            print(f"  [Post-Process Fix G2] Repaired {_n} over-arg call(s) (arity truncation).")
+            return _fixed
+    except Exception as _e:
+        print(f"  [Post-Process Fix G2] skipped ({_e}).")
+    return content
+
+
+def _apply_lifecycle_invariants(content: str) -> str:
+    """Fix #4/#5/#10/#34 composite: inject missing lifecycle invariants.
+
+    Only applies to a WHOLE Lua module, not a SEARCH/REPLACE patch fragment —
+    injecting into fragments produced duplicate ``local SLOT_ID`` lines and
+    spurious OnLoadStatic stubs into every task's patch block.
+    """
+    if '<<<<<<< SEARCH' in content or '>>>>>>> REPLACE' in content:
+        return content
+    content = _inject_onload_static(content)           # Fix #4
+    content = _inject_slot_id(content)                 # Fix #5
+    content = _auto_declare_handles(content)           # Fix #10
+    content = _inject_onunload(content)                # Fix #34 — inject missing OnUnload() stub
+    return content
+
+
+#: Ordered fix sequence for the FULL post-processor.  Each entry is
+#: ``(fix_label, invariant_id, callable)``.  ``invariant_id`` maps the fix to
+#: the reviewer invariant (I1..I5) it satisfies, so the failure corpus can
+#: group observed fixes.  This list is the single source of truth for both
+#: ``post_process_lua`` and ``post_process_lua_observed``.
+_FIX_SEQUENCE = [
+    ("#3",  "I4", _strip_pipeline_artifacts),
+    ("#11", "I4", _strip_comment_monologues),
+    ("#27", "I1", _repair_lua_structure),
+    ("#2",  "I2", _strip_module_level_mod),
+    ("#13", "I1", _repair_duplicate_underscore_locals),
+    ("#23", "I1", _strip_local_in_tables),
+    ("#24", "I1", _strip_broken_local_declarations),
+    ("#25", "I1", _fix_json_colon_tables),
+    ("#26", "I1", _strip_stray_closing_parens),
+    ("#9",  "I2", _sanitize_modifier_keys),
+    ("#31", "I2", _repair_modifier_access),
+    ("#1",  "I3", _strip_duplicate_functions),
+    ("#16", "I2", _strip_engine_redefinitions),
+    ("#6",  "I2", _add_midwayphysics_prefix),
+    ("#21", "I2", _neutralize_method_calls),
+    ("#8",  "I2", _strip_phantom_api_calls),
+    ("G2",  "I5", _fix_call_arities),
+    ("#22", "I2", _strip_phantom_engine_calls),
+    ("#29", "I2", _neutralize_roblox),
+    ("#28", "I1", _repair_orphaned_then),
+    ("#17", "I3", _dedupe_spawn_shared_booth),
+    ("#14", "I2", _normalize_pool_name_arguments),
+    ("#18", "I2", _align_createpool_names),
+    ("#32", "I4", _hoist_cross_lifecycle_locals),
+    ("#20", "I4", _localize_bare_assignments),
+    ("#19", "I4", _auto_declare_read_before_write),
+    ("#12", "I3", _dedupe_onstep_registrations),
+    ("#33", "I1", _neutralize_orphaned_else),
+    ("#27", "I1", _repair_lua_structure),          # 2nd pass — blank surplus `end`
+    ("#15", "I1", _repair_bare_expression_statements),
+    ("#4+", "I3", _apply_lifecycle_invariants),    # #4/#5/#10/#34 (whole-file only)
+]
+
+
+def _run_fix_sequence(content: str, on_fix=None) -> str:
+    """Apply every fix in ``_FIX_SEQUENCE`` in order.
+
+    ``on_fix(fix_label, invariant_id, before, after)`` is invoked after each
+    fix that CHANGED the content, enabling the failure-corpus observer.
+    """
+    for _label, _invariant, _fn in _FIX_SEQUENCE:
+        _before = content
+        content = _fn(content)
+        if on_fix is not None and content != _before:
+            on_fix(_label, _invariant, _before, content)
+    return content
+
+
 def post_process_lua(content: str) -> str:
-    """Apply all 9 deterministic fixes to a Lua attraction script.
+    """Apply all deterministic fixes to a Lua attraction script.
 
     Args:
         content: Raw Lua source text.
 
     Returns:
-        Cleaned Lua source with all 8 fixes applied.
+        Cleaned Lua source with all fixes applied.
     """
     # Preserve trailing newline — many fix functions use splitlines()/join
     # which naturally strips it.
     had_trailing_newline = content.endswith('\n')
-
-    # Order matters: strip artifacts first so they don't interfere with
-    # structural fixes, then fix structure, then add missing pieces.
-    content = _strip_pipeline_artifacts(content)      # Fix #3 first
-    content = _strip_comment_monologues(content)       # Fix #11 — kill prose comment essays
-    content = _repair_lua_structure(content)           # Fix #27 — close unbalanced brackets/blocks
-    content = _strip_module_level_mod(content)         # Fix #2
-    content = _repair_duplicate_underscore_locals(content)  # Fix #13 — local _ = a, _ = b syntax error
-    content = _strip_local_in_tables(content)               # Fix #23 — `local` inside table constructor
-    content = _strip_broken_local_declarations(content)     # Fix #24 — truncated `local _)` fragment
-    content = _fix_json_colon_tables(content)               # Fix #25 — JSON `"key":` -> Lua `key =`
-    content = _strip_stray_closing_parens(content)          # Fix #26 — orphaned `)` line
-    content = _sanitize_modifier_keys(content)         # Fix #9 -- canonicalize/neutralize MOD.* keys
-    content = _repair_modifier_access(content)         # Fix #31 — AttractionConstants.modifiers or {} guard
-    content = _strip_duplicate_functions(content)      # Fix #1
-    content = _add_midwayphysics_prefix(content)       # Fix #6
-    content = _neutralize_method_calls(content)        # Fix #21 — handle.Method -> MidwayPhysics.Method(handle)
-    content = _strip_phantom_api_calls(content)        # Fix #8 — catch hallucinations after prefix fix
-    content = _strip_phantom_engine_calls(content)     # Fix #22 — neutralize phantom Engine.* setters
-    content = _neutralize_roblox(content)              # Fix #29 — comment out Roblox/Luau idioms
-    content = _repair_orphaned_then(content)           # Fix #28 — orphaned then/do from commented openers
-    content = _dedupe_spawn_shared_booth(content)      # Fix #17 — collapse duplicate SpawnSharedBooth()
-    content = _normalize_pool_name_arguments(content)  # Fix #14 — quoted '<key>_pool' literal -> variable
-    content = _align_createpool_names(content)         # Fix #18 — CreatePool literal -> declared pool constant
-    content = _hoist_cross_lifecycle_locals(content)   # Fix #32 — hoist OnLoad/OnUnload-shared locals to module scope
-    content = _localize_bare_assignments(content)      # Fix #20 — prefix `local` onto leaked globals
-    content = _auto_declare_read_before_write(content) # Fix #19 — declare read-before-write scalars
-    content = _dedupe_onstep_registrations(content)    # Fix #12 — one OnStep callback only
-    content = _repair_bare_expression_statements(content)  # Fix #15 — LAST: bare MOD.x / neutralized literals are invalid statements
-    # Full-file invariants (#4 OnLoadStatic, #5 SLOT_ID) only apply to a whole
-    # Lua module, not to a SEARCH/REPLACE patch fragment.  Applying them to
-    # fragments injected duplicate `local SLOT_ID` lines and spurious
-    # OnLoadStatic stubs into every task's patch block.
-    _is_patch_fragment = ('<<<<<<< SEARCH' in content or '>>>>>>> REPLACE' in content)
-    if not _is_patch_fragment:
-        content = _inject_onload_static(content)           # Fix #4
-        content = _inject_slot_id(content)                 # Fix #5
-        content = _auto_declare_handles(content)           # Fix #10
-    # Fix #7 is a gate, not a transform — used by callers
-
-    # Restore trailing newline
+    content = _run_fix_sequence(content)
     if had_trailing_newline and not content.endswith('\n'):
         content += '\n'
-
     return content
 
 
-def post_process_surgery(content: str) -> str:
+def post_process_lua_observed(content: str, file_relpath: str = "") -> str:
+    """Run ``post_process_lua`` and record every applied fix to the corpus.
+
+    Identical output to ``post_process_lua``; additionally appends one record
+    per fix that changed the file, gated behind ``MIDWAY_FAILURE_CORPUS=1``
+    (see ``failure_corpus.record_fix``).  With the flag off this is a
+    zero-cost pass, so it is safe to wire into the production path.
+    """
+    from failure_corpus import record_fix
+
+    def _on_fix(label, invariant, before, after):
+        record_fix(label, invariant, before, after, file_relpath)
+
+    had_trailing_newline = content.endswith('\n')
+    content = _run_fix_sequence(content, on_fix=_on_fix)
+    if had_trailing_newline and not content.endswith('\n'):
+        content += '\n'
+    return content
+
+
+def post_process_surgery(content: str, inject_lifecycle: bool = False) -> str:
     """Deterministic repair of a whole-file surgery output.
 
-    Runs the full fix pipeline EXCEPT:
-      - `_strip_pipeline_artifacts` (marker->TODO laundering would hide raw
-        `-- [TASK_N_INSERT_HOOK]` markers from the marker-clearance gate), and
-      - the lifecycle invariant injections (OnLoadStatic/SLOT_ID/handles),
-        which the surgery already preserves and re-injecting could duplicate.
+    Runs the full fix pipeline EXCEPT ``_strip_pipeline_artifacts``
+    (marker->TODO laundering would hide raw ``-- [TASK_N_INSERT_HOOK]``
+    markers from the marker-clearance gate).
+
+    ``inject_lifecycle`` (default False) additionally applies the idempotent
+    lifecycle injections (OnLoadStatic / SLOT_ID / handles / OnUnload).
+    Callers that repair a WHOLE accumulated file — the convergence repair and
+    gap-filler — pass True so I3 ("OnLoadStatic/OnUnload appears 0x")
+    converges; the raw surgery path keeps False because its output already
+    preserves those hooks.
     """
     had_trailing_newline = content.endswith('\n')
     content = _repair_lua_structure(content)           # Fix #27 — close unbalanced brackets/blocks
@@ -2072,11 +2219,13 @@ def post_process_surgery(content: str) -> str:
     content = _fix_json_colon_tables(content)               # Fix #25
     content = _strip_stray_closing_parens(content)          # Fix #26
     content = _sanitize_modifier_keys(content)            # Fix #9
+    content = _repair_modifier_access(content)            # Fix #31 — AttractionConstants.modifiers or {} guard
     content = _strip_duplicate_functions(content)         # Fix #1 - duplicate lifecycle
     content = _strip_engine_redefinitions(content)        # Fix #16
     content = _add_midwayphysics_prefix(content)          # Fix #6
     content = _neutralize_method_calls(content)           # Fix #21
     content = _strip_phantom_api_calls(content)           # Fix #8
+    content = _fix_call_arities(content)                  # Fix G2 — shrink over-arg calls to min arity
     content = _strip_phantom_engine_calls(content)        # Fix #22
     content = _neutralize_roblox(content)                 # Fix #29
     content = _repair_orphaned_then(content)              # Fix #28
@@ -2087,7 +2236,14 @@ def post_process_surgery(content: str) -> str:
     content = _localize_bare_assignments(content)         # Fix #20
     content = _auto_declare_read_before_write(content)    # Fix #19
     content = _dedupe_onstep_registrations(content)       # Fix #12
+    content = _neutralize_orphaned_else(content)          # Fix #33 — orphaned else/elseif residue
+    content = _repair_lua_structure(content)              # Fix #27 (2nd pass)
     content = _repair_bare_expression_statements(content) # Fix #15 - LAST
+    if inject_lifecycle and '<<<<<<< SEARCH' not in content and '>>>>>>> REPLACE' not in content:
+        content = _inject_onload_static(content)          # Fix #4
+        content = _inject_slot_id(content)                # Fix #5
+        content = _auto_declare_handles(content)          # Fix #10
+        content = _inject_onunload(content)               # Fix #34
     if had_trailing_newline and not content.endswith('\n'):
         content += '\n'
     return content
@@ -2127,7 +2283,9 @@ def post_process_lua_file(path: Path) -> bool:
         return False
 
     original = path.read_text(encoding="utf-8", errors="replace")
-    cleaned = post_process_lua(original)
+    # Observed pass: identical output, but records each applied fix to the
+    # failure corpus when MIDWAY_FAILURE_CORPUS=1 (zero-cost otherwise).
+    cleaned = post_process_lua_observed(original, file_relpath=path.name)
 
     if cleaned != original:
         path.write_text(cleaned, encoding="utf-8")

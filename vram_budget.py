@@ -61,6 +61,8 @@ VRAM_SAFE_BUDGET: float = VRAM_TOTAL_GB - VRAM_HEADROOM_GB  # 12.0 GB
 _MODEL_COST_TABLE: Dict[str, tuple] = {
     "qwen2.5-coder:1.5b": (1.3,  0.025),
     "qwen2.5-coder:7b":   (5.28, 0.055),  # q8_0: 5.28 GB@8K → 6.76 GB@32K
+    "midway-coder-lora":  (5.28, 0.055),  # 7B LoRA coder (q4_K_M) — same cost class as qwen2.5-coder:7b
+    "midway-reasoner-lora": (5.28, 0.055), # 7B LoRA reasoner (q4_K_M) — same cost class
     "qwen3.5:9b":         (6.1,  0.075),
     "phi3:14b":           (8.22, 0.095),  # q8_0: 8.22 GB@8K -> 9.56 GB@16K (runner caps at 4K!)
     "phi3.5":             (3.9,  0.192),  # q8_0: ~3.9 GB@8K -> ~8.6 GB@32K (128K needs 43.7 GB)

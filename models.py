@@ -214,6 +214,7 @@ class SignalType(str, Enum):
     EXTRACT_SKELETON = "EXTRACT_SKELETON"
     FLUSH = "FLUSH"
     REQUEST_API = "REQUEST_API"
+    AMBIGUITY = "AMBIGUITY"
 
 
 class OrchestrationConfig(BaseModel):
@@ -589,6 +590,10 @@ class PipelineContext(BaseModel):
     # -- Coverage & Runtime Feedback ------------------------------------------
     coverage_gaps: List[str] = Field(default_factory=list)
     runtime_errors: List[str] = Field(default_factory=list)
+    # -- Inter-persona argumentation ------------------------------------------
+    # AMBIGUITY signals raised by agents when a task spec is underspecified or
+    # self-contradictory (see docs/MESH_SIGNAL_ARGUMENTATION_PLAN.md).
+    ambiguity_signals: List[Dict[str, Any]] = Field(default_factory=list)
 
     # -- Phase III: AST Patch Models (LangGraph Alignment) -------------------
     # Structured patch sets for state-reducing merge operations.
@@ -689,3 +694,4 @@ class PipelineContext(BaseModel):
         self.integration_schema = None
         self.coverage_gaps = []
         self.runtime_errors = []
+        self.ambiguity_signals = []

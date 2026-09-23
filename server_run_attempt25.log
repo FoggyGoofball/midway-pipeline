@@ -1,0 +1,2624 @@
+
+============================================================
+  Midway Pipeline Stream Server (Hardened)
+  Listening on http://0.0.0.0:8765
+  Run log: C:\Users\Admin\source\repos\midway-pipeline\pipeline_run.log
+============================================================
+
+  [Watchdog] started (ntfy -> https://ntfy.sh/midway-f4a5ec27, interval 30s; commands: send !help on the topic)
+  [Session] Started new session: pipeline_20260921_103013_63b6bb8a
+  [APILedger] ✓ Internal API ledger reset for new run.
+  [DecisionLog] ✓ Reset for new run ().
+  [Kernel] Mounted cartridge for project: Midway to Nowhere
+  [Kernel] No cartridge config present  using built-in defaults.
+  [Kernel] Prompt factories refreshed from cartridge.
+
+======================================================================
+  [10:30:13] Phase 1 & 2: Autonomic Workspace Discovery
+======================================================================
+  [Librarian] Executing programmatic repository indexing...
+  [Librarian] Verified active C++ AST symbols: 13
+  [Scope Classifier] Mode=NEW_ATTRACTION, target=strongman
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [Kernel] Cartridge provided scoped context (scope=NEW_ATTRACTION, attraction='strongman', 2257 chars)
+  [Kernel] Bridge contract appended to agent context (2388 chars)
+  [Adaptive ctx] Input ~1372 tok → KV cache pinned at 32768 (stable allocation, no resize).
+  [VRAM Budget] 📊 Loaded 'llama3.1:8b-instruct-q4_K_M' (7.0 GB). Used: 7.0/12.0 GB (58%)
+
+============================================================
+  [10:30:15] [START] [Clarification Gate] Calling Ollama (llama3.1:8b-instruct-q4_K_M)...
+  [VRAM Guard] num_ctx=32768, user=3197 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:30:15] [START] [Clarification Gate] Calling Ollama (llama3.1:8b-instruct-q4_K_M) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=060af006a83f)
+SPECIFICITY: SPECIFIC
+
+1. Strongman Striker Revival - Implement The Bell's Curse mechanic from GDD description.
+2. Weighty Consequences - Add Cracked Base platform wobble effect as per original design document.
+3. Echo Chamber - Include Sound Dampeners that muffle bell ringing sound for precise timing feedback.  [Telemetry] Clarification Gate (llama3.1:8b-instruct-q4_K_M)  TTFT: 36.25s | Speed: 8.9 tok/s (535 TPM) | Effective: 1.6 tok/s 🚨 SLOW
+  [10:30:59] [END] [Clarification Gate] Execution complete.
+  [Clarify Gate] Specificity: SPECIFIC
+  [Clarify Gate] ✓ Request is specific — proceeding to blueprint.
+
+  [Lead Producer] Scope is NEW_ATTRACTION — scope gate skipped (blueprint is mandatory for new attractions).
+  [Lead Producer] AST index: 10 files indexed (3 large).
+  [Blueprint] 🔒 Auto-enforced file constraint: attractions/strongman/strongman.lua
+  [Adaptive ctx] Input ~6547 tok → KV cache pinned at 32768 (stable allocation, no resize).
+  [System] VRAM Flush: Evicting llama3.1:8b-instruct-q4_K_M from unified memory...
+  [VRAM Budget] 📊 Evicted 'llama3.1:8b-instruct-q4_K_M' (7.0 GB). Used: 0.0/12.0 GB
+  [VRAM Budget] 📊 Loaded 'qwen3.5:9b' (7.9 GB). Used: 7.9/12.0 GB (66%)
+
+============================================================
+  [10:30:59] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=12307 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:30:59] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=d8791356eea3)
+- [ ] Task 1: Define module-level constants, state variables (ball handle, lever handle, puck handle, score, streak, difficulty), and helper function anchors for the Strongman attraction in the file - attractions/strongman/strongman.lua
+- [ ] Task 2: Implement OnLoadStatic to spawn the permanent booth geometry, static platform, and static bell using SpawnStaticBox and SpawnStaticSphere - attractions/strongman/strongman.lua
+- [ ] Task 3: Implement OnLoad to create the object pool for pucks, register the MidwayPhysics.OnStep callback, and initialize the lever mechanism with a kinematic box - attractions/strongman/strongman.lua
+- [ ] Task 4: Implement the OnStep callback to read AttractionConstants.modifiers for friction and mass changes, apply variable friction to the puck via SetFriction, and handle lever rebound physics with ApplyImpulse - attractions/strongman/strongman.lua
+- [ ] Task 5: Implement player input handling to apply angular impulse to the lever on "fire" action, calculate swing power based on input duration, and spawn a dynamic puck using SpawnDynamicSphere at the lever tip - attractions/strongman/strongman.lua
+- [ ] Task 6: Implement the puck ascent logic to track height, detect bell collision via IsSensorTriggered, and award Tickets using Engine.AwardTickets with Engine.GetStreak() as a multiplier on success - attractions/strongman/strongman.lua
+- [ ] Task 7: Implement rogue-like modifiers including "Rusty Rails" (variable friction), "Weighted Puck" (mass reduction), and "Tower Gauge Shift" (destroy old puck with DestroyBody, spawn new puck at random height) - attractions/strongman/strongman.lua
+- [ ] Task 8: Implement the Streak Protocol logic to roll over wagered Tokens to the next difficulty tier on win, and permanently forfeit all wagered Tokens and escrowed Tickets on failure - attractions/strongman/strongman.lua
+- [ ] Task 9: Implement OnUnload to print diagnostic logs for the Strongman attraction state and pool status without modifying engine files - attractions/strongman/strongman.lua  [Telemetry] Blueprint Generation (round 1) (qwen3.5:9b)  TTFT: 85.18s | Speed: 6.2 tok/s (371 TPM) | Effective: 2.8 tok/s
+  [10:33:35] [END] [Blueprint Generation (round 1)] Execution complete.
+  [Blueprint Validator] ⚠ Auto-rejecting blueprint  1 structural issue(s):
+  - Only 9 task(s) for NEW_ATTRACTION  minimum 11 required (one per scaffold anchor). There are 11 deterministic anchor markers in the scaffold file that must each be filled by exactly one task. Expand the plan to cover every lifecycle phase and gameplay concern.
+  [Adaptive ctx] Input ~4613 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:33:35] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6505 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:33:35] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=fe23079b8e70)
+- [ ] Task 1: Define module-level constants, state variables (ball handle, lever handle, puck handle, score, streak, difficulty), and helper function anchors for the Strongman attraction in the file - attractions/strongman/strongman.lua
+- [ ] Task 2: Implement OnLoadStatic to spawn the permanent booth geometry, static platform, and static bell using SpawnStaticBox and SpawnStaticSphere - attractions/strongman/strongman.lua
+- [ ] Task 3: Implement OnLoad to create the object pool for pucks, register the MidwayPhysics.OnStep callback, and initialize the lever mechanism with a kinematic box - attractions/strongman/strongman.lua
+- [ ] Task 4: Implement the OnStep callback to read AttractionConstants.modifiers for friction and mass changes, apply variable friction to the puck via SetFriction, and handle lever rebound physics with ApplyImpulse - attractions/strongman/strongman.lua
+- [ ] Task 5: Implement player input handling to apply angular impulse to the lever on "fire" action, calculate swing power based on input duration, and spawn a dynamic puck using SpawnDynamicSphere at the lever tip - attractions/strongman/strongman.lua
+- [ ] Task 6: Implement the puck ascent logic to track height, detect bell collision via IsSensorTriggered, and award Tickets using Engine.AwardTickets with Engine.GetStreak() as a multiplier on success - attractions/strongman/strongman.lua
+- [ ] Task 7: Implement rogue-like modifiers including "Rusty Rails" (variable friction), "Weighted Puck" (mass reduction), and "Tower Gauge Shift" (destroy old puck with DestroyBody, spawn new puck at random height) - attractions/strongman/strongman.lua
+- [ ] Task 8: Implement the Streak Protocol logic to roll over wagered Tokens to the next difficulty tier on win, and permanently forfeit all wagered Tokens and escrowed Tickets on failure - attractions/strongman/strongman.lua
+- [ ] Task 9: Implement OnUnload to print diagnostic logs for the Strongman attraction state and pool status without modifying engine files - attractions/strongman/strongman.lua
+- [ ] Task 10: Implement the bell swing animation logic to rotate the bell body based on impact velocity and reset to neutral position after a cooldown timer - attractions/strongman/strongman.lua
+- [ ] Task 11: Implement the difficulty progression system to adjust puck mass and bell height thresholds based on current difficulty level and streak count - attractions/strongman/strongman.lua  [Telemetry] Blueprint Generation (round 1) (qwen3.5:9b)  TTFT: 39.86s | Speed: 6.1 tok/s (368 TPM) | Effective: 4.2 tok/s
+  [10:35:39] [END] [Blueprint Generation (round 1)] Execution complete.
+  [Lead Producer] Saved to docs/project_blueprint.md.
+
+==================================================
+  BLUEPRINT GATE  Review the architectural blueprint
+  Location: C:\Users\Admin\source\repos\midway\docs\project_blueprint.md
+==================================================
+
+  ┌─ WHAT IS THE BLUEPRINT GATE? ─────────────────────────────────────┐
+  │ Before writing any code, the pipeline drew up a plan  the        │
+  │ blueprint  describing every task it intends to carry out and      │
+  │ which systems it will touch.                                       │
+  │                                                                   │
+  │ This is your chance to read that plan and catch mistakes BEFORE   │
+  │ any code is generated. Open the file shown above, read it, then   │
+  │ come back here.                                                   │
+  │                                                                   │
+  │  Y   plan looks good, start generating code.                    │
+  │  n   something is wrong; you will be asked what to fix.         │
+  └───────────────────────────────────────────────────────────────────┘
+  [Blueprint Gate] Blueprint auto-approved (AUTO_APPROVE_GATES=True).
+
+  [Scaffold] 🔗 Injected 11 task anchor markers into skeleton (all deterministic)
+  [Scaffold] ✅ Wrote canonical Lua skeleton to attractions/strongman/strongman.lua (1437 bytes)
+  [Lead Producer] Auto-feeding first task while preserving block constraints: Define module-level constants, state variables (ball handle, lever handle, puck handle, score, streak, difficulty), and helper function anchors for the Strongman attraction in the file - attractions/strongman/strongman.lua
+  [Lead Producer] Continuing to Phase 3...
+
+======================================================================
+  [10:35:39] Phase 3: Director - Task Decomposition
+======================================================================
+  [Director] Skipped — NEW_ATTRACTION blueprint path owns task decomposition (bulk enricher rebuilds the full task list).
+  [Blueprint Enricher] Attempt 1/3: sending 11 flat task(s)...
+  [Blueprint Enricher] NEW_ATTRACTION → deterministic enrichment (no LLM).
+  [Blueprint Enricher] ✓ Attempt 1: parsed 11 tasks (matches expected 11).
+  [Blueprint Enricher] Parsed 11 enriched task(s) with dependency metadata.
+  [Blueprint Enricher] Bulk-enriched 11 blueprint task(s) with full DAG metadata  wave sorter will handle dependency ordering in a single pass. All tasks run in one iteration.
+
+============================================================
+  [Architect] 🏗 Running pre-decomposition design pass...
+============================================================
+  [Architect] Extracting structured design (single-turn, native JSON)...
+  [Adaptive ctx] Input ~2205 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:35:39] [START] [Architect Design Pass (structured JSON)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=4164 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:35:39] [START] [Architect Design Pass (structured JSON)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=70485faa85d0)
+{
+  "title": "Strongman High Striker",
+  "summary": "A rogue-like strength game where players swing a mallet to launch a puck up a tower, battling modifiers like rusty rails, shifting bells, and cracked bases.",
+  "handles": [
+    {
+      "name": "mallet_handle",
+      "lua_type": "userdata",
+      "owner_hint": "Player input controller",
+      "lifecycle": "persistent",
+      "description": "Kinematic box representing the heavy mallet swung by the player."
+    },
+    {
+      "name": "puck_handle",
+      "lua_type": "userdata",
+      "owner_hint": "Projectile system",
+      "lifecycle": "ephemeral",
+      "description": "Dynamic sphere representing the puck launched up the tower."
+    },
+    {
+      "name": "bell_handle",
+      "lua_type": "userdata",
+      "owner_hint": "Target system",
+      "lifecycle": "persistent",
+      "description": "Kinematic cylinder representing the bell that shifts position."
+    },
+    {
+      "name": "platform_handle",
+      "lua_type": "userdata",
+      "owner_hint": "Environment",
+      "lifecycle": "persistent",
+      "description": "Static box representing the cracked base/platform."
+    },
+    {
+      "name": "sensor_rails_handle",
+      "lua_type": "userdata",
+      "owner_hint": "Environment",
+      "lifecycle": "persistent",
+      "description": "Sensor box detecting puck contact with rusty rails for friction."
+    },
+    {
+      "name": "sensor_shock_handle",
+      "lua_type": "userdata",
+      "owner_hint": "Environment",
+      "lifecycle": "persistent",
+      "description": "Sensor box detecting player proximity to shock plates."
+    }
+  ],
+  "lifecycle_order": [
+    "SpawnStaticBox(platform_handle)",
+    "SpawnStaticBox(sensor_shock_handle)",
+    "SpawnStaticBox(sensor_rails_handle)",
+    "SpawnKinematicBox(mallet_handle)",
+    "SpawnKinematicCylinder(bell_handle)",
+    "CreatePool('puck_pool', 5, 10, {radius=0.15, mass=1.0})"
+  ],
+  "event_flow": [
+    {
+      "trigger": "MidwayInput.IsActionDown('fire')",
+      "action": "ApplyImpulse to mallet_handle to swing down; Reset puck if active."
+    },
+    {
+      "trigger": "IsSensorTriggered(sensor_rails_handle)",
+      "action": "ApplyLinearDamping to puck_handle to simulate rusty rail friction."
+    },
+    {
+      "trigger": "GetPosition(bell_handle) < GetPosition(puck_handle).y",
+      "action": "ApplyImpulse to bell_handle to shift it upward."
+    },
+    {
+      "trigger": "IsSensorTriggered(sensor_shock_handle)",
+      "action": "Engine.AwardTickets(-1, 'Shock Damage') if player is active."
+    },
+    {
+      "trigger": "puck_handle hits bell_handle",
+      "action": "Check win condition; AwardTickets; Trigger Streak Protocol."
+    },
+    {
+      "trigger": "Engine.GetStreak() > 0",
+      "action": "SpawnDynamicSphere(puck_handle) at new random height via Tower Gauge Shift."
+    }
+  ],
+  "pool_requirements": {
+    "puck_pool": 5
+  },
+  "economy_hooks": [
+    "Engine.AwardTickets",
+    "Engine.AwardTokens",
+    "Engine.GetStreak"
+  ],
+  "feature_checklist": [
+    "Rusty Rails friction mechanic",
+    "Weighted Puck mass variation",
+    "Counter-Weight Springs tension",
+    "The Bell's Curse shifting",
+    "Cracked Base wobble",
+    "Echo Strikes rhythm",
+    "Sabotaged Mallet splintering",
+    "Shock Plates hazard",
+    "Tower Gauge Shift respawn"
+  ],
+  "task_anchors": [
+    {
+      "task_id": "swing_mallet",
+      "hook": "ApplyImpulse(mallet_handle)",
+      "location": "Player input zone"
+    },
+    {
+      "task_id": "launch_puck",
+      "hook": "SpawnDynamicSphere(puck_pool)",
+      "location": "Tower base"
+    },
+    {
+      "task_id": "shift_bell",
+      "hook": "MoveKinematic(bell_handle)",
+      "location": "Tower top"
+    },
+    {
+      "task_id": "handle_shock",
+      "hook": "IsSensorTriggered(sensor_shock_handle)",
+      "location": "Platform surface"
+    },
+    {
+      "task_id": "apply_friction",
+      "hook": "SetLinearDamping(puck_handle)",
+      "location": "Rusty Rails"
+    }
+  ],
+  "module_state_variables": [
+    {
+      "name": "swing_cooldown",
+      "lua_type": "number",
+      "initial_value": 0.0,
+      "description": "Time elapsed since last mallet swing to prevent spamming.",
+      "owner_task": "swing_mallet"
+    },
+    {
+      "name": "bell_shift_timer",
+      "lua_type": "number",
+      "initial_value": 0.0,
+      "description": "Timer controlling how often the bell shifts position.",
+      "owner_task": "shift_bell"
+    },
+    {
+      "name": "current_streak",
+      "lua_type": "number",
+      "initial_value": 0,
+      "description": "Current streak count for Streak Protocol multiplier.",
+      "owner_task": "launch_puck"
+    },
+    {
+      "name": "mallet_integrity",
+      "lua_type": "number",
+      "initial_value": 1.0,
+      "description": "Remaining power of the mallet head (1.0 = new, 0.0 = broken).",
+      "owner_task": "swing_mallet"
+    },
+    {
+      "name": "puck_height_offset",
+      "lua_type": "number",
+      "initial_value": 0.0,
+      "description": "Random offset for Tower Gauge Shift respawn height.",
+      "owner_task": "launch_puck"
+    },
+    {
+      "name": "echo_hit_count",
+      "lua_type": "number",
+      "initial_value": 0,
+      "description": "Consecutive hits on same spot for Echo Strikes tension.",
+      "owner_task": "launch_puck"
+    }
+  ]
+}  [Telemetry] Architect Design Pass (structured JSON) (qwen3.5:9b)  TTFT: 24.53s | Speed: 4.8 tok/s (285 TPM) | Effective: 4.3 tok/s
+  [10:40:12] [END] [Architect Design Pass (structured JSON)] Execution complete.
+  [Architect] ✅ Structured design extracted: 'Strongman High Striker' (6 handles, 6 event edges, 9 checklist items, 6 state vars).
+  [Architect] ✅ Design doc created (structured): 'Strongman High Striker'
+             6 handles, 6 event edges, 9 checklist items
+
+======================================================================
+  🎨 BLUEPRINT APPROVAL  Review the Architect's design document
+======================================================================
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like strength game where players swing a mallet to launch a puck up a tower, battling modifiers like rusty rails, shifting bells, and cracked bases.
+
+### Declared Handles
+  mallet_handle (userdata)  Kinematic box representing the heavy mallet swung by the player. [owner: Player input controller, lifecycle: persistent]
+  puck_handle (userdata)  Dynamic sphere representing the puck launched up the tower. [owner: Projectile system, lifecycle: ephemeral]
+  bell_handle (userdata)  Kinematic cylinder representing the bell that shifts position. [owner: Target system, lifecycle: persistent]
+  platform_handle (userdata)  Static box representing the cracked base/platform. [owner: Environment, lifecycle: persistent]
+  sensor_rails_handle (userdata)  Sensor box detecting puck contact with rusty rails for friction. [owner: Environment, lifecycle: persistent]
+  sensor_shock_handle (userdata)  Sensor box detecting player proximity to shock plates. [owner: Environment, lifecycle: persistent]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.0 - Time elapsed since last mallet swing to prevent spamming. [task swing_mallet]
+  bell_shift_timer (number) = 0.0 - Timer controlling how often the bell shifts position. [task shift_bell]
+  current_streak (number) = 0 - Current streak count for Streak Protocol multiplier. [task launch_puck]
+  mallet_integrity (number) = 1.0 - Remaining power of the mallet head (1.0 = new, 0.0 = broken). [task swing_mallet]
+  puck_height_offset (number) = 0.0 - Random offset for Tower Gauge Shift respawn height. [task launch_puck]
+  echo_hit_count (number) = 0 - Consecutive hits on same spot for Echo Strikes tension. [task launch_puck]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_handle)
+  2. SpawnStaticBox(sensor_shock_handle)
+  3. SpawnStaticBox(sensor_rails_handle)
+  4. SpawnKinematicBox(mallet_handle)
+  5. SpawnKinematicCylinder(bell_handle)
+  6. CreatePool('puck_pool', 5, 10, {radius=0.15, mass=1.0})
+
+### Event Flow
+  MidwayInput.IsActionDown('fire') → ApplyImpulse to mallet_handle to swing down; Reset puck if active.
+  IsSensorTriggered(sensor_rails_handle) → ApplyLinearDamping to puck_handle to simulate rusty rail friction.
+  GetPosition(bell_handle) < GetPosition(puck_handle).y → ApplyImpulse to bell_handle to shift it upward.
+  IsSensorTriggered(sensor_shock_handle) → Engine.AwardTickets(-1, 'Shock Damage') if player is active.
+  puck_handle hits bell_handle → Check win condition; AwardTickets; Trigger Streak Protocol.
+  Engine.GetStreak() > 0 → SpawnDynamicSphere(puck_handle) at new random height via Tower Gauge Shift.
+
+### Pool Requirements
+  puck_pool: 5
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails friction mechanic
+  - Weighted Puck mass variation
+  - Counter-Weight Springs tension
+  - The Bell's Curse shifting
+  - Cracked Base wobble
+  - Echo Strikes rhythm
+  - Sabotaged Mallet splintering
+  - Shock Plates hazard
+  - Tower Gauge Shift respawn
+
+----------------------------------------------------------------------
+  This design will guide every task agent in this run.
+  a  Approve and continue (recommended)
+  r  Reject and abort pipeline
+  s  Skip design (run without a design document)
+----------------------------------------------------------------------
+  [Blueprint Gate] ✓ Design auto-approved (AUTO_APPROVE_GATES=True).
+
+======================================================================
+  [10:40:12] Phase 4: Mesh Execution (Omni-Batch DAG)  11 Task(s)
+======================================================================
+  [Anchor Invariant] ✓ Appended 3 feature-coverage task(s) (checklist features missing from the blueprint).
+  [Skeleton Builder] 🧬 Injected 6 handle(s) + 6 state var(s) + 1 pool name(s) at module root of C:\Users\Admin\source\repos\midway\attractions\strongman\strongman.lua
+  [Anchor Invariant] ✓ attractions/strongman/strongman.lua: 11 canonical + 3 extra anchor(s) — one per task. (baseline snapshotted for revert)
+
+============================================================
+  Mechanics Scaffold: reasoning 14 Lua task(s) → bounded scaffold
+============================================================
+  [Scaffold] ⏭ Task 1: structural hook — skipped.
+  [Scaffold] ⏭ Task 3: structural hook — skipped.
+  [Adaptive ctx] Input ~2578 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:40:12] [START] [Mechanics Scaffold (task 4, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6474 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:40:12] [START] [Mechanics Scaffold (task 4, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=d209e041ff62)
+### Mechanic: Strongman OnLoad Initialization
+INTENT: Spawns all persistent environment and player objects, creates the puck object pool, and registers the physics step callback.
+PSEUDO:
+  platform_handle = SpawnStaticBox(0, 0, 0, 10, 1, 10)
+  sensor_shock_handle = SpawnSensorBox(-2, 0, 0, 1, 0.2, 1)
+  sensor_rails_handle = SpawnSensorBox(2, 0, 0, 1, 0.2, 1)
+  mallet_handle = SpawnKinematicBox(-3, 0, 0, 0.5, 0.5, 0.5)
+  bell_handle = SpawnStaticCylinder(0, 10, 0, 0.5, 0.5)
+  puck_pool = CreatePool('puck_pool', 5, 10, {radius=0.15, mass=1.0})
+  OnStep(function(dt)
+    -- handle physics step logic
+  end)
+API:
+  SpawnStaticBox(lx, ly, lz, w, h, d)
+  SpawnSensorBox(lx, ly, lz, w, h, d)
+  SpawnKinematicBox(lx, ly, lz, w, h, d)
+  SpawnStaticCylinder(lx, ly, lz, halfHeight, radius)
+  CreatePool(name, hotN, coldN, paramsTable)
+  OnStep(fn)  [Telemetry] Mechanics Scaffold (task 4, attempt 1) (qwen3.5:9b)  TTFT: 28.16s | Speed: 5.5 tok/s (331 TPM) | Effective: 3.5 tok/s
+  [10:41:31] [END] [Mechanics Scaffold (task 4, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 4: 'Strongman OnLoad Initialization' (6 API call(s)).
+  [Adaptive ctx] Input ~2603 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:41:31] [START] [Mechanics Scaffold (task 7, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6548 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:41:31] [START] [Mechanics Scaffold (task 7, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=3d54d196f48b)
+### Mechanic: Variable Friction & Mass Modifiers
+INTENT: OnStep reads AttractionConstants.modifiers to dynamically adjust puck friction and mass based on current game state.
+PSEUDO:
+  if puck_handle then
+    friction_mod = AttractionConstants.modifiers.friction or 1.0
+    mass_mod = AttractionConstants.modifiers.mass or 1.0
+    SetFriction(puck_handle, friction_mod)
+    SetMass(puck_handle, mass_mod)
+  end
+API:
+  SetFriction(puck_handle, v)
+  SetMass(puck_handle, kg)  [Telemetry] Mechanics Scaffold (task 7, attempt 1) (qwen3.5:9b)  TTFT: 28.16s | Speed: 6.7 tok/s (403 TPM) | Effective: 2.5 tok/s
+  [10:42:16] [END] [Mechanics Scaffold (task 7, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 7: 'Variable Friction & Mass Modifiers' (2 API call(s)).
+  [Adaptive ctx] Input ~2600 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:42:16] [START] [Mechanics Scaffold (task 5, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6541 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:42:16] [START] [Mechanics Scaffold (task 5, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=fa24cc09adee)
+### Mechanic: Fire Action Swing & Launch
+INTENT: Detects the 'fire' input to apply angular impulse to the mallet, calculate swing power from input duration, and spawn a new puck at the lever tip.
+PSEUDO:
+  if MidwayInput.IsActionDown('fire') then
+    duration = GetTimeSinceLastFire()
+    impulse = duration * POWER_SCALE
+    ApplyAngularImpulse(mallet_handle, 0, impulse, 0)
+    if puck_handle then
+      tip_pos = GetPosition(mallet_handle) + OFFSET
+      SpawnDynamicSphere(tip_pos.x, tip_pos.y, tip_pos.z, 0.15, 1.0)
+    end
+  end
+API:
+  MidwayInput.IsActionDown("fire")
+  GetTimeSinceLastFire()
+  ApplyAngularImpulse(handle, ix, iy, iz)
+  GetPosition(handle) → lx, ly, lz
+  SpawnDynamicSphere(lx, ly, lz, radius [, mass])  [Telemetry] Mechanics Scaffold (task 5, attempt 1) (qwen3.5:9b)  TTFT: 28.37s | Speed: 6.0 tok/s (357 TPM) | Effective: 3.1 tok/s
+  [10:43:15] [END] [Mechanics Scaffold (task 5, attempt 1)] Execution complete.
+  [Adaptive ctx] Input ~2670 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:43:15] [START] [Mechanics Scaffold (task 5, attempt 2)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6749 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:43:15] [START] [Mechanics Scaffold (task 5, attempt 2)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=95fa6e27f540)
+### Mechanic: Fire Input & Angular Swing
+INTENT: Detects the 'fire' action to apply an angular impulse to the mallet, accumulating swing power based on input duration, and spawns a dynamic puck at the lever tip upon release.
+PSEUDO:
+  if MidwayInput.IsActionDown('fire') then
+    duration = GetTime() - last_fire_time
+    if duration > 0.1 then
+      ApplyAngularImpulse(mallet_handle, 0, 0, -1.0 * duration)
+      last_fire_time = GetTime()
+    end
+  else
+    if puck_handle then
+      puck_handle = PoolAcquire('puck_pool', GetPosition(mallet_handle).x, GetPosition(mallet_handle).y, GetPosition(mallet_handle).z)
+    end
+  end
+API:
+  MidwayInput.IsActionDown('fire')
+  GetTime()
+  ApplyAngularImpulse(handle, ix, iy, iz)
+  PoolAcquire(name, lx, ly, lz)  [Telemetry] Mechanics Scaffold (task 5, attempt 2) (qwen3.5:9b)  TTFT: 23.42s | Speed: 5.9 tok/s (354 TPM) | Effective: 3.4 tok/s
+  [10:44:10] [END] [Mechanics Scaffold (task 5, attempt 2)] Execution complete.
+  [Scaffold] ⚠ Task 5: still invalid after re-prompt (1 violation(s)); using as-is: API line 'GetTime()' references bare call GetTime(...) with no known namespace.
+  [Scaffold] ✓ Task 5: 'Fire Input & Angular Swing' (4 API call(s)).
+  [Adaptive ctx] Input ~2578 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:44:10] [START] [Mechanics Scaffold (task 6, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6473 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:44:10] [START] [Mechanics Scaffold (task 6, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=e190ce506a0f)
+### Mechanic: Puck Ascent & Bell Collision
+INTENT: Track puck height, detect bell collision via sensor, and award tickets using the current streak multiplier.
+PSEUDO:
+  if IsSensorTriggered(sensor_rails_handle) then
+    SetLinearDamping(puck_handle, 0.8)
+  end
+  if GetPosition(puck_handle).y > GetPosition(bell_handle).y then
+    ApplyImpulse(bell_handle, 0, 1, 0)
+  end
+  if puck_handle hits bell_handle then
+    tickets = Engine.GetStreak() * 10
+    Engine.AwardTickets(tickets, 'Bell Strike')
+  end
+API:
+  SetLinearDamping(handle, v)
+  GetPosition(handle) → lx, ly, lz
+  ApplyImpulse(handle, ix, iy, iz)
+  IsSensorTriggered(handle) → bool
+  Engine.AwardTickets(n, label)
+  Engine.GetStreak() → int  [Telemetry] Mechanics Scaffold (task 6, attempt 1) (qwen3.5:9b)  TTFT: 28.34s | Speed: 5.8 tok/s (347 TPM) | Effective: 3.0 tok/s
+  [10:45:08] [END] [Mechanics Scaffold (task 6, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 6: 'Puck Ascent & Bell Collision' (6 API call(s)).
+  [Scaffold] ⏭ Task 2: structural hook — skipped.
+  [Adaptive ctx] Input ~2593 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:45:08] [START] [Mechanics Scaffold (task 8, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6518 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:45:08] [START] [Mechanics Scaffold (task 8, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=c36b001621dd)
+### Mechanic: Streak Protocol
+INTENT: On a win, award tokens and increment the streak counter; on a loss, forfeit all wagered tokens and escrowed tickets.
+PSEUDO:
+  if win_condition then
+    tokens = Engine.GetTokens() + wagered
+    Engine.AwardTokens(tokens, 'Streak Win')
+    Engine.AwardTickets(Engine.GetTickets(), 'Streak Win')
+    current_streak = current_streak + 1
+  else
+    Engine.AwardTokens(-wagered, 'Streak Loss')
+    Engine.AwardTickets(-escrowed, 'Streak Loss')
+    current_streak = 0
+  end
+API:
+  Engine.AwardTokens(n, label)
+  Engine.AwardTickets(n, label)
+  Engine.GetTokens()
+  Engine.GetTickets()
+  Engine.GetStreak()  [Telemetry] Mechanics Scaffold (task 8, attempt 1) (qwen3.5:9b)  TTFT: 28.17s | Speed: 5.9 tok/s (355 TPM) | Effective: 2.9 tok/s
+  [10:46:03] [END] [Mechanics Scaffold (task 8, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 8: 'Streak Protocol' (5 API call(s)).
+  [Adaptive ctx] Input ~2562 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:46:03] [START] [Mechanics Scaffold (task 11, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6427 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:46:03] [START] [Mechanics Scaffold (task 11, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=54ce758d0ba0)
+### Mechanic: Strongman Diagnostics
+INTENT: OnUnload prints the current state of all attraction handles and pool statistics to the console without modifying engine files.
+PSEUDO:
+  if mallet_handle then print("Mallet:", GetPosition(mallet_handle)) end
+  if puck_handle then print("Puck:", GetPosition(puck_handle)) end
+  if bell_handle then print("Bell:", GetPosition(bell_handle)) end
+  if platform_handle then print("Platform:", GetPosition(platform_handle)) end
+  if sensor_rails_handle then print("Rails:", GetPosition(sensor_rails_handle)) end
+  if sensor_shock_handle then print("Shock:", GetPosition(sensor_shock_handle)) end
+  print("Puck Pool Total:", PoolTotal('puck_pool'))
+API:
+  GetPosition(handle)
+  PoolTotal(name)
+  print  [Telemetry] Mechanics Scaffold (task 11, attempt 1) (qwen3.5:9b)  TTFT: 28.03s | Speed: 6.4 tok/s (385 TPM) | Effective: 3.0 tok/s
+  [10:46:56] [END] [Mechanics Scaffold (task 11, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 11: 'Strongman Diagnostics' (2 API call(s)).
+  [Adaptive ctx] Input ~2581 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:46:56] [START] [Mechanics Scaffold (task 10, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6483 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:46:56] [START] [Mechanics Scaffold (task 10, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=57e37def862f)
+### Mechanic: Bell Swing Reset
+INTENT: applies an angular impulse to the bell based on impact velocity and resets its rotation to neutral after a cooldown timer expires.
+PSEUDO:
+  impact_vel = GetVelocity(puck_handle)
+  if impact_vel > 0 then
+    ApplyAngularImpulse(bell_handle, 0, 0, impact_vel * SCALED_FACTOR)
+  end
+  if bell_rotation > NEUTRAL_ANGLE then
+    ApplyAngularImpulse(bell_handle, 0, 0, -ROTATION_DAMPING)
+  end
+  if cooldown_elapsed > COOLDOWN_TIME then
+    ApplyAngularImpulse(bell_handle, 0, 0, -ROTATION_TO_NEUTRAL)
+  end
+API:
+  GetVelocity(puck_handle) → vx, vy, vz
+  ApplyAngularImpulse(handle, ix, iy, iz)
+  IsActive(handle) → bool  [Telemetry] Mechanics Scaffold (task 10, attempt 1) (qwen3.5:9b)  TTFT: 28.13s | Speed: 5.9 tok/s (354 TPM) | Effective: 2.9 tok/s
+  [10:47:51] [END] [Mechanics Scaffold (task 10, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 10: 'Bell Swing Reset' (3 API call(s)).
+  [Adaptive ctx] Input ~2582 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:47:51] [START] [Mechanics Scaffold (task 9, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6485 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:47:51] [START] [Mechanics Scaffold (task 9, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=b88267e74281)
+### Mechanic: Dynamic Difficulty Tuning
+INTENT: scales puck mass and bell height thresholds based on current streak to increase challenge as the player succeeds
+PSEUDO:
+  streak = Engine.GetStreak()
+  if streak > 0 then
+    mass_factor = 1.0 + (streak * 0.1)
+    bell_threshold = bell_threshold + (streak * 0.05)
+    SetMass(puck_handle, mass_factor)
+    bell.y = bell.y + bell_threshold
+  end
+API:
+  Engine.GetStreak()
+  SetMass(puck_handle, mass)
+  MoveKinematic(bell_handle, lx, ly, lz, dt)  [Telemetry] Mechanics Scaffold (task 9, attempt 1) (qwen3.5:9b)  TTFT: 28.55s | Speed: 6.4 tok/s (381 TPM) | Effective: 2.6 tok/s
+  [10:48:39] [END] [Mechanics Scaffold (task 9, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 9: 'Dynamic Difficulty Tuning' (3 API call(s)).
+  [Adaptive ctx] Input ~2490 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:48:39] [START] [Mechanics Scaffold (task 12, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6209 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:48:39] [START] [Mechanics Scaffold (task 12, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=982aa8e8b129)
+### Mechanic: Echo Strikes rhythm
+INTENT: increments a consecutive hit counter when the puck strikes the bell within a specific timing window to build tension
+PSEUDO:
+  if puck_handle hits bell_handle then
+    if GetVelocity(puck_handle).y > MIN_ECHO_VELOCITY then
+      echo_hit_count = echo_hit_count + 1
+    end
+  end
+API:
+  ApplyImpulse(puck_handle, ix, iy, iz)
+  ApplyImpulse(bell_handle, ix, iy, iz)
+  GetPosition(bell_handle)
+  GetVelocity(puck_handle)
+  IsSensorTriggered(sensor_rails_handle)
+  IsSensorTriggered(sensor_shock_handle)
+  Engine.AwardTickets(n, label)
+  Engine.GetStreak()
+  SpawnDynamicSphere(lx, ly, lz, radius [, mass])
+  SpawnKinematicBox(lx, ly, lz, w, h, d)
+  SpawnKinematicCylinder(lx, ly, lz, halfHeight, radius)
+  SpawnStaticBox(lx, ly, lz, w, h, d)
+  SpawnStaticCylinder(lx, ly, lz, halfHeight, radius)
+  SpawnStaticSphere(lx, ly, lz, radius)
+  SpawnStaticCapsule(lx, ly, lz, halfHeight, radius)
+  SpawnStaticMesh(lx, ly, lz, yaw, path)
+  SpawnDynamicBox(lx, ly, lz, w, h, d [, mass])
+  SpawnDynamicCapsule(lx, ly, lz, halfHeight, radius [, mass])
+  SpawnDynamicCylinder(lx, ly, lz, halfHeight, radius [, mass])
+  SpawnDynamicMesh(lx, ly, lz, yaw, mass, path)
+  SpawnSensorBox(lx, ly, lz, w, h, d)
+  SpawnSensorSphere(lx, ly, lz, radius)
+  MoveKinematic(handle, lx, ly, lz, dt)
+  SetLinearVelocity(handle, vx, vy, vz)
+  AddLinearVelocity(handle, vx, vy, vz)
+  SetFriction(handle, v)
+  SetRestitution(handle, v)
+  SetGravityFactor(handle, v)
+  SetMass(handle, kg)
+  SetLinearDamping(handle, v)
+  SetAngularDamping(handle, v)
+  DestroyBody(handle)
+  OnStep(fn)
+  CreatePool(name, hotN, coldN, paramsTable)
+  PoolAcquire(name, lx, ly, lz)
+  PoolReturn(name, handle)
+  PoolCullBelow(name, yThreshold)
+  PoolFree(name)
+  PoolTotal(name)
+  MidwayInput.IsActionDown("fire")
+  MidwayInput.IsActionDown("aim_left")
+  MidwayInput.IsActionDown("aim_right")
+  MidwayInput.IsActionDown("power_up")
+  MidwayInput.IsActionDown("power_down")
+  MidwayInput.IsKeyDown(name)  [Telemetry] Mechanics Scaffold (task 12, attempt 1) (qwen3.5:9b)  TTFT: 28.01s | Speed: 5.4 tok/s (321 TPM) | Effective: 4.2 tok/s
+  [10:50:49] [END] [Mechanics Scaffold (task 12, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 12: 'Echo Strikes rhythm' (45 API call(s)).
+  [Adaptive ctx] Input ~2496 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:50:49] [START] [Mechanics Scaffold (task 13, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6227 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:50:49] [START] [Mechanics Scaffold (task 13, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=440a6236eda5)
+### Mechanic: Sabotaged Mallet Splintering
+INTENT: reduces the mallet's swing power and mass as it hits a critical integrity threshold to simulate breaking wood
+PSEUDO:
+  if mallet_integrity < 0.3 then
+    damage = 0.3 - mallet_integrity
+    mallet_integrity = 0.0
+    ApplyImpulse(mallet_handle, 0, -damage, 0)
+    SetMass(mallet_handle, 0.8)
+    SetLinearDamping(mallet_handle, 0.5)
+  end
+API:
+  ApplyImpulse(mallet_handle, ix, iy, iz)
+  SetMass(mallet_handle, kg)
+  SetLinearDamping(mallet_handle, v)  [Telemetry] Mechanics Scaffold (task 13, attempt 1) (qwen3.5:9b)  TTFT: 27.70s | Speed: 6.1 tok/s (368 TPM) | Effective: 2.7 tok/s
+  [10:51:39] [END] [Mechanics Scaffold (task 13, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 13: 'Sabotaged Mallet Splintering' (3 API call(s)).
+  [Adaptive ctx] Input ~2490 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [10:51:39] [START] [Mechanics Scaffold (task 14, attempt 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=6209 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:51:39] [START] [Mechanics Scaffold (task 14, attempt 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=dcb89551c872)
+### Mechanic: Shock Plates hazard
+INTENT: detects player proximity via a sensor and deducts tickets when triggered
+PSEUDO:
+  if IsSensorTriggered(sensor_shock_handle) then
+    if IsActive(player_handle) then
+      Engine.AwardTickets(-1, 'Shock Damage')
+    end
+  end
+API:
+  IsSensorTriggered(sensor_shock_handle)
+  IsActive(player_handle)
+  Engine.AwardTickets(n, label)  [Telemetry] Mechanics Scaffold (task 14, attempt 1) (qwen3.5:9b)  TTFT: 28.36s | Speed: 7.6 tok/s (456 TPM) | Effective: 2.0 tok/s
+  [10:52:18] [END] [Mechanics Scaffold (task 14, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 14: 'Shock Plates hazard' (3 API call(s)).
+  [Scaffold] Done: 11 scaffold(s) stored on ctx.scaffolds.
+
+============================================================
+  Phase A: Deterministic Skeleton Builder (pre-task)
+============================================================
+  [Skeleton Builder] ✓ All target files already have valid skeleton structure
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '1')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '1')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '1')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '2')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '2')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '2')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '3')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '3')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '3')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '4')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '4')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '4')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '5')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '5')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '5')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '6')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '6')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '6')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '7')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '7')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '7')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '8')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '8')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '8')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '9')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '9')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '9')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '10')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '10')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '10')
+  [Wave Sorter] 🔒 Deferred task '12' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '11')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '11')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '11')
+  [Wave Sorter] 🔒 Deferred task '13' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '12')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '12')
+  [Wave Sorter] 🔒 Deferred task '14' to next wave (file 'attractions/strongman/strongman.lua' already claimed by '13')
+  [DAG] Sorted 14 task(s) into 14 wave(s):
+    Wave 1: Task 1 [Lua]
+    Wave 2: Task 2 [Lua]
+    Wave 3: Task 3 [Lua]
+    Wave 4: Task 4 [Lua]
+    Wave 5: Task 5 [Lua]
+    Wave 6: Task 6 [Lua]
+    Wave 7: Task 7 [Lua]
+    Wave 8: Task 8 [Lua]
+    Wave 9: Task 9 [Lua]
+    Wave 10: Task 10 [Lua]
+    Wave 11: Task 11 [Lua]
+    Wave 12: Task 12 [Lua]
+    Wave 13: Task 13 [Lua]
+    Wave 14: Task 14 [Lua]
+
+  ============================================================
+  Processing Wave 1/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_1 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_1': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 2374-char staging block for attractions/strongman/strongman.lua (full file 3998 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 9508 chars; no truncation
+
+============================================================
+  [10:52:18] [START] [Lua Scripter (Task task_1)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=17431 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:52:18] [START] [Lua Scripter (Task task_1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=d434038faba9)
+<<<<<<< SEARCH
+  32 | local mallet_integrity = 1.0  -- task swing_mallet Remaining power of the mallet head (1.0 = new, 0.0 = broken).
+  33 | local puck_height_offset = 0.0  -- task launch_puck Random offset for Tower Gauge Shift respawn height.
+  34 | local echo_hit_count = 0  -- task launch_puck Consecutive hits on same spot for Echo Strikes tension.
+  35 > -- [TASK_1_INSERT_HOOK] -- module-level state (balls/objects table, globals)
+  36 | 
+  37 | -- ─── INVARIANT 3: OnLoadStatic → SpawnSharedBooth ──────
+=======
+  32 | local mallet_integrity = 1.0  -- task swing_mallet Remaining power of the mallet head (1.0 = new, 0.0 = broken).
+  33 | local puck_height_offset = 0.0  -- task launch_puck Random offset for Tower Gauge Shift respawn height.
+  34 | local echo_hit_count = 0  -- task launch_puck Consecutive hits on same spot for Echo Strikes tension.
+  35 | local puck_pool = nil  -- task launch_puck Active pooled puck handle.
+  36 | local score = 0  -- task launch_puck Current score for streak multiplier.
+  37 | local difficulty = 1.0  -- task launch_puck Dynamic difficulty based on modifiers.
+  38 | local bell_offset = 0.0  -- task shift_bell Vertical offset for The Bell's Curse.
+  39 | local base_wobble = 0.0  -- task cracked_base Horizontal wobble for Cracked Base.
+  40 | local rusty_friction = 0.0  -- task rusty_rails Accumulated friction from rusty rails.
+  41 | -- [TASK_1_INSERT_HOOK] -- module-level state (balls/objects table, globals)
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_1) (qwen3.5:9b)  TTFT: 100.30s ⚠️ EXTREME | Speed: 5.3 tok/s (319 TPM) | Effective: 2.2 tok/s
+  [10:55:09] [END] [Lua Scripter (Task task_1)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (4415 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Define_module_level_constants_state]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 2/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_2 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_2': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 2139-char staging block for attractions/strongman/strongman.lua (full file 4415 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 11491 chars; no truncation
+
+============================================================
+  [10:55:14] [START] [Lua Scripter (Task task_2)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=19414 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:55:14] [START] [Lua Scripter (Task task_2)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=0b386bec22d3)
+  [Watchdog] ⚠ ⚠ Midway: extreme TTFT — TTFT 100.3s on 'Lua Scripter (Task task_1)' (qwen3.5:9b)
+<<<<<<< SEARCH
+  42 | -- ALL static geometry MUST go here
+  43 | function OnLoadStatic()
+  44 |     SpawnSharedBooth()
+  45 >     -- [TASK_3_INSERT_HOOK] -- permanent geometry: SpawnSharedBooth() + static physics bodies
+  46 | end
+  47 | 
+=======
+  42 | -- ALL static geometry MUST go here
+  43 | function OnLoadStatic()
+  44 |     SpawnSharedBooth()
+  45 |     MidwayPhysics.SpawnStaticBox(platform_handle, 0, 0, 0, 2, 1, 2)
+  46 |     MidwayPhysics.SpawnStaticBox(sensor_shock_handle, 0, 0, 0, 1, 0.5, 1)
+  47 |     MidwayPhysics.SpawnStaticBox(sensor_rails_handle, 0, 0, 0, 0.5, 0.5, 10)
+  48 |     MidwayPhysics.SpawnKinematicBox(mallet_handle, 0, 0, 0, 0.5, 0.5, 0.5)
+  49 |     MidwayPhysics.SpawnKinematicCylinder(bell_handle, 0, 0, 0, 0.5, 0.5)
+  50 |     -- [TASK_3_INSERT_HOOK] -- permanent geometry: SpawnSharedBooth() + static physics bodies
+  51 | end
+  52 | 
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_2) (qwen3.5:9b)  TTFT: 58.17s | Speed: 5.0 tok/s (302 TPM) | Effective: 2.4 tok/s
+  [10:57:05] [END] [Lua Scripter (Task task_2)] Execution complete.
+  [Anchor Guard] ⛔ task_2 REPLACE redefines 'OnLoadStatic' — skipping block (lifecycle already provided by the skeleton)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_OnLoadStatic_spawn_permanent_booth]
+  [Thermal Pacing] Cooling down for 5.0s...
+  [IntegrationSchema] ⚠ Handle conflict: OnLoadStatic, OnLoadStatic (tasks: task_2)
+
+  ============================================================
+  Processing Wave 3/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_3 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_3': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3371-char staging block for attractions/strongman/strongman.lua (full file 4415 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 12714 chars; no truncation
+
+============================================================
+  [10:57:11] [START] [Lua Scripter (Task task_3)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=20637 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:57:11] [START] [Lua Scripter (Task task_3)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=d2d4bbb4a3ba)
+<<<<<<< SEARCH
+  49 | -- ALL game logic and setup MUST go here
+  50 | function OnLoad()
+  51 | -- (other task anchor, NOT yours)
+  52 >     -- [TASK_4_INSERT_HOOK] -- object pool creation (MidwayPhysics.CreatePool with shape/mass/restitution)
+  53 | -- (other task anchor, NOT yours)
+  54 | -- (other task anchor, NOT yours)
+=======
+  49 | -- ALL game logic and setup MUST go here
+  50 | function OnLoad()
+  51 |     -- Create puck pool
+  52 |     MidwayPhysics.CreatePool('puck_pool', 5, 10, {radius=0.15, mass=1.0})
+  53 |     -- Spawn initial puck
+  54 |     puck_handle = MidwayPhysics.PoolAcquire('puck_pool', 0, 0, 0)
+  55 |     -- Spawn lever (kinematic box)
+  56 |     MidwayPhysics.SpawnKinematicBox(0, 0, 0, 0.2, 0.1, 2.0, lever_handle)
+  57 |     -- Register step callback
+  58 |     MidwayPhysics.OnStep(function(dt)
+  59 |         -- Step logic
+  60 |     end)
+  61 | end
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_3) (qwen3.5:9b)  TTFT: 64.39s | Speed: 5.1 tok/s (305 TPM) | Effective: 2.2 tok/s
+  [10:59:05] [END] [Lua Scripter (Task task_3)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match failed  trying fuzzy (normalize+slide)...
+  [FuzzyPatch] DEBUG: Fuzzy (normalize+slide) failed  trying normalized-content match...
+  [FuzzyPatch] WARNING: No match found after all fallbacks. Search preview: '-- ALL game logic and setup MUST go here function OnLoad() -- (other task anchor'
+  [Anchor Guard] 🔀 task_3 redefines 'OnLoad' — stripped wrappers, keeping 460 chars of game logic.
+  [Real-time Patch] ⚠ SEARCH block not found in attractions/strongman/strongman.lua: '-- ALL game logic and setup MUST go here\nfunction OnLoad()\n-- (other task anchor...'  (block 1 of 1 skipped)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_OnLoad_create_object_pool]
+  [Thermal Pacing] Cooling down for 5.0s...
+  [IntegrationSchema] ⚠ Handle conflict: OnLoad, OnLoad (tasks: task_3)
+
+  ============================================================
+  Processing Wave 4/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_4 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  Read: modifier_state.json (162 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_4': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3142-char staging block for attractions/strongman/strongman.lua (full file 4415 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 13049 chars; no truncation
+
+============================================================
+  [10:59:10] [START] [Lua Scripter (Task task_4)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=20972 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [10:59:10] [START] [Lua Scripter (Task task_4)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=e74e57f7fd6b)
+<<<<<<< SEARCH
+    -- [TASK_7_INSERT_HOOK] -- static modifier read (per frame): apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND (no streak, no scoring)
+=======
+    local MOD = AttractionConstants.modifiers
+    if puck_handle then
+        local friction = 0.5 + (MOD.friction or 0.0) * 0.5
+        local mass = 1.0 + (MOD.mass or 0.0) * 0.5
+        MidwayPhysics.SetFriction(puck_handle, friction)
+        MidwayPhysics.SetMass(puck_handle, mass)
+    end
+    if mallet_handle then
+        local impulse = 0.0
+        if MidwayInput.IsActionDown("fire") then
+            if swing_cooldown <= 0.0 then
+                local pos = MidwayPhysics.GetPosition(mallet_handle)
+                MidwayPhysics.ApplyImpulse(mallet_handle, 0, 0, -1000.0 * (mallet_integrity or 1.0))
+                swing_cooldown = 0.5
+                if puck_handle then
+                    MidwayPhysics.DestroyBody(puck_handle)
+                    puck_handle = MidwayPhysics.PoolAcquire('puck_pool', 0, 0, 0)
+                end
+            end
+        end
+        if swing_cooldown > 0.0 then
+            local pos = MidwayPhysics.GetPosition(mallet_handle)
+            MidwayPhysics.MoveKinematic(mallet_handle, pos.x, pos.y + (swing_cooldown - 0.5), pos.z, dt)
+        end
+    end
+    if bell_handle then
+        local bell_pos = MidwayPhysics.GetPosition(bell_handle)
+        local puck_pos = MidwayPhysics.GetPosition(puck_handle)
+        if puck_handle and puck_pos.y > bell_pos.y then
+            local streak = Engine.GetStreak()
+            Engine.AwardTickets((10 + streak * 5) * (1.0 + MOD.heat * 0.2), 'WIN')
+            Engine.AwardTokens(1, 'BONUS')
+            bell_shift_timer = 2.0
+            MidwayPhysics.DestroyBody(puck_handle)
+            puck_handle = MidwayPhysics.PoolAcquire('puck_pool', 0, 0, 0)
+        end
+    end
+    if bell_shift_timer > 0.0 then
+        local bell_pos = MidwayPhysics.GetPosition(bell_handle)
+        MidwayPhysics.MoveKinematic(bell_handle, bell_pos.x, bell_pos.y + (bell_shift_timer * 0.1), bell_pos.z, dt)
+        bell_shift_timer = bell_shift_timer - dt
+    end
+    if sensor_rails_handle then
+        if MidwayInput.IsSensorTriggered(sensor_rails_handle) then
+            local puck_pos = MidwayPhysics.GetPosition(puck_handle)
+            if puck_handle then
+                MidwayPhysics.SetLinearDamping(puck_handle, 0.5)
+            end
+        end
+    end
+    if sensor_shock_handle then
+        if MidwayInput.IsSensorTriggered(sensor_shock_handle) then
+            Engine.AwardTickets(-1, 'Shock Damage')
+        end
+    end
+=======
+    -- [TASK_7_INSERT_HOOK] -- static modifier read (per frame): apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND (no streak, no scoring)
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_4) (qwen3.5:9b)  TTFT: 63.24s | Speed: 5.0 tok/s (299 TPM) | Effective: 3.3 tok/s
+  [11:02:14] [END] [Lua Scripter (Task task_4)] Execution complete.
+
+============================================================
+  [11:02:14] [START] [Empty Block Fix (task_4)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=1889 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:02:14] [START] [Empty Block Fix (task_4)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=7d6ccdae4fd1)
+SEARCH/REPLACE block:
+<<<<<<< SEARCH
+    -- [TASK_7_INSERT_HOOK] -- static modifier read (per frame): apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND (no streak, no scoring)
+=======
+    -- [TASK_7_INSERT_HOOK] -- static modifier read (per frame): apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND (no streak, no scoring)
+    local mods = AttractionConstants.modifiers
+    -- Apply variable friction based on modifiers
+    local targetFriction = mods.friction or 1.0
+    if targetFriction ~= 1.0 then
+        MidwayPhysics.SetFriction(targetFriction)
+    end
+    -- Apply mass changes if needed (e.g., if the puck has a mass property)
+    -- local targetMass = mods.mass or 1.0
+    -- if targetMass ~= 1.0 then
+    --     MidwayPhysics.SetMass(targetMass)
+    -- end
+    -- Apply engine modifiers (Heat/Luck/SleightOfHand) as static multipliers
+    -- These affect physics calculations but do not directly award tickets or streaks
+    if mods.heat then
+        MidwayPhysics.ApplyImpulse(0, mods.heat, 0) -- Apply impulse based on heat modifier
+    end
+    if mods.luck then
+        MidwayPhysics.ApplyImpulse(0, mods.luck, 0) -- Apply impulse based on luck modifier
+    end
+    if mods.sleight_of_hand then
+        MidwayPhysics.ApplyImpulse(0, mods.sleight_of_hand, 0) -- Apply impulse based on sleight of hand modifier
+    end
+>>>>>>> REPLACE  [Telemetry] Empty Block Fix (task_4) (qwen3.5:9b)  TTFT: 12.09s | Speed: 5.6 tok/s (338 TPM) | Effective: 4.6 tok/s
+  [11:03:20] [END] [Empty Block Fix (task_4)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Empty Block Guard] Re-prompt produced real code for task_4
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (5423 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_OnStep_callback_read_AttractionConstants]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 5/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_5 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_5': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3336-char staging block for attractions/strongman/strongman.lua (full file 5423 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 13628 chars; no truncation
+
+============================================================
+  [11:03:25] [START] [Lua Scripter (Task task_5)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=21551 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:03:25] [START] [Lua Scripter (Task task_5)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=50b821329200)
+<<<<<<< SEARCH
+    -- [TASK_5_INSERT_HOOK] -- round state init: declare ball counters, timers, and round variables (locals only, no physics)
+=======
+    -- [TASK_5_INSERT_HOOK] -- round state init: declare ball counters, timers, and round variables (locals only, no physics)
+    local last_fire_time = 0
+    local fire_duration = 0
+    local swing_power = 0
+    local puck_spawned = false
+    local puck_handle = nil
+    local mallet_handle = nil
+    local bell_handle = nil
+    local platform_handle = nil
+    local sensor_rails_handle = nil
+    local sensor_shock_handle = nil
+    local puck_pool_name = 'puck_pool'
+    local MOD = AttractionConstants.modifiers
+    local current_streak = Engine.GetStreak()
+    local mallet_integrity = 1.0
+    local puck_height_offset = 0.0
+    local echo_hit_count = 0
+    local swing_cooldown = 0.0
+    local bell_shift_timer = 0.0
+    local swing_cooldown_timer = 0.0
+    local bell_shift_timer = 0.0
+    local bell_shift_timer = 0.0
+    local bell_shift_timer = 0.0
+    local bell_shift_timer = 0.0
+    local bell_shift_timer = 0.0
+    local bell_shift_timer = 0.0  [Telemetry] Lua Scripter (Task task_5) (qwen3.5:9b)  TTFT: 114.19s ⚠️ EXTREME | Speed: 5.0 tok/s (297 TPM) | Effective: 1.5 tok/s 🚨 SLOW
+  [Loop Guard] ⚠ Repetition loop detected in 'Lua Scripter (Task task_5)' — discarding 1105 chars, warming 0.40→0.60, restarting.
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:06:09] [START] [Lua Scripter (Task task_5)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=9dbbd615a50c)
+<<<<<<< SEARCH
+    -- [TASK_5_INSERT_HOOK] -- round state init: declare ball counters, timers, and round variables (locals only, no physics)
+=======
+    -- [TASK_5_INSERT_HOOK] -- round state init: declare ball counters, timers, and round variables (locals only, no physics)
+    local last_fire_time = 0
+    local swing_duration = 0
+    local puck_spawned = false
+    -- [TASK_5_INSERT_HOOK] -- round state init: declare ball counters, timers, and round variables (locals only, no physics)
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_5) (qwen3.5:9b)  TTFT: 11.93s | Speed: 7.0 tok/s (422 TPM) | Effective: 4.0 tok/s
+  [11:06:36] [END] [Lua Scripter (Task task_5)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (5638 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_player_input_handling_apply]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 6/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_6 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_6': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3120-char staging block for attractions/strongman/strongman.lua (full file 5638 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 13057 chars; no truncation
+
+============================================================
+  [11:06:42] [START] [Lua Scripter (Task task_6)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=20980 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:06:42] [START] [Lua Scripter (Task task_6)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=96f6b92d3084)
+<<<<<<< SEARCH
+    -- [TASK_6_INSERT_HOOK] -- input handling / aiming mechanism setup
+=======
+    -- [TASK_6_INSERT_HOOK] -- input handling / aiming mechanism setup
+    MidwayPhysics.OnStep(function(dt)
+        local MOD = AttractionConstants.modifiers
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        local bell_lx, bell_ly, bell_lz = MidwayPhysics.GetPosition(bell_handle)
+        
+        -- Rusty Rails: Apply friction if puck is in contact with rails
+        if IsSensorTriggered(sensor_rails_handle) then
+            MidwayPhysics.SetLinearDamping(puck_handle, 0.8)
+        end
+        
+        -- Tower Gauge Shift: Randomly respawn puck at new height if timer triggers
+        if bell_shift_timer > 0 and bell_shift_timer <= dt then
+            MidwayPhysics.DestroyBody(puck_handle)
+            local new_height = bell_ly + (MOD.luck * 0.5 - 0.2)
+            puck_handle = MidwayPhysics.PoolAcquire('puck_pool', bell_lx, new_height, bell_lz)
+            bell_shift_timer = 0
+        end
+        
+        -- Check win condition: Puck reaches bell height
+        if ly >= bell_ly then
+            -- Award Tickets based on streak multiplier
+            local tickets = Engine.GetStreak() * 10
+            Engine.AwardTickets(tickets, 'Bell Strike')
+            
+            -- Reset puck for next attempt
+            MidwayPhysics.DestroyBody(puck_handle)
+            puck_handle = MidwayPhysics.PoolAcquire('puck_pool', bell_lx, bell_ly - 1, bell_lz)
+        end
+    end)
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_6) (qwen3.5:9b)  TTFT: 60.78s | Speed: 5.4 tok/s (323 TPM) | Effective: 2.6 tok/s
+  [11:08:39] [END] [Lua Scripter (Task task_6)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (6978 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_puck_ascent_logic_track]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 7/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_7 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  Read: modifier_state.json (162 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_7': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 2226-char staging block for attractions/strongman/strongman.lua (full file 6978 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 13207 chars; no truncation
+
+============================================================
+  [11:08:45] [START] [Lua Scripter (Task task_7)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=21130 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:08:45] [START] [Lua Scripter (Task task_7)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=4242debef1ff)
+<<<<<<< SEARCH
+    -- [TASK_2_INSERT_HOOK] -- shared constants table (geometry, physics, gameplay values)
+=======
+    -- [TASK_2_INSERT_HOOK] -- shared constants table (geometry, physics, gameplay values)
+    local MOD = AttractionConstants.modifiers
+    
+    -- Weighted Puck: Adjust mass based on modifier
+    local puckMass = 1.0 - (MOD.mass or 0) * 0.5
+    
+    -- Tower Gauge Shift: Random height offset for respawn
+    local heightOffset = (MOD.luck or 0) * 0.5 - 0.2
+    
+    -- Rusty Rails: Base friction value
+    local rustyFriction = 0.8
+    -- [TASK_2_INSERT_HOOK] -- shared constants table (geometry, physics, gameplay values)
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_7) (qwen3.5:9b)  TTFT: 61.04s | Speed: 6.2 tok/s (371 TPM) | Effective: 1.7 tok/s 🚨 SLOW
+  [11:10:10] [END] [Lua Scripter (Task task_7)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (7413 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_rogue_like_modifiers_including]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 8/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_8 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_8': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3309-char staging block for attractions/strongman/strongman.lua (full file 7413 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 14074 chars; no truncation
+
+============================================================
+  [11:10:15] [START] [Lua Scripter (Task task_8)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=21997 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:10:15] [START] [Lua Scripter (Task task_8)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=2be525d1afcf)
+<<<<<<< SEARCH
+    -- [TASK_8_INSERT_HOOK] -- scoring (tickets): Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier (tickets ONLY)
+=======
+    if win_condition then
+        local streak = Engine.GetStreak()
+        local tickets = Engine.GetTickets()
+        local tokens = Engine.GetTokens()
+        
+        -- Award tickets scaled by streak
+        Engine.AwardTickets(tickets * streak, 'WIN')
+        
+        -- Award tokens for streak success
+        Engine.AwardTokens(tokens + 1, 'STREAK_WIN')
+        
+        -- Increment streak
+        current_streak = current_streak + 1
+    else
+        -- Forfeit wagered tokens and escrowed tickets
+        Engine.AwardTokens(-1, 'STREAK_LOSS')
+        Engine.AwardTickets(-1, 'STREAK_LOSS')
+        current_streak = 0
+    end
+    -- [TASK_8_INSERT_HOOK] -- scoring (tickets): Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier (tickets ONLY)
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_8) (qwen3.5:9b)  TTFT: 64.44s | Speed: 5.6 tok/s (334 TPM) | Effective: 1.9 tok/s 🚨 SLOW
+  [11:11:53] [END] [Lua Scripter (Task task_8)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (8049 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_Streak_Protocol_logic_roll]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 9/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_9 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_9': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3100-char staging block for attractions/strongman/strongman.lua (full file 8049 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 14399 chars; no truncation
+
+============================================================
+  [11:11:59] [START] [Lua Scripter (Task task_9)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=22322 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:11:59] [START] [Lua Scripter (Task task_9)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=0112491d9a49)
+<<<<<<< SEARCH
+    -- [TASK_11_INSERT_HOOK] -- cleanup & diagnostics (DestroyDynamicBody, print stats)
+=======
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+    -- [TASK_11_INSERT_HOOK] -- cleanup & diagnostics (DestroyDynamicBody, print stats)
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_9) (qwen3.5:9b)  TTFT: 40.51s | Speed: 5.5 tok/s (329 TPM) | Effective: 3.0 tok/s
+  [11:13:26] [END] [Lua Scripter (Task task_9)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (8967 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_OnUnload_print_diagnostic_logs]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 10/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_10 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_10': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3242-char staging block for attractions/strongman/strongman.lua (full file 8967 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 15019 chars; no truncation
+
+============================================================
+  [11:13:31] [START] [Lua Scripter (Task task_10)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=22942 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:13:31] [START] [Lua Scripter (Task task_10)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=50b6ad37bf17)
+<<<<<<< SEARCH
+    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUATION payout scaling on score
+=======
+    local MOD = AttractionConstants.modifiers
+    local difficulty = 1.0 + MOD.heat * 0.2
+    local tilt = MOD.sleight_of_hand
+
+    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUATION payout scaling on score
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        local vx, vy, vz = MidwayPhysics.GetVelocity(puck_handle)
+        local impact_vel = math.sqrt(vx * vx + vy * vy + vz * vz)
+
+        if impact_vel > 0.1 then
+            local impulse = impact_vel * 0.5 * difficulty
+            MidwayPhysics.ApplyAngularImpulse(bell_handle, 0, 0, impulse)
+        end
+
+        local bell_pos = MidwayPhysics.GetPosition(bell_handle)
+        if bell_pos.y > 0.5 then
+            MidwayPhysics.ApplyAngularImpulse(bell_handle, 0, 0, -0.1 * tilt)
+        end
+
+        if bell_shift_timer > 0.5 then
+            bell_shift_timer = 0.0
+        else
+            bell_shift_timer = bell_shift_timer + dt
+        end
+
+        if bell_shift_timer > 1.0 then
+            local new_y = bell_pos.y + (math.random(-0.1, 0.1) * tilt)
+            MidwayPhysics.MoveKinematic(bell_handle, bell_pos.x, new_y, bell_pos.z, dt)
+        end
+    end
+    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUATION payout scaling on score
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_10) (qwen3.5:9b)  TTFT: 42.47s | Speed: 5.3 tok/s (319 TPM) | Effective: 3.2 tok/s
+  [11:15:19] [END] [Lua Scripter (Task task_10)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match failed  trying fuzzy (normalize+slide)...
+  [FuzzyPatch] DEBUG: Fuzzy (normalize+slide) failed  trying normalized-content match...
+  [FuzzyPatch] WARNING: No match found after all fallbacks. Search preview: '    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus +'
+  [Real-time Patch] ⚠ SEARCH block not found in attractions/strongman/strongman.lua: '    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus +...'  (block 1 of 1 skipped)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_bell_swing_animation_logic]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 11/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_11 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_11': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 3084-char staging block for attractions/strongman/strongman.lua (full file 8967 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 15186 chars; no truncation
+
+============================================================
+  [11:15:25] [START] [Lua Scripter (Task task_11)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=23109 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:15:25] [START] [Lua Scripter (Task task_11)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=185f06b88f67)
+<<<<<<< SEARCH
+    -- [TASK_9_INSERT_HOOK] -- dynamic difficulty tuning: recompute heat/luck/sleight-of-hand from current streak on score events
+=======
+    local MOD = AttractionConstants.modifiers
+    local difficulty = 1.0 + MOD.heat * 0.2
+    local tilt = MOD.sleight_of_hand
+
+    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUATION payout scaling on score
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        local vx, vy, vz = MidwayPhysics.GetVelocity(puck_handle)
+        local impact_vel = math.sqrt(vx * vx + vy * vy + vz * vz)
+
+        if impact_vel > 0.1 then
+            local impulse = impact_vel * 0.5 * difficulty
+            MidwayPhysics.ApplyAngularImpulse(bell_handle, 0, 0, impulse)
+        end
+
+        local bell_pos = MidwayPhysics.GetPosition(bell_handle)
+        if bell_pos.y > 0.5 then
+            MidwayPhysics.ApplyAngularImpulse(bell_handle, 0, 0, -0.1 * tilt)
+        end
+
+        if bell_shift_timer > 0.5 then
+            bell_shift_timer = 0.0
+        else
+            
+=======
+    -- [TASK_9_INSERT_HOOK] -- dynamic difficulty tuning: recompute heat/luck/sleight-of-hand from current streak on score events
+=======
+    local MOD = AttractionConstants.modifiers
+    local difficulty = 1.0 + MOD.heat * 0.2
+    local tilt = MOD.sleight_of_hand
+
+    -- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUATION payout scaling on score
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        local vx, vy, vz = MidwayPhysics.GetVelocity(puck_handle)
+        local impact_vel = math.sqrt(vx * vx + vy * vy + vz * vz)
+
+        if impact_vel > 0.1 then
+            local impulse = impact_vel * 0.5 * difficulty
+            MidwayPhysics.ApplyAngularImpulse(bell_handle, 0, 0, impulse)
+        end
+
+        local bell_pos = MidwayPhysics.GetPosition(bell_handle)
+        if bell_pos.y > 0.5 then
+            MidwayPhysics.ApplyAngularImpulse(bell_handle, 0, 0, -0.1 * tilt)
+        end
+
+        if bell_shift_timer > 0.5 then
+            bell_shift_timer = 0.0
+        else
+            
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_11) (qwen3.5:9b)  TTFT: 43.13s | Speed: 5.1 tok/s (308 TPM) | Effective: 3.6 tok/s
+  [11:17:44] [END] [Lua Scripter (Task task_11)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Anchor Verifier] 🔧 Post-patch re-injected '-- [TASK_9_INSERT_HOOK] -- dynamic difficulty tuning: recompute heat/luck/sleight-of-hand from current streak on score events' into attractions/strongman/strongman.lua
+  [Post-Process Fix #15] Converted 1 bare expression statement(s) to 'local _ = ...'
+  [Snapshot] ⚠ post-patch file not luac-clean for attractions/strongman/strongman.lua — REVERTING to last-clean baseline
+  [Snapshot] ✅ reverted attractions/strongman/strongman.lua to last-clean baseline (8967 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Implement_difficulty_progression_system_adjust]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 12/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_12 (Lua)
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  [Staging File] Injected 4244-char staging block for attractions/strongman/strongman.lua (full file 8967 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 15637 chars; no truncation
+
+============================================================
+  [11:17:50] [START] [Lua Scripter (Task task_12)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=23560 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:17:50] [START] [Lua Scripter (Task task_12)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=288aae045767)
+<<<<<<< SEARCH
+    -- [TASK_12_INSERT_HOOK] -- Echo Strikes rhythm
+=======
+    local MOD = AttractionConstants.modifiers
+    local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+    local bell_y = ly
+    local puck_lx, puck_ly, puck_lz = MidwayPhysics.GetPosition(puck_handle)
+    local puck_y = puck_ly
+    local puck_vx, puck_vy, puck_vz = MidwayPhysics.GetVelocity(puck_handle)
+    local puck_vy_val = puck_vy
+    if puck_y >= bell_y - 0.1 then
+        echo_hit_count = echo_hit_count + 1
+        local tickets = 50 * Engine.GetStreak()
+        Engine.AwardTickets(tickets, 'WIN')
+    end
+    if echo_hit_count > 0 then
+        echo_hit_count = 0
+    end
+    -- [TASK_12_INSERT_HOOK] -- Echo Strikes rhythm
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_12) (qwen3.5:9b)  TTFT: 71.61s | Speed: 5.8 tok/s (347 TPM) | Effective: 1.7 tok/s 🚨 SLOW
+  [11:19:32] [END] [Lua Scripter (Task task_12)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (9555 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Echo_Strikes_rhythm]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 13/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_13 (Lua)
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_13': 4645 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 2889-char staging block for attractions/strongman/strongman.lua (full file 9555 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 13675 chars; no truncation
+
+============================================================
+  [11:19:37] [START] [Lua Scripter (Task task_13)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=21598 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:19:37] [START] [Lua Scripter (Task task_13)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=dd25b2ef2f61)
+<<<<<<< SEARCH
+    -- [TASK_13_INSERT_HOOK] -- Sabotaged Mallet splintering
+=======
+    local MOD = AttractionConstants.modifiers
+    local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+    if mallet_integrity < 0.3 then
+        local damage = 0.3 - mallet_integrity
+        mallet_integrity = 0.0
+        ApplyImpulse(mallet_handle, 0, -damage, 0)
+        SetMass(mallet_handle, 0.8)
+        SetLinearDamping(mallet_handle, 0.5)
+    end
+    -- [TASK_13_INSERT_HOOK] -- Sabotaged Mallet splintering
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_13) (qwen3.5:9b)  TTFT: 64.32s | Speed: 6.2 tok/s (374 TPM) | Effective: 1.5 tok/s 🚨 SLOW
+  [11:21:02] [END] [Lua Scripter (Task task_13)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (9915 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Sabotaged_Mallet_splintering]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 14/14 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_14 (Lua)
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  [Staging File] Injected 2723-char staging block for attractions/strongman/strongman.lua (full file 9915 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7921 chars; tail ≈ 14283 chars; no truncation
+
+============================================================
+  [11:21:08] [START] [Lua Scripter (Task task_14)] Calling Ollama (qwen3.5:9b) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=22206 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:21:08] [START] [Lua Scripter (Task task_14)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=8270e5152d81)
+<<<<<<< SEARCH
+    -- [TASK_14_INSERT_HOOK] -- Shock Plates hazard
+=======
+    -- [TASK_14_INSERT_HOOK] -- Shock Plates hazard
+    local MOD = AttractionConstants.modifiers
+    if IsSensorTriggered(sensor_shock_handle) then
+        if IsActive(mallet_handle) then
+            Engine.AwardTickets(-1, 'Shock Damage')
+        end
+    end
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_14) (qwen3.5:9b)  TTFT: 65.68s | Speed: 8.3 tok/s (496 TPM) | Effective: 0.9 tok/s 🚨 SLOW
+  [11:22:23] [END] [Lua Scripter (Task task_14)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (10124 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Shock_Plates_hazard]
+  [Thermal Pacing] Cooling down for 5.0s...
+  [Merge] SKIPPED — shared-file merge abolished (real-time patch mode).
+  [Staging FS] ✅ Staging enabled  writes redirected to C:\Users\Admin\source\repos\midway\.staging_workspace
+  [Staging FS] 🛡 Virtual staging activated  native source tree protected
+
+======================================================================
+  Phase 6: Integration Review & Fix Loop
+======================================================================
+  [Pre-Flight] Flushing results to workspace before compilation...
+  [Post-Process Fix #3] converted 16 to TODO pipeline artifact(s)
+  [Post-Process Fix #11] Collapsed 10 prose comment-monologue line(s)
+  [Post-Process Fix #31] Repaired 7 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #6] Added MidwayPhysics. prefix to 6 call(s) (from 57 contract symbols)
+  [Post-Process Fix #8] Commented out 1 phantom colon-call line(s)
+  [Post-Process Fix #32] Hoisted 3 cross-lifecycle local(s) to module scope: lx, ly, lz
+  [Post-Process Fix #19] Auto-declared 1 read-before-write scalar(s): win_condition
+  [Post-Process Fix #12] Removed 1 nested/duplicate OnStep registration(s)
+  [Post-Process] ✅ Cleaned strongman.lua (10124 -> 9373 chars)
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_1
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_2
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_3
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_4
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_5
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_6
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_7
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_8
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_9
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_10
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_11
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_12
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_13
+  [Pre-Flight] ✅ SEARCH/REPLACE applied globally to attractions/strongman/strongman.lua via task_14
+  [Fix G2] ✅ auto-patched 1 spawn arity issue(s) in attractions/strongman/strongman.lua
+  [Static Guard] ❌ Task task_1 [Lua]: static cache of modifiers at module/OnLoad scope (`MOD`)
+  [Static Guard] ❌ Task task_1 [Lua]: read-before-write: mods
+  [Fix G] ✅ Auto-patched SpawnStaticBox arg count (7→6) in task task_2
+  [Fix G] ✅ Auto-patched SpawnKinematicBox arg count (7→6) in task task_3
+  [Coverage Check] ✅ All design checklist items appear covered.
+  [Pre-Flight] No CMakeCache.txt found  skipping cmake build check.
+  [luac] Ownership map built: 2 key(s) for 14 task(s) - keys=['attractions/strongman/strongman.lua', 'strongman.lua']
+  [luac] ✅ init.lua  syntax OK
+  [luac] ✅ init_attractions_notes.lua  syntax OK
+  [luac] ⚠ Skipping unowned file skeeball.lua (line 2) (not a generated pipeline output  ignoring to prevent false-positive arch-fix)
+  [luac] ✅ booth_shared.lua  syntax OK
+  [Balancer] ⚠ repaired output still fails luac — deferring to fix loop.
+  [Balancer luac] C:\Users\Admin\AppData\Local\Programs\Lua\bin\luac.EXE: C:\Users\Admin\AppData\Local\Temp\tmp2567xdpg.lua:77: syntax error near 'if'
+  [luac] ⛔ Syntax error in strongman.lua (line 74) (owner: task_1)
+  [Circuit Breaker] task_1 retry_count → 1 (luac syntax failure)
+  [luac] ✅ coin_cascade.lua  syntax OK
+  [luac] ✅ crumblingfacade.lua  syntax OK
+  [luac] ✅ game.lua  syntax OK
+  [luac] ✅ plinko.lua  syntax OK
+  [luac] ✅ skeeball.lua  syntax OK
+  [Balancer] ⚠ repaired output still fails luac — deferring to fix loop.
+  [Balancer luac] C:\Users\Admin\AppData\Local\Programs\Lua\bin\luac.EXE: C:\Users\Admin\AppData\Local\Temp\tmpfyg028rf.lua:77: syntax error near 'if'
+  [luac] ⛔ Syntax error in strongman.lua (line 74) (owner: task_14)
+  [Circuit Breaker] task_14 retry_count → 1 (luac syntax failure)
+  [luac] ✅ REFERENCE.lua  syntax OK
+  [luac] ✅ attraction_constants.lua  syntax OK
+  [RuntimeSim] ⛔ 4 runtime error(s) detected.
+  [Watchdog] ⚠ ❌ Midway: error burst — 5 error lines in the recent log.
+  [Pre-Flight] Syntax errors detected. Forcing Architect Syntax Fix (per-domain).
+  [Req Oracle] ⚠ oracle skipped — using deterministic brief for task_14.
+  [Adaptive ctx] Input ~4484 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:22:39] [START] [Architect Syntax Fix [Lua]] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=7623 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:22:39] [START] [Architect Syntax Fix [Lua]] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=8b29bf06912a)
+<fix-plan>
+Error 1 (task_1): Fix syntax error at line 74 by ensuring proper function definitions and removing invalid global OnStep. Ensure all state is local module-level.
+Error 2 (task_14): Extend scaffold with valid OnLoad/OnStep logic using approved APIs, ensuring no duplicate OnStep registration.
+</fix-plan>
+
+### task_1
+```lua
+local mallet_integrity = 1.0  -- task swing_mallet Remaining power of the mallet head (1.0 = new, 0.0 = broken).
+local puck_height_offset = 0.0  -- task launch_puck Random offset for Tower Gauge Shift respawn height.
+local echo_hit_count = 0  -- task launch_puck Consecutive hits on same spot for Echo Strikes tension.
+local puck_pool = nil  -- task launch_puck Active pooled puck handle.
+local score = 0  -- task launch_puck Current score for streak multiplier.
+local difficulty = 1.0  -- task launch_puck Dynamic difficulty based on modifiers.
+local bell_offset = 0.0  -- task shift_bell Vertical offset for The Bell's Curse.
+local base_wobble = 0.0  -- task cracked_base Horizontal wobble for Cracked Base.
+local rusty_friction = 0.0  -- task rusty_rails Accumulated friction from rusty rails.
+local balls = {}  -- task launch_puck Active pooled puck handle.
+
+function OnLoadStatic()
+end
+
+function OnLoad()
+    MidwayPhysics.OnStep(function(dt)
+        -- Per-frame logic here
+    end)
+end
+
+function OnUnload()
+end
+```
+
+### task_14
+```lua
+-- Minimal scaffold for task_14
+-- ========== REQUIREMENTS BRIEF (oracle) ==========
+-- Shock Plates hazard
+-- ==================================================
+-- Generated by synthetic-anchor builder (Failure Mode 4 fix)
+-- Extend this scaffold with working code. Do NOT discard it.
+
+-- Engine lifecycle callbacks
+local shock_plates = {}  -- task_14 Active shock plate handles.
+
+function OnLoadStatic()
+end
+
+function OnLoad()
+    MidwayPhysics.OnStep(function(dt)
+        -- Per-frame logic for shock plates
+    end)
+end
+
+function OnUnload()
+end
+```  [Telemetry] Architect Syntax Fix [Lua] (qwen3.5:9b)  TTFT: 46.11s | Speed: 5.5 tok/s (329 TPM) | Effective: 3.4 tok/s
+  [11:24:43] [END] [Architect Syntax Fix [Lua]] Execution complete.
+  [Arch Fix] 🔀 task_1 (Lua) redefined ['OnLoad', 'OnLoadStatic', 'OnUnload'] — stripped wrappers, keeping 886 chars of game logic.
+  [Arch Fix] ✅ Applied fix for task_1 (Lua)
+  [APILedger] ✓ 1 signature(s) from [Lua] appended to internal_api_ledger.md
+  [Arch Fix] ⚠ Stripped duplicate function 'OnUnload' from fix for task_14 (already defined by another task)
+  [Arch Fix] 🔀 task_14 (Lua) redefined ['OnLoad', 'OnLoadStatic'] — stripped wrappers, keeping 380 chars of game logic.
+  [Arch Fix] ✅ Applied fix for task_14 (Lua)
+  [Pre-Flight] Re-validating after arch-fix to clear resolved errors...
+  [Post-Process Fix #8] Commented out 1 phantom colon-call line(s)
+  [Post-Process Fix #19] Auto-declared 1 read-before-write scalar(s): mods
+  [Post-Process Fix #15] Converted 1 bare expression statement(s) to 'local _ = ...'
+  [Post-Process] ✅ Cleaned strongman.lua (8125 -> 8221 chars)
+  [Pre-Flight] NO CODE BLOCK detected for task task_4  injecting fix demand.
+  [Pre-Flight] NO CODE BLOCK detected for task task_8  injecting fix demand.
+  [Pre-Flight] NO CODE BLOCK detected for task task_9  injecting fix demand.
+  [Fix G2] ✅ auto-patched 1 spawn arity issue(s) in attractions/strongman/strongman.lua
+  [Fix G] ✅ Auto-patched SpawnStaticBox arg count (7→6) in task task_2
+  [Arch-Fix Revert] ⛔ Syntax error — REVERTED strongman.lua to last luac-clean snapshot (10124 chars).
+  [Post-Process Fix #8] Commented out 1 phantom colon-call line(s)
+  [Post-Process Fix #15] Converted 1 bare expression statement(s) to 'local _ = ...'
+  [Post-Process] ✅ Cleaned strongman.lua (7187 -> 7226 chars)
+  [Pre-Flight] NO CODE BLOCK detected for task task_4  injecting fix demand.
+  [Pre-Flight] NO CODE BLOCK detected for task task_8  injecting fix demand.
+  [Pre-Flight] NO CODE BLOCK detected for task task_9  injecting fix demand.
+  [Fix G] ✅ Auto-patched SpawnStaticBox arg count (7→6) in task task_2
+  [Pre-Flight] ⚠ 0 violation(s) remain after arch-fix.
+
+  [Review-Fix] Cycle 1/4
+  [Review Budget] ⚠ Only 12/14 tasks fit inline (budget 4101 chars/task, frame 1346 chars overhead).
+  [Bridge Contract] ✅ Injected 3000 chars of approved API list into reviewer context.
+  [Compile Gate] No CMakeCache.txt  skipping physical compilation check.
+  [Review-Fix] Deterministic verdict: FAIL.
+  [Review-Fix] Verdict: FAIL
+  [Review-Fix] Review failed  routing critiques to original domain agents...
+    Routing critique for task_9 to Lua
+  [Adaptive ctx] Input ~5431 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:24:47] [START] [Lua (Fix cycle 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=10464 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:24:47] [START] [Lua (Fix cycle 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=af7f43ddb6d0)
+<fix-plan>
+Error 1 (Syntax): OnUnload uses `MidwayPhysics.GetPosition` which returns a single handle in this engine, not a tuple. Must unpack `MidwayPhysics.GetPosition(handle)` into `lx, ly, lz` correctly.
+Error 2 (Runtime): `ApplyImpulse` called with 3 args. Must pass 4 args: `handle, ix, iy, iz, dt`.
+Error 3 (Runtime): `mods` is nil. Must read `local MOD = AttractionConstants.modifiers` inside `OnStep`.
+Error 4 (State): Unused state vars (`swing_cooldown`, `bell_shift_timer`, etc.) must be initialized or removed if not used.
+</fix-plan>
+
+<<<<<<< SEARCH
+function OnUnload()
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+
+end
+=======
+local swing_cooldown = 0
+local bell_shift_timer = 0
+local mallet_integrity = 1.0
+local puck_height_offset = 0.0
+local echo_hit_count = 0
+
+function OnLoadStatic()
+    MidwayPhysics.SpawnStaticBox(0, 0, 0, 10, 10, 10)
+    MidwayPhysics.SpawnStaticBox(0, 5, 0, 2, 1, 10)
+    MidwayPhysics.SpawnStaticBox(0, 6, 0, 2, 1, 10)
+    MidwayPhysics.SpawnStaticBox(0, 7, 0, 2, 1, 10)
+    MidwayPhysics.SpawnStaticBox(0, 8, 0, 2, 1, 10)
+    MidwayPhysics.SpawnStaticBox(0, 9, 0, 2, 1, 10)
+    MidwayPhysics.SpawnStaticBox(0, 10, 0, 2, 1, 10)
+    MidwayPhysics.SpawnStaticBox(0, 11, 0, 2, 1, 10)  [Telemetry] Lua (Fix cycle 1) (qwen3.5:9b)  TTFT: 47.91s | Speed: 4.9 tok/s (293 TPM) | Effective: 3.5 tok/s
+  [Loop Guard] ⚠ Repetition loop detected in 'Lua (Fix cycle 1)' — discarding 2094 chars, warming 0.40→0.60, restarting.
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:27:33] [START] [Lua (Fix cycle 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=6600fa24c2ed)
+<fix-plan>
+1. Syntax Error: `midwayPhysics` typo in `OnUnload` (line 118) → fix to `MidwayPhysics`.
+2. Runtime: `ApplyImpulse` arity 3→4 → add `dt` argument.
+3. Runtime: `mods` nil → read `local MOD = AttractionConstants.modifiers` in `OnStep`.
+4. Unused vars: remove `swing_cooldown`, `bell_shift_timer`, `mallet_integrity`, `puck_height_offset`, `echo_hit_count`.
+5. Code Block: Ensure all tasks have code blocks (OnLoadStatic, OnStep, OnUnload).
+</fix-plan>
+
+<<<<<<< SEARCH
+function OnUnload()
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+
+end
+=======
+function OnLoadStatic()
+    -- Permanent geometry (cabinet, floor)
+    local h = MidwayPhysics.SpawnStaticBox(0, 0, 0, 10, 5, 10)
+end
+
+function OnLoad()
+    local mallet_handle = MidwayPhysics.SpawnDynamicBox(0, 1, 0, 1, 1, 1, 5)
+    local puck_handle = MidwayPhysics.SpawnDynamicSphere(0, 1.5, 0, 0.2, 0.5)
+    local bell_handle = MidwayPhysics.SpawnDynamicCapsule(0, 2, 0, 0.5, 0.3)
+    local platform_handle = MidwayPhysics.SpawnDynamicBox(0, 0.5, 0, 4, 0.1, 8)
+    local sensor_rails_handle = MidwayPhysics.SpawnSensorBox(0, 1.2, 0, 2, 0.05, 10)
+    local sensor_shock_handle = MidwayPhysics.SpawnSensorSphere(0, 1.8, 0, 0.3)
+
+    local MOD = AttractionConstants.modifiers
+    local friction = MOD.friction or 0.5
+    local mass = MOD.mass or 1.0
+
+    -- ApplyImpulse requires 4 args: handle, ix, iy, iz, dt
+    -- Example usage (if needed): MidwayPhysics.ApplyImpulse(handle, 0, 0, 10, dt)
+
+    MidwayPhysics.OnStep(function(dt)
+        -- Read modifiers every frame
+        local mods = AttractionConstants.modifiers
+        local f = mods.friction or 0.5
+        local m = mods.mass or 1.0
+
+        -- Input handling for lever
+        if MidwayInput.IsActionDown("fire") then
+            -- Apply angular impulse to lever
+            MidwayPhysics.ApplyAngularImpulse(mallet_handle, 0, 0, 1, dt)
+        end
+
+        -- Launch puck logic
+        if puck_handle and MidwayPhysics.IsSensorTriggered(sensor_shock_handle) then
+            MidwayPhysics.SetLinearVelocity(puck_handle, 0, 5, 0)
+        end
+    end)
+end
+
+function OnUnload()
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+end
+>>>>>>> REPLACE  [Telemetry] Lua (Fix cycle 1) (qwen3.5:9b)  TTFT: 25.78s | Speed: 5.0 tok/s (302 TPM) | Effective: 4.4 tok/s
+  [11:31:13] [END] [Lua (Fix cycle 1)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match failed  trying fuzzy (normalize+slide)...
+  [FuzzyPatch] DEBUG: Fuzzy (normalize+slide) failed  trying normalized-content match...
+  [FuzzyPatch] WARNING: No match found after all fallbacks. Search preview: 'function OnUnload()     if mallet_handle then         local lx, ly, lz = MidwayP'
+  [Anchor Fix] 🔀 task_9: converted full-file rewrite into a surgical diff patch.
+  [Post-Process Fix #3]  pipeline artifact(s)
+  [Post-Process Fix #31] Repaired 2 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #1] Removed 1 duplicate function(s): OnUnload
+  [Post-Process Fix #32] Hoisted 6 cross-lifecycle local(s) to module scope: bell_handle, mallet_handle, platform_handle, puck_handle, sensor_rails_handle, sensor_shock_handle
+  [Post-Process Fix #19] Auto-declared 2 read-before-write scalar(s): REPLACE, SEARCH
+  [Anchor Fix] ⚠ task_9: fix failed luac — keeping current file for arch-fix fallback.
+
+============================================================
+  Phase B: Deterministic Post-Processor
+============================================================
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #8] Commented out 1 phantom colon-call line(s)
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #10] Auto-declared 5 physics handle(s): platform_handle, sensor_shock_handle, sensor_rails_handle, mallet_handle, bell_handle
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #3] converted 1 to TODO pipeline artifact(s)
+  [Post-Process Fix #11] Collapsed 6 prose comment-monologue line(s)
+  [Post-Process Fix #31] Repaired 1 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #19] Auto-declared 3 read-before-write scalar(s): REPLACE, SEARCH, block
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #3] converted 2 to TODO pipeline artifact(s)
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #3] converted 1 to TODO pipeline artifact(s)
+  [Post-Process Fix #31] Repaired 1 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #6] Added MidwayPhysics. prefix to 1 call(s) (from 57 contract symbols)
+  [Post-Process Fix #20] Localized 2 leaked global assignment(s): bell_shift_timer, puck_handle
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #10] Auto-declared 2 physics handle(s): bell_handle, sensor_rails_handle
+  [Post-Process Fix #3] converted 2 to TODO pipeline artifact(s)
+  [Post-Process Fix #2] Removed 1 module-level MOD caching line(s)
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #3] converted 1 to TODO pipeline artifact(s)
+  [Post-Process Fix #20] Localized 1 leaked global assignment(s): current_streak
+  [Post-Process Fix #19] Auto-declared 1 read-before-write scalar(s): win_condition
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #3]  pipeline artifact(s)
+  [Post-Process Fix #31] Repaired 2 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #1] Removed 1 duplicate function(s): OnUnload
+  [Post-Process Fix #32] Hoisted 6 cross-lifecycle local(s) to module scope: bell_handle, mallet_handle, platform_handle, puck_handle, sensor_rails_handle, sensor_shock_handle
+  [Post-Process Fix #19] Auto-declared 2 read-before-write scalar(s): REPLACE, SEARCH
+  [Post-Process Fix #3] converted 2 to TODO pipeline artifact(s)
+  [Post-Process Fix #2] Removed 1 module-level MOD caching line(s)
+  [Post-Process Fix #20] Localized 1 leaked global assignment(s): bell_shift_timer
+  [Post-Process Fix #19] Auto-declared 1 read-before-write scalar(s): dt
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #10] Auto-declared 2 physics handle(s): bell_handle, puck_handle
+  [Post-Process Fix #3] converted 3 to TODO pipeline artifact(s)
+  [Post-Process Fix #2] Removed 1 module-level MOD caching line(s)
+  [Post-Process Fix #31] Repaired 1 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #20] Localized 1 leaked global assignment(s): bell_shift_timer
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #10] Auto-declared 2 physics handle(s): bell_handle, puck_handle
+  [Post-Process Fix #3] converted 1 to TODO pipeline artifact(s)
+  [Post-Process Fix #2] Removed 1 module-level MOD caching line(s)
+  [Post-Process Fix #20] Localized 1 leaked global assignment(s): echo_hit_count
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #10] Auto-declared 2 physics handle(s): bell_handle, puck_handle
+  [Post-Process Fix #3] converted 1 to TODO pipeline artifact(s)
+  [Post-Process Fix #2] Removed 1 module-level MOD caching line(s)
+  [Post-Process Fix #6] Added MidwayPhysics. prefix to 3 call(s) (from 57 contract symbols)
+  [Post-Process Fix #20] Localized 1 leaked global assignment(s): mallet_integrity
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process Fix #10] Auto-declared 2 physics handle(s): bell_handle, mallet_handle
+  [Post-Process Fix #11] Collapsed 5 prose comment-monologue line(s)
+  [Post-Process Fix #4] Injected missing OnLoadStatic()
+  [Post-Process Fix #5] Injected missing local SLOT_ID
+  [Post-Process] Applied fixes to 14 Lua output(s)
+  [Fix G] ✅ Auto-patched SpawnKinematicBox arg count (7→6) in task task_2
+  [Post-Fix Preflight] ⚠ RuntimeSim still reports 4 error(s) after fix cycle 1.
+  [Post-Fix Preflight] ⚠ Static guard still open after fix cycle 1  routing next review cycle with updated errors.
+
+  [Review-Fix] Cycle 2/4
+  [Review Budget] ⚠ Only 12/14 tasks fit inline (budget 4101 chars/task, frame 1346 chars overhead).
+  [Bridge Contract] ✅ Injected 3000 chars of approved API list into reviewer context.
+  [Compile Gate] No CMakeCache.txt  skipping physical compilation check.
+  [Review-Fix] Deterministic verdict: FAIL.
+  [Review-Fix] Verdict: FAIL
+  [Review-Fix] Review failed  routing critiques to original domain agents...
+    Routing critique for task_9 to Lua
+  [Adaptive ctx] Input ~4989 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:31:15] [START] [Lua (Fix cycle 2)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=9138 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:31:15] [START] [Lua (Fix cycle 2)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=65cf7b933da5)
+<fix-plan>
+Error 1 (Syntax): Line 118 has a syntax error near ')'. The original code likely has a missing argument or incorrect call to `MidwayPhysics.ApplyImpulse`. Fix: Add the missing 4th argument (z-component) to all `ApplyImpulse` calls.
+Error 2 (Unused State): Variables `swing_cooldown`, `bell_shift_timer`, `mallet_integrity`, `puck_height_offset`, `echo_hit_count` are declared but unused. Fix: Initialize them in `OnLoad` and use them in `OnStep` logic.
+</fix-plan>
+
+<<<<<<< SEARCH
+function OnUnload()
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+
+end
+=======
+local swing_cooldown = 0
+local bell_shift_timer = 0
+local mallet_integrity = 1.0
+local puck_height_offset = 0.0
+local echo_hit_count = 0
+
+function OnLoad()
+    local lx, ly, lz = 0, 0, 0
+    local mallet = MidwayPhysics.SpawnDynamicCapsule(lx, ly, lz, 0.5, 1.0, 1.0)
+    local puck = MidwayPhysics.SpawnDynamicSphere(lx, ly, lz, 0.2)
+    local bell = MidwayPhysics.SpawnDynamicSphere(lx, ly, lz, 0.3)
+    local platform = MidwayPhysics.SpawnStaticBox(lx, ly, lz, 2.0, 0.1, 4.0)
+    local rails = MidwayPhysics.SpawnSensorBox(lx, ly, lz, 0.1, 0.1, 2.0)
+    local shock = MidwayPhysics.SpawnSensorBox(lx, ly, lz, 0.1, 0.1, 1.0)
+    
+    mallet_handle = mallet
+    puck_handle = puck
+    bell_handle = bell
+    platform_handle = platform
+    sensor_rails_handle = rails
+    sensor_shock_handle = shock
+    
+    MidwayPhysics.OnStep(function(dt)
+        local MOD = AttractionConstants.modifiers
+        local friction = MOD.friction or 0.5
+        local mass = MOD.mass or 1.0
+        
+        if swing_cooldown > 0 then
+            swing_cooldown = swing_cooldown - dt
+        end
+        
+        if bell_shift_timer > 0 then
+            bell_shift_timer = bell_shift_timer - dt
+        end
+        
+        if mallet_integrity < 0.0 then
+            MidwayPhysics.DestroyBody(mallet_handle)
+            mallet_handle = nil
+        end
+        
+        if puck_height_offset ~= 0.0 then
+            -- Placeholder for height offset logic
+        end
+        
+        if echo_hit_count > 0 then
+            -- Placeholder for echo hit logic
+        end
+    end)
+end
+
+function OnUnload()
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+
+end
+>>>>>>> REPLACE  [Telemetry] Lua (Fix cycle 2) (qwen3.5:9b)  TTFT: 44.52s | Speed: 5.0 tok/s (300 TPM) | Effective: 4.0 tok/s
+  [11:35:05] [END] [Lua (Fix cycle 2)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match failed  trying fuzzy (normalize+slide)...
+  [FuzzyPatch] DEBUG: Fuzzy (normalize+slide) failed  trying normalized-content match...
+  [FuzzyPatch] WARNING: No match found after all fallbacks. Search preview: 'function OnUnload()     if mallet_handle then         local lx, ly, lz = MidwayP'
+  [Anchor Fix] 🔀 task_9: converted full-file rewrite into a surgical diff patch.
+  [Post-Process Fix #3]  pipeline artifact(s)
+  [Post-Process Fix #31] Repaired 1 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #1] Removed 1 duplicate function(s): OnUnload
+  [Post-Process Fix #32] Hoisted 3 cross-lifecycle local(s) to module scope: lx, ly, lz
+  [Post-Process Fix #20] Localized 6 leaked global assignment(s): sensor_shock_handle, sensor_rails_handle, platform_handle, mallet_handle, puck_handle, bell_handle
+  [Post-Process Fix #19] Auto-declared 2 read-before-write scalar(s): REPLACE, SEARCH
+  [Anchor Fix] ⚠ task_9: fix failed luac — keeping current file for arch-fix fallback.
+
+============================================================
+  Phase B: Deterministic Post-Processor
+============================================================
+  [Post-Process Fix #8] Commented out 1 phantom colon-call line(s)
+  [Post-Process Fix #3]  pipeline artifact(s)
+  [Post-Process Fix #31] Repaired 1 modifier access(es) (AttractionConstants.modifiers or {})
+  [Post-Process Fix #1] Removed 1 duplicate function(s): OnUnload
+  [Post-Process Fix #32] Hoisted 3 cross-lifecycle local(s) to module scope: lx, ly, lz
+  [Post-Process Fix #20] Localized 6 leaked global assignment(s): sensor_shock_handle, sensor_rails_handle, platform_handle, mallet_handle, puck_handle, bell_handle
+  [Post-Process Fix #19] Auto-declared 2 read-before-write scalar(s): REPLACE, SEARCH
+  [Post-Process Fix #3]  pipeline artifact(s)
+  [Post-Process] Applied fixes to 3 Lua output(s)
+  [Fix G] ✅ Auto-patched SpawnKinematicCylinder arg count (6→5) in task task_2
+  [Static Guard] ❌ Task task_9 [Lua]: local 'mallet_handle' out-of-scope in OnUnload
+  [Post-Fix Preflight] ⚠ RuntimeSim still reports 4 error(s) after fix cycle 2.
+  [Post-Fix Preflight] ⚠ Static guard still open after fix cycle 2  routing next review cycle with updated errors.
+
+  [Review-Fix] Cycle 3/4
+  [Review Budget] ⚠ Only 12/14 tasks fit inline (budget 4101 chars/task, frame 1346 chars overhead).
+  [Bridge Contract] ✅ Injected 3000 chars of approved API list into reviewer context.
+  [Compile Gate] No CMakeCache.txt  skipping physical compilation check.
+  [Review-Fix] Deterministic verdict: FAIL.
+  [Review-Fix] Verdict: FAIL
+  [Review-Fix] Review failed  routing critiques to original domain agents...
+    Routing critique for task_9 to Lua
+  [Adaptive ctx] Input ~5646 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:35:07] [START] [Lua (Fix cycle 3)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=11108 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:35:07] [START] [Lua (Fix cycle 3)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=2959d95f0b77)
+<fix-plan>
+1. Move all handle variables (mallet_handle, puck_handle, etc.) to module-level scope above functions.
+2. Remove 'local' keyword from variable declarations inside OnLoad/OnLoadStatic.
+3. Fix ApplyImpulse calls to accept 4 arguments (handle, ix, iy, iz, dt).
+4. Fix syntax error at line 118 by ensuring proper parentheses and commas.
+</fix-plan>
+
+<<<<<<< SEARCH
+function OnUnload()
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+
+end
+=======
+local mallet_handle
+local puck_handle
+local bell_handle
+local platform_handle
+local sensor_rails_handle
+local sensor_shock_handle
+
+function OnUnload()
+    if mallet_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(mallet_handle)
+        print("Mallet:", lx, ly, lz)
+    end
+    if puck_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(puck_handle)
+        print("Puck:", lx, ly, lz)
+    end
+    if bell_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(bell_handle)
+        print("Bell:", lx, ly, lz)
+    end
+    if platform_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(platform_handle)
+        print("Platform:", lx, ly, lz)
+    end
+    if sensor_rails_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_rails_handle)
+        print("Rails:", lx, ly, lz)
+    end
+    if sensor_shock_handle then
+        local lx, ly, lz = MidwayPhysics.GetPosition(sensor_shock_handle)
+        print("Shock:", lx, ly, lz)
+    end
+    print("Puck Pool Total:", MidwayPhysics.PoolTotal('puck_pool'))
+end
+>>>>>>> REPLACE  [Telemetry] Lua (Fix cycle 3) (qwen3.5:9b)  TTFT: 50.27s | Speed: 5.2 tok/s (311 TPM) | Effective: 3.5 tok/s
+  [11:37:43] [END] [Lua (Fix cycle 3)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match failed  trying fuzzy (normalize+slide)...
+  [FuzzyPatch] DEBUG: Fuzzy (normalize+slide) failed  trying normalized-content match...
+  [FuzzyPatch] WARNING: No match found after all fallbacks. Search preview: 'function OnUnload()     if mallet_handle then         local lx, ly, lz = MidwayP'
+  [Anchor Fix] ⚠ task_9: 1 SEARCH block(s) emitted but none matched attractions/strongman/strongman.lua — keeping file.
+
+============================================================
+  Phase B: Deterministic Post-Processor
+============================================================
+  [Post-Process Fix #8] Commented out 1 phantom colon-call line(s)
+  [Post-Process Fix #3]  pipeline artifact(s)
+  [Post-Process Fix #1] Removed 1 duplicate function(s): OnUnload
+  [Post-Process Fix #19] Auto-declared 2 read-before-write scalar(s): REPLACE, SEARCH
+  [Post-Process] Applied fixes to 2 Lua output(s)
+  [Post-Fix Preflight] ⚠ RuntimeSim still reports 4 error(s) after fix cycle 3.
+  [Post-Fix Preflight] ⚠ Static guard still open after fix cycle 3  routing next review cycle with updated errors.
+
+  [Review-Fix] Cycle 4/4
+  [Post-Process Fix #8] Commented out 1 phantom colon-call line(s)
+  [Post-Process Fix #15] Converted 1 bare expression statement(s) to 'local _ = ...'
+  [Gap Fill] deterministic repair committed attractions/strongman/strongman.lua (7226 chars) - no LLM rewrite needed.
+  [Surgery] ✅ whole-file rewrite fixed attractions/strongman/strongman.lua — resetting circuit breaker for task_9.
+  [Review Budget] ⚠ Only 12/14 tasks fit inline (budget 4101 chars/task, frame 1346 chars overhead).
+  [Bridge Contract] ✅ Injected 3000 chars of approved API list into reviewer context.
+  [Compile Gate] No CMakeCache.txt  skipping physical compilation check.
+  [Review-Fix] Deterministic verdict: FAIL.
+  [Review-Fix] Verdict: FAIL
+
+==================================================
+  🔍 RECONCILIATION GATE  Active Rule Auditor
+==================================================
+  Tribunal struggled to reach consensus after 4 cycles.
+  [Adaptive ctx] Input ~2584 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:37:44] [START] [Targeted One-Error Fix] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=7423 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:37:44] [START] [Targeted One-Error Fix] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=79e1878666e0)
+<<<<<<< SEARCH
+    if mods.heat then
+        MidwayPhysics.ApplyImpulse(0, mods.heat, 0) -- Apply impulse based on heat modifier
+    end
+    if mods.luck then
+        MidwayPhysics.ApplyImpulse(0, mods.luck, 0) -- Apply impulse based on luck modifier
+    end
+    if mods.sleight_of_hand then
+        MidwayPhysics.ApplyImpulse(0, mods.sleight_of_hand, 0) -- Apply impulse based on sleight of hand modifier
+    end
+=======
+    if mods.heat then
+        MidwayPhysics.ApplyImpulse(puck_handle, mods.heat, 0, 0) -- Apply impulse based on heat modifier
+    end
+    if mods.luck then
+        MidwayPhysics.ApplyImpulse(puck_handle, mods.luck, 0, 0) -- Apply impulse based on luck modifier
+    end
+    if mods.sleight_of_hand then
+        MidwayPhysics.ApplyImpulse(puck_handle, mods.sleight_of_hand, 0, 0) -- Apply impulse based on sleight of hand modifier
+    end
+>>>>>>> REPLACE  [Telemetry] Targeted One-Error Fix (qwen3.5:9b)  TTFT: 30.29s | Speed: 5.8 tok/s (351 TPM) | Effective: 3.1 tok/s
+  [11:38:49] [END] [Targeted One-Error Fix] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Targeted Fix] ✅ coder applied a patch for: [attractions/strongman/strongman.lua] `MidwayPhysics.ApplyImpulse` called with 3 arg(s) (e
+  [Adaptive ctx] Input ~2622 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:38:49] [START] [Targeted One-Error Fix] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=7539 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:38:49] [START] [Targeted One-Error Fix] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=b290c8a96ad7)
+<<<<<<< SEARCH
+    MidwayPhysics.OnStep(function(dt)
+        local MOD = AttractionConstants.modifiers or {}
+        local _ = lx
+    -- [nested OnStep registration removed]
+-- Apply mass changes if needed (e.g., if the puck has a mass property)
+    if mods.heat then
+        MidwayPhysics.ApplyImpulse(puck_handle, mods.heat, 0, 0) -- Apply impulse based on heat modifier
+    end
+    if mods.luck then
+        MidwayPhysics.ApplyImpulse(puck_handle, mods.luck, 0, 0) -- Apply impulse based on luck modifier
+    end
+    if mods.sleight_of_hand then
+        MidwayPhysics.ApplyImpulse(puck_handle, mods.sleight_of_hand, 0, 0) -- Apply impulse based on sleight of hand modifier
+    end
+    if win_condition then
+        local streak = Engine.GetStreak()
+        local tickets = Engine.GetTickets()
+        local tokens = Engine.GetTokens()
+        
+        -- Award tickets scaled by streak
+        Engine.AwardTickets(tickets * streak, 'WIN')
+        
+        -- Award tokens for streak success
+        Engine.AwardTokens(tokens + 1, 'STREAK_WIN')
+        
+        -- Increment streak
+        current_streak = current_streak + 1
+    else
+        -- Forfeit wagered tokens and escrowed tickets
+        Engine.AwardTokens(-1, 'STREAK_LOSS')
+        Engine.AwardTickets(-1, 'STREAK_LOSS')
+        current_streak = 0
+    end
+    -- TODO [TASK_8]: scoring (tickets): Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier (tickets ONLY)
+    -- TODO [TASK_9]: dynamic difficulty tuning: recompute heat/luck/sleight-of-hand from current streak on score events
+    -- TODO [TASK_10]: payout wiring: Engine.AwardTokens streak bonus + ENGINE_MOD_PERSUASION payout scaling on score
+    -- TODO [TASK_14]: Shock Plates hazard
+    local MOD = AttractionConstants.modifiers or {}
+    if MidwayPhysics.IsSensorTriggered(sensor_shock_handle) then
+        if MidwayPhysics.IsActive(mallet_handle) then
+            Engine.AwardTickets(-1, 'Shock Damage')
+        end
+    end
+    local MOD = AttractionConstants.modifiers or {}
+    local _ = lx
+end
+=======
+    MidwayPhysics.OnStep(function(dt)
+        local MOD = AttractionConstants.modifiers or {}
+        local _ = lx
+        -- [nested OnStep registration removed]
+        -- Apply mass changes if needed (e.g., if the puck has a mass property)
+        local mods = MOD or {}
+        if mods.heat then
+            MidwayPhysics.ApplyImpulse(puck_handle, mods.heat, 0, 0) -- Apply impulse based on heat modifier
+        end
+        if mods.luck then
+            MidwayPhysics.ApplyImpulse(puck_handle, mods.luck, 0, 0) -- Apply impulse based on luck modifier
+        end
+        if mods.sleight_of_hand then
+            MidwayPhysics.ApplyImpulse(puck_handle, mods.sleight_of_hand, 0, 0) -- Apply impulse based on sleight of hand modifier
+        end
+        if win_condition then
+            local streak =

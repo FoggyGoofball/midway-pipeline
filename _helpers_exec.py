@@ -1406,10 +1406,17 @@ def execute_task(task, user_prompt: str, director_output: str,
             # Use block-aware collapse instead of flat head/tail truncation
             # to preserve structural blocks and generate VRAM_STUB pointers
             # for offloaded content (future paging LoRA training target).
+            _core_mem = {"task_spec": task.spec}
+            try:
+                from pipeline import _CTX as _cm_ctx
+                if _cm_ctx is not None and getattr(_cm_ctx, "core_memory_table", None):
+                    _core_mem = {**_cm_ctx.core_memory_table, "task_spec": task.spec}
+            except Exception:
+                pass
             _before_spec = TokenBudget._block_aware_collapse(
                 _before_spec,
                 _allowed,
-                core_memory_table={"task_spec": task.spec}  # never evict task spec
+                core_memory_table=_core_mem  # never evict task spec (+ ctx core memory)
             ) + (
                 f"\n[... context truncated at {_allowed} chars; "
                 f"overflow preserved in OffloadStore as '{_overflow_id}' ...]\n"

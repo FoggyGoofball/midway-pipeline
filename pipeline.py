@@ -138,27 +138,46 @@ _CTX = PipelineContext(
     session_id="",
     tasks=[],
     global_signals=[],
+    # Phase I (MemGPT) core memory: immutable facts that must survive context
+    # pruning.  token_budget._block_aware_collapse renders this as the
+    # "Core Memory Table" and exempts it from eviction; _helpers_exec merges it
+    # into every task's collapse call so it is never lost.
+    core_memory_table={
+        "project": "Midway to Nowhere",
+        "language": "lua",
+        "api_contract": (
+            "MidwayPhysics.* = physics/spawn/pool/query; "
+            "Engine.* = economy (AwardTickets/AwardTokens/GetStreak); "
+            "MidwayInput.* = input (IsActionDown/IsKeyDown); "
+            "SpawnSharedBooth is a bare global (no namespace)"
+        ),
+    },
 )
 
 # -- Configuration ----------------------------------------------------------
 OLLAMA_HOST = "http://192.168.0.16:11434"
 
-# Execution coder. qwen3.5:9b is the best SEARCH/REPLACE instruction-follower
-# at this size (8/11 first-try vs deepseek's 0/9). deepseek-coder-v2:16b reverts via MIDWAY_CODER_MODEL.
-CODER_MODEL = os.getenv("MIDWAY_CODER_MODEL", "qwen3.5:9b")
-# Reviewer: qwen3.5:9b by default; MIDWAY_REVIEWER_MODEL=deepseek-coder-v2:16b reverts.
-REVIEWER_MODEL = os.getenv("MIDWAY_REVIEWER_MODEL", "qwen3.5:9b")
+# Execution coder: the LoRA-tuned coder (SEARCH/REPLACE + Midway contract).
+CODER_MODEL = os.getenv("MIDWAY_CODER_MODEL", "midway-coder-lora")
+# Reviewer/escalation/reasoner: the SECOND LoRA adapter (verdict + signals).
+# qwen3.5:9b is NOT LoRA-trainable — kept only as an emergency fallback via
+# MIDWAY_REVIEWER_MODEL.
+REVIEWER_MODEL = os.getenv("MIDWAY_REVIEWER_MODEL", "midway-reasoner-lora")
+# Mechanics Scaffold: defaults to the coder model so the whole build stays on
+# ONE resident model (no scaffold<->coder eviction swap). Override with
+# MIDWAY_SCAFFOLD_MODEL=qwen3.5:9b if the 7B scaffold ever regresses.
+SCAFFOLD_MODEL = os.getenv("MIDWAY_SCAFFOLD_MODEL", CODER_MODEL)
 ANALYST_MODEL = REVIEWER_MODEL
 FALLBACK_REVIEWER_MODEL = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL = "phi3.5:latest"  # 3.8B mini  compresses large context before phi3:14b review
-LIBRARIAN_MODEL = "llama3.1:8b-instruct-q4_K_M"
+LIBRARIAN_MODEL = "midway-reasoner-lora"
 SYNTAX_GATE_MODEL = "qwen2.5-coder:1.5b"
 INTENT_CLASSIFIER_MODEL = "llama3.2:1b"
 CHAT_MODEL = CODER_MODEL
 EXECUTION_MODEL = CODER_MODEL
 REASONING_MODEL = REVIEWER_MODEL
 MODEL = EXECUTION_MODEL
-DIRECTOR_MODEL = "llama3.1:8b-instruct-q4_K_M"
+DIRECTOR_MODEL = "midway-reasoner-lora"
 
 # Point to the game engine project root (midway/), not midway-pipeline/ itself
 PROJECT_ROOT = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway")))
@@ -239,6 +258,57 @@ _MAX_OUTPUT_CHARS = 4000
 
 
 # ==========================================================================
+#  !help  Static capability reference (no Ollama required)
+# ==========================================================================
+
+def is_help_command(prompt: str) -> bool:
+    """Detect the ``!help`` command (and common aliases) case-insensitively."""
+    return bool(prompt) and prompt.strip().lower().split()[0] in (
+        "!help", "help!", "/help", "?help", "help-me",
+    )
+
+
+def get_help_text() -> str:
+    """Return the human-readable capability reference for the pipeline."""
+    return (
+        "**Midway Pipeline - Capability Reference**\n\n"
+        "I orchestrate a mesh of local models (Ollama) that turn your game-design "
+        "docs into working engine code (Sol/Lua/etc.), review and merge it, and "
+        "gate it on syntax. No cloud models involved.\n\n"
+        "**Commands**\n"
+        "- `!help` - this reference.\n\n"
+        "**1. Build / implement a feature (default)**\n"
+        "Describe what to build and it goes through the full pipeline: Architect "
+        "design -> mesh task decomposition -> expert coders -> reviewer -> conflict "
+        "resolution -> code merge -> deterministic post-processing -> syntax gate.\n"
+        "  _e.g._ `build the strongman striker`, `add sol2 bindings for the barker`\n\n"
+        "**2. Plan a feature (multi-turn)**\n"
+        "Say `plan ...` / `design ...` / `how should we approach ...` and I will walk "
+        "you through an iterative plan across turns, then publish it to "
+        "`docs/plans/` (which every build step consults) once you approve.\n"
+        "  _e.g._ `plan the billboarding mechanic for the barker`\n\n"
+        "**3. Ask about the codebase (read-only analyst)**\n"
+        "Ask `explain ...`, `summarize ...`, `where is ...`, `how does ... work` and I "
+        "search the GDD, project state, and file structure without writing any "
+        "files.\n"
+        "  _e.g._ `explain how scoring works`, `where is the mallet spawner`\n\n"
+        "**4. Chat**\n"
+        "Casual questions (`what can you do`, `how are you`) get a direct "
+        "project-aware answer, bypassing the build pipeline.\n\n"
+        "**5. Resume / recover**\n"
+        "- Resume a prior run by passing its checkpoint id (e.g. "
+        "`--checkpoint <id>` on the CLI).\n"
+        "- If a run is BLOCKED, reply with a manual code fix to continue, or "
+        "`abort` to stop.\n\n"
+        "**Inter-persona signals**\n"
+        "Expert agents communicate via `[TAG:...]` signals (QUERY, DELEGATE, "
+        "VETO, OBJECT, RECOURSE, CONSULT, APPROVE, RESULT, REVISE, FLUSH, "
+        "APPEAL, MERGE, REJECT, REQUEST_API, AST_PATCH, AMBIGUITY). See "
+        "`docs/SIGNAL_TAGS_REFERENCE.md`.\n"
+    )
+
+
+# ==========================================================================
 #  run_mesh_pipeline  Main orchestration
 #  Delegates to mesh_loops.run_fetches / run_tasks and
 #  mesh_finalize.run_code_merge.
@@ -247,6 +317,15 @@ _MAX_OUTPUT_CHARS = 4000
 def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
                       session_mgr=None) -> str:
     """Run the full mesh consensus pipeline. Synchronous  no async/await."""
+    # -- !help command: static capability reference --------------------------
+    # Handled before ANY state reset, ledger write, or Ollama health check so
+    # the reference is available with zero side effects even when the model
+    # host is offline.
+    if is_help_command(user_prompt or ""):
+        _CTX.is_chat = True
+        _CTX.final_output = get_help_text()
+        return _CTX.final_output
+
     from mesh_loops import run_fetches, run_tasks
     from mesh_finalize import run_code_merge
 

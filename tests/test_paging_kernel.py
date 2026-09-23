@@ -18,7 +18,6 @@ import pytest
 from paging_kernel import (
     MAX_PAGE_RECURSION,
     PagingBuffer,
-    PagingController,
     _extract_lines_chunk,
     _extract_search_chunk,
     _resolve_dynamic_page_limit,
@@ -29,6 +28,7 @@ from paging_kernel import (
     inject_continuation_prompt,
     inject_paged_content,
 )
+from paging_controller import PagingController
 
 
 # -- detect_page_tokens -------------------------------------------------------

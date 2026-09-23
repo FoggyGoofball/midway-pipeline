@@ -20,7 +20,12 @@ from _post_process_lua import (
     _neutralize_roblox,
     repair_lua_syntax,
     search_exactly_once_gate,
+    _auto_declare_read_before_write,
+    _dedupe_onstep_registrations,
+    _neutralize_orphaned_else,
+    _inject_onunload,
 )
+from _preflight_helpers import _strip_search_replace_metadata
 
 
 # ==============================================================================
@@ -752,3 +757,162 @@ class TestNeutralizeRoblox:
         src = '    local position = MidwayPhysics.GetPosition(puck)\n'
         out = _neutralize_roblox(src)
         assert '-- [roblox removed]' not in out
+
+
+# ==============================================================================
+#  Merge-boundary residual SEARCH/REPLACE marker sweep
+# ==============================================================================
+
+class TestStripSearchReplaceMetadata:
+    def test_strips_truncated_search_marker(self):
+        src = (
+            'function OnLoad()\n'
+            '<<<<<<< SEARCH\n'
+            '    print("old")\n'
+            'end\n'
+        )
+        out = _strip_search_replace_metadata(src)
+        assert '<<<<<<<' not in out
+        assert 'print("old")' in out
+
+    def test_strips_bare_separator_and_closer(self):
+        src = (
+            'function OnLoad()\n'
+            '=======\n'
+            '>>>>>>> REPLACE\n'
+            '    print("new")\n'
+            'end\n'
+        )
+        out = _strip_search_replace_metadata(src)
+        assert '=======' not in out
+        assert '>>>>>>>' not in out
+        assert 'print("new")' in out
+
+    def test_strips_markdown_patch_headers(self):
+        src = '### SEARCH\nfunction OnLoad()\n### REPLACE\n    print("x")\nend\n'
+        out = _strip_search_replace_metadata(src)
+        assert '### SEARCH' not in out
+        assert '### REPLACE' not in out
+        assert 'print("x")' in out
+
+    def test_applies_well_formed_block(self):
+        src = (
+            'function OnLoad()\n'
+            '<<<<<<< SEARCH\n'
+            '    print("old")\n'
+            '=======\n'
+            '    print("new")\n'
+            '>>>>>>> REPLACE\n'
+            'end\n'
+        )
+        out = _strip_search_replace_metadata(src)
+        assert 'print("new")' in out
+        assert 'print("old")' not in out
+        assert '<<<<<<<' not in out and '>>>>>>>' not in out
+
+
+# ==============================================================================
+#  Fix #19: read-before-write auto-declaration guards
+# ==============================================================================
+
+class TestAutoDeclareReadBeforeWrite:
+    def test_declares_genuine_scalar(self):
+        src = 'function OnLoad()\n    local tickets = score * 2\nend\n'
+        out = _auto_declare_read_before_write(src)
+        assert 'local score = 0' in out
+
+    def test_skips_prose_contamination(self):
+        words = ' '.join(f'word{i}' for i in range(40))
+        src = f'function OnLoad()\n    {words}\nend\n'
+        out = _auto_declare_read_before_write(src)
+        # Prose must not be auto-declared en masse
+        assert 'local word0' not in out
+
+    def test_skips_keyword_concat_artifact(self):
+        src = 'function OnLoad()\n    endendend\nend\n'
+        out = _auto_declare_read_before_write(src)
+        assert 'local endendend' not in out
+
+
+# ==============================================================================
+#  Fix #12: OnStep dedupe must remove the FULL nested registration (incl. else)
+# ==============================================================================
+
+class TestDedupeOnStepSpan:
+    def test_removes_full_nested_registration_with_else(self):
+        src = (
+            'function OnLoad()\n'
+            '    MidwayPhysics.OnStep(function(dt)\n'
+            '        local MOD = AttractionConstants.modifiers\n'
+            '        if swing_phase == 1.0 then\n'
+            '            -- swing up\n'
+            '        else\n'
+            '            swing_cooldown = math.max(0, swing_cooldown - dt)\n'
+            '        end\n'
+            '    end)\n'
+            '    MidwayPhysics.OnStep(function(dt)\n'
+            '        -- duplicate registration\n'
+            '    end)\n'
+            'end\n'
+        )
+        out = _dedupe_onstep_registrations(src)
+        # Only one registration survives, and the kept one keeps its whole if/else body.
+        assert out.count('MidwayPhysics.OnStep') == 1
+        assert 'swing_cooldown' in out
+        assert 'else' in out
+        assert 'duplicate registration' not in out
+
+
+# ==============================================================================
+#  Fix #33: orphaned else/elseif neutralization
+# ==============================================================================
+
+class TestNeutralizeOrphanedElse:
+    def test_comments_orphaned_else(self):
+        src = (
+            'function OnLoad()\n'
+            '    else\n'
+            '        swing_cooldown = math.max(0, swing_cooldown - dt)\n'
+            '    end\n'
+            'end\n'
+        )
+        out = _neutralize_orphaned_else(src)
+        assert '-- [orphaned else/elseif removed]' in out
+
+    def test_keeps_legit_if_else(self):
+        src = (
+            'function OnLoad()\n'
+            '    if x then\n'
+            '        a = 1\n'
+            '    else\n'
+            '        a = 2\n'
+            '    end\n'
+            'end\n'
+        )
+        out = _neutralize_orphaned_else(src)
+        assert '-- [orphaned else/elseif removed]' not in out
+
+    def test_comments_orphaned_elseif(self):
+        src = (
+            'function OnLoad()\n'
+            '    elseif y then\n'
+            '        a = 3\n'
+            'end\n'
+        )
+        out = _neutralize_orphaned_else(src)
+        assert '-- [orphaned else/elseif removed]' in out
+
+
+# ==============================================================================
+#  Fix #34: Inject missing OnUnload()
+# ==============================================================================
+
+class TestInjectOnUnload:
+    def test_injects_when_missing(self):
+        src = 'function OnLoad()\n    print("x")\nend\n'
+        out = _inject_onunload(src)
+        assert 'function OnUnload()' in out
+
+    def test_no_inject_when_present(self):
+        src = 'function OnUnload()\nend\n'
+        assert _inject_onunload(src) == src

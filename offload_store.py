@@ -34,6 +34,10 @@ class OffloadStore:
         self.index_ttl = index_ttl
         self._index_loaded: float = 0
         self._index_path = self.store_dir / ".index_cache.json"
+        # Self-regulating GC: reclaim blocks + session windows when the store
+        # grows past this ceiling (checked periodically, not on every write).
+        self._store_ops = 0
+        self._gc_max_bytes = 512 * 1024 * 1024
 
     def _load_index(self):
         """Lazy-load index from disk with TTL."""
@@ -137,10 +141,27 @@ class OffloadStore:
             path.write_text(json.dumps(info, indent=2), encoding="utf-8")
             self.index[block_id] = {k: v for k, v in info.items() if k != "full_text"}
             self._save_index()
+            self._store_ops += 1
+            if self._store_ops % 25 == 0:
+                self._maybe_gc()
             return True
         except OSError as e:
             print(f"  [OffloadStore] !! Failed to store block '{block_id}': {e}")
             return False
+
+    def _maybe_gc(self) -> None:
+        """Periodic self-regulating GC (see garbage_collect).
+
+        Reclaims indexed blocks AND leaked session-window files once the store
+        exceeds ``_gc_max_bytes``.  Runs every N store operations so the store
+        stays bounded even though the pipeline never calls garbage_collect()
+        explicitly.
+        """
+        try:
+            if self.store_size() > self._gc_max_bytes:
+                self.garbage_collect(max_mb=self._gc_max_bytes // (1024 * 1024))
+        except Exception:
+            pass
 
 
     def retrieve_block(self, block_id: str) -> str:
@@ -221,24 +242,30 @@ class OffloadStore:
         ]
 
     def store_size(self) -> int:
-        """Calculate total disk size of stored blocks in bytes."""
+        """Calculate total disk size of stored blocks + session windows in bytes."""
         total = 0
         if self.store_dir.is_dir():
-            for f in self.store_dir.glob("block_*.json"):
-                try:
-                    total += f.stat().st_size
-                except OSError:
-                    pass
+            for f in self.store_dir.glob("*.json"):
+                if f.name.startswith("block_") or f.name.startswith("session_"):
+                    try:
+                        total += f.stat().st_size
+                    except OSError:
+                        pass
         return total
 
     def garbage_collect(self, max_mb: int = 512) -> int:
-        """Remove oldest blocks until total size is under max_mb.
+        """Remove oldest blocks and session windows until size is under max_mb.
+
+        Session-window files are the ``session_<id>.json`` snapshots written by
+        ``store_message_window``.  ``MemGPTContextStore.close()`` would delete
+        them, but close() is not wired into the pipeline, so these files leak.
+        Reclaim them here (oldest-first) as part of the same GC pass.
 
         Args:
             max_mb: Maximum disk usage in MB.
 
         Returns:
-            Number of blocks evicted.
+            Number of blocks/sessions evicted.
         """
         max_bytes = max_mb * 1024 * 1024
         current = self.store_size()
@@ -246,18 +273,32 @@ class OffloadStore:
             return 0
         target = int(max_bytes * 0.8)
         self._load_index()
+        evicted = 0
+        # 1. Evict indexed blocks, oldest-first.
         sorted_blocks = sorted(
             self.index.items(),
             key=lambda x: x[1].get("timestamp", ""),
         )
-        evicted = 0
         for bid, _ in sorted_blocks:
             if self.store_size() <= target:
                 break
             if self.delete_block(bid):
                 evicted += 1
+        # 2. Evict leaked session-window files, oldest-first (mtime).
+        _session_files = sorted(
+            self.store_dir.glob("session_*.json") if self.store_dir.is_dir() else [],
+            key=lambda p: p.stat().st_mtime,
+        )
+        for sf in _session_files:
+            if self.store_size() <= target:
+                break
+            try:
+                sf.unlink()
+                evicted += 1
+            except OSError:
+                pass
         if evicted > 0:
-            print(f"  [OffloadStore] GC: evicted {evicted} blocks "
+            print(f"  [OffloadStore] GC: evicted {evicted} block(s)/session(s) "
                   f"({current // 1024} KB -> {self.store_size() // 1024} KB)")
         return evicted
 

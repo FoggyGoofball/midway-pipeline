@@ -141,8 +141,29 @@ def _post_process_workspace_lua_files(ctx: PipelineContext) -> None:
         _seen.add(_pk)
         try:
             post_process_lua_file(_path)
+            # Phase 3: verify-or-revert — never leave an unprovable file on disk.
+            try:
+                from _verify_gate import verify_or_revert
+                _rel_norm = _rel.replace("\\", "/")
+                _baseline = (getattr(ctx, '_last_luac_clean_anchor', None) or {}).get(_rel_norm)
+                if _baseline is not None:
+                    _proposed = _path.read_text(encoding="utf-8", errors="replace")
+                    _kept = verify_or_revert(ctx, _rel_norm, _proposed, _baseline)
+                    if _kept != _proposed:
+                        _path.write_text(_kept, encoding="utf-8")
+                        print(f"  [VerifyGate] ↺ reverted {_rel} to last luac-clean baseline.")
+            except Exception as _vg_e:
+                print(f"  [VerifyGate] ⚠ unavailable ({_vg_e})")
         except Exception as _e:
             print(f"  [Post-Process] ⚠ {_rel}: {_e}")
+
+    # Phase 1: read-only invariant report (DETERMINISTIC_HARDENING_PLAN.md).
+    # Observational only — never mutates files or changes verdicts.
+    try:
+        from _verify_gate import report_invariants
+        report_invariants(ctx)
+    except Exception as _rie:
+        print(f"  [Invariants] ⚠ reporter unavailable ({_rie})")
 
 
 def _strip_search_replace_metadata(content: str) -> str:
@@ -209,6 +230,27 @@ def _strip_search_replace_metadata(content: str) -> str:
     # Idempotent  safe to call even if no artifacts are present.
     from _helpers_text import strip_pipeline_artifacts
     result = strip_pipeline_artifacts(result)
+
+    # ── Residual Conflict-Marker Sweep ────────────────────────────────────
+    # The canonical + markdown block handlers above only match WELL-FORMED
+    # blocks. A small model frequently emits a truncated or malformed patch
+    # (a bare `<<<<<<< SEARCH` with no closer, or markers glued to telemetry
+    # text). Those markers are never valid Lua/C++, so sweep out any
+    # remaining marker line as a last resort. Applied at the merge boundary
+    # (fragments -> whole file), where removal is always safe.
+    _residual_marker = _re.compile(
+        r'^\s*(?:<{3,}[^\n]*|>{3,}[^\n]*|={3,}\s*)$',
+        _re.MULTILINE,
+    )
+    _md_patch_header = _re.compile(
+        r'^\s*#{1,6}\s*(?:search|replace)\b[^\n]*$',
+        _re.MULTILINE | _re.IGNORECASE,
+    )
+    _before_sweep = result
+    result = _residual_marker.sub('', result)
+    result = _md_patch_header.sub('', result)
+    if result != _before_sweep:
+        print("  [Strip SR] Removed residual SEARCH/REPLACE marker line(s).")
 
     return result
 

@@ -529,6 +529,15 @@ def _inject_static_pattern_errors(ctx: PipelineContext) -> None:
             f"Replace with one of those (or a bare local).",
         ))
 
+    # -- Tombstone guards: durable failure signatures -----------------------
+    # Data lives in _tombstones.py so the catalogue can grow without touching
+    # this hot loop. Each entry is a one-line prohibition + one-line reason.
+    try:
+        from _tombstones import TOMBSTONE_GUARDS
+        _GUARDS.extend(TOMBSTONE_GUARDS)
+    except Exception:
+        pass
+
     for tid, content in list(ctx.all_results_dict.items()):
         if not content:
             continue

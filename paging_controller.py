@@ -10,7 +10,7 @@ Contains:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from paging_kernel import (
     PAGE_IN_REGEX, PAGE_OUT_REGEX, VRAM_STUB_REGEX,
@@ -19,6 +19,7 @@ from paging_kernel import (
     PagingBuffer, ActiveMessages, MemGPTContextStore,
     handle_page_in, handle_page_out,
     inject_paged_content, inject_continuation_prompt,
+    _extract_raw_text_from_result,
 )
 
 
@@ -36,6 +37,11 @@ class PagingController:
     def __init__(self, project_root: Optional[Path] = None,
                  offload_store=None):
         import uuid as _uuid
+        # Default to the process-wide singleton so a bare PagingController never
+        # leaves self.memgpt.store as None (which would crash checkpoint/recall).
+        if offload_store is None:
+            from offload_store import get_offload_store
+            offload_store = get_offload_store()
         self.buffer = PagingBuffer()
         self.project_root = project_root
         self.offload_store = offload_store
@@ -330,6 +336,12 @@ class PagingController:
         # Oldest non-system turns are persisted as individually addressable
         # blocks; each replaced with a PAGE_IN-able stub so the model can
         # recall them on demand.  Also checkpoints the trimmed window.
+        # The eviction threshold tracks the active model's context window
+        # (allocated_ctx tokens ≈ 3 chars/token) instead of a stale fixed cap.
+        self.memgpt.evict_chars = max(
+            self.memgpt.DEFAULT_EVICT_CHARS,
+            self.allocated_ctx * 3,
+        )
         messages = self.memgpt.evict_old_turns(messages)
 
         # ── Directive A: Ghost Buffer  inject partial generation as assistant message ──
@@ -394,7 +406,7 @@ class PagingController:
         payload = {
             "model": "",  # caller must set this
             "stream": True,
-            "think": False,   # qwen3.5 is a thinking model — force direct content on resume
+            "think": False,   # defensive: force direct content on resume (no current model emits thinking)
             "keep_alive": "30m",  # warm keep-alive — avoid offload churn (see ollama_config.KEEP_ALIVE)
             "options": {
                 "num_ctx": _resume_ctx,

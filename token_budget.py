@@ -37,6 +37,8 @@ MODEL_TOKEN_LIMITS: dict = {
     # Threshold = 80% of context window; hard = context window (working ceilings)
     "qwen3.5:9b":          (26214, 32768),    # 32K (native 256K, VRAM-capped)
     "qwen2.5-coder:7b":    (26214, 32768),    # 32K native max
+    "midway-coder-lora":   (26214, 32768),    # 7B LoRA coder — same 32K budget as qwen2.5-coder:7b
+    "midway-reasoner-lora": (26214, 32768),   # 7B LoRA reasoner — same 32K budget
     "qwen2.5-coder:1.5b":  (26214, 32768),    # 32K native max
     "phi3.5":              (26214, 32768),    # 32K (128K needs 43.7 GB = OOM)
     "phi-3.5":             (26214, 32768),    # format alias

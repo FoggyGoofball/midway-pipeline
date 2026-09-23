@@ -40,6 +40,10 @@ SIGNAL_PATTERNS: Dict[str, str] = {
     # Format: [AST_PATCH:src/Engine.cpp] ... code ... [/AST_PATCH]
     "AST_PATCH": r"\[\s*\*?\*?\s*AST_PATCH\s*\*?\*?\s*:\s*([^\]]+)\s*\]\s*\n?```\w*\n(.*?)\n?```\s*\n?\[/\s*AST_PATCH\s*\]",
 
+    # -- Inter-persona argumentation -----------------------------------------
+    # Raised when a task spec is underspecified or self-contradictory.
+    "AMBIGUITY": r"\[\s*\*?\*?\s*AMBIGUITY\s*\*?\*?\s*:\s*([^\]]+)\s*:\s*([^\]]+)\s*\]",
+
 }
 
 # -- Phase III: AST Patch Extraction Pattern (LangGraph Alignment) ------
@@ -85,15 +89,21 @@ def extract_signals(text: str) -> List[Dict[str, Any]]:
     Returns:
         List of signal dicts with keys: type, match, target, content.
     """
+    # Tags whose bracket syntax carries no colon-args (parser must not index
+    # their empty capture groups), and one-arg tags whose single group is the
+    # content (no target).
+    _ZERO_ARG_TAGS = {"APPROVE", "FLUSH"}
+    _ONE_ARG_TAGS = {"RESULT"}
+
     signals: List[Dict[str, Any]] = []
     for signal_type, pattern in SIGNAL_PATTERNS.items():
         for match in re.finditer(pattern, text, re.DOTALL | re.IGNORECASE | re.MULTILINE):
             groups = match.groups()
             signal: Dict[str, Any] = {"type": signal_type, "match": match.group(0)}
-            if signal_type == "APPROVE":
+            if signal_type in _ZERO_ARG_TAGS:
                 signal["target"] = None
                 signal["content"] = None
-            elif signal_type == "RESULT":
+            elif signal_type in _ONE_ARG_TAGS:
                 signal["target"] = None
                 signal["content"] = groups[0].strip()
             else:

@@ -22,6 +22,7 @@ LoRA dataset = f(cartridge_knowledge, model_profile, failure_corpus, n)
 | `cartridge_lora_generator.py` | cartridge API dataset (spawn, phantom-fix, pool, economy) | ❌ hardcoded to Midway |
 | `lora_fine_tune.py` | Unsloth QLoRA trainer | ❌ hardcoded `Qwen2.5-Coder-7B` + ChatML |
 | `lora_trainer_server.py` / `setup_lora_server.sh` | trainer service | fine |
+| `signals_lora_generator.py` *(planned)* | inter-agent + inter-pipeline signal dataset | ❌ not built — source of truth: `docs/SIGNAL_TAGS_REFERENCE.md` |
 
 Specific hardcoding in `cartridge_lora_generator.py`:
 
@@ -33,7 +34,13 @@ Specific hardcoding in `cartridge_lora_generator.py`:
   `midwayphysics_spawn_api`, `object_pools`, `economy_api`, `script_lifecycle`,
   `globals_injected` off a contract dict. This is the pattern to extend.
 
-## Three dimensions
+## Five dimensions
+
+The complete signal surface the LoRA generators must cover is enumerated in
+`docs/SIGNAL_TAGS_REFERENCE.md` (Part A: inter-agent mesh tags; Part B:
+inter-pipeline paging + snapshots + checkpoints). The first three dimensions
+below are the existing API/model/runtime axes; dimensions 4 and 5 are the
+signal axes added by that reference.
 
 ### 1. Cartridge dimension (API knowledge)
 
@@ -85,6 +92,43 @@ the dataset:
 Flow: **run → collect failures → regenerate dataset → fine-tune → re-run →
 measure** (fewer fix cycles, fewer circuit-breaker trips).
 
+### 4. Inter-agent signal dimension (mesh tags)
+
+The personas talk to one another via bracket-tag signals (`[QUERY:…]`,
+`[VETO:…]`, `[OBJECT:…]`, `[APPEAL:…]`, `[AMBIGUITY:…]`, …). A model does not
+*intrinsically* know a tag exists — the tag only works if **four layers** agree
+(prompt enumeration, `SignalType` enum, parser regex, dispatcher branch) per
+`docs/MESH_SIGNAL_ARGUMENTATION_PLAN.md` §3. The LoRA for the anchor/coder path
+should therefore teach **emit + parse** in the same sample, code-first:
+
+- **Emit scenarios** — the assistant output ends with a signal *alongside* a
+  required SEARCH/REPLACE or code block (never instead of it).
+- **Response scenarios** — the assistant *receives* a signal and reacts
+  (`VETO` → defend/appeal, `CONSULT`/`QUERY` → answer, `REVISE` → re-do).
+- **Round-trip scenarios** — the parser's exact capture shape
+  (`type`, `target`, `content`) is mirrored in the next user turn.
+
+The full tag list, syntax, dispatcher behavior, and a ChatML sample per tag live
+in `docs/SIGNAL_TAGS_REFERENCE.md` Part A (16 live tags + 4 deprecated), plus
+suggested scenario weights in Part D.
+
+### 5. Inter-pipeline signal dimension (paging + snapshots + checkpoints)
+
+Beyond persona→persona, the pipeline speaks to **itself** and to the **agent**
+through three orchestrator-level signal families, all documented in
+`docs/SIGNAL_TAGS_REFERENCE.md` Part B:
+
+- **Paging protocol** (`<invoke_kernel>` PAGE_IN/PAGE_OUT + `<VRAM_STUB>`)
+  — already the first LoRA dataset (`lora_dataset_generator.py` →
+  `paging_lora_dataset.jsonl`, 1500 pts, model/cartridge-agnostic).
+- **Snapshots** — `SnapshotManager` run mirrors (`.pipeline_snapshots/`) and the
+  cross-iteration `completed_file_snapshots` carry-forward that tells the
+  Director "already built — extend, don't rebuild". Target scenario: the
+  Director honors a `## COMPLETED WORK` block instead of re-stubbing.
+- **Checkpoints** — `save_checkpoint`/`load_checkpoint` (`BLOCKED` resurrection,
+  manual-fix resume). Target scenario: the orchestrator re-hydrates a blocked
+  run and resumes at the right phase.
+
 ## Composed pipeline
 
 ```
@@ -94,6 +138,7 @@ cartridge wizard (DomainKnowledgeGraph: arity table + phantom list + domains)
 cartridge_lora_generator.py (data-driven templates + cartridge knowledge)
         │  + model_profile (template, tokenizer, train_on_inputs, quirks)
         │  + failure_corpus (harvested from pipeline logs)
+        │  + signals_lora_generator.py (Part A tags + Part B paging/snapshots)
         ▼
 <model>_<cartridge>_dataset.jsonl
         ▼
@@ -104,6 +149,9 @@ adapters/<model>_<cartridge>/
 
 Naming is the concrete expression of "each model × each cartridge":
 `qwen3.5-9b_midway_lora`, `qwen3.5-9b_ue4_lora`, `llama3.1-8b_midway_lora`, …
+The signal scenarios are **cartridge-agnostic** (bracket tags and the paging
+protocol are the same across cartridges), so they can be generated once per
+base model and mixed into every cartridge dataset.
 
 ## Constraints
 
@@ -112,6 +160,9 @@ Naming is the concrete expression of "each model × each cartridge":
 - **Unsloth coverage:** verify base model support before promising a LoRA.
 - **Don't poison the factual LoRA:** phantom-fix dataset must use
   `train_on_inputs=true` — the API contract must be in the loss, not masked.
+- **Signal LoRA is completion-only:** inter-agent signal behavior (emit/parse/
+  react) uses `train_on_inputs=false` — the tag emission must be learned as a
+  behavior, not injected as a fact. Factual API knowledge stays separate.
 
 ## Suggested first step
 
@@ -120,3 +171,10 @@ phantom list instead of hardcoded `PHANTOM_CORRECTIONS`/`if-elif`, and add the
 arity-driven scenario (correct call + "drop the extra arg" negative). That
 single change makes the generator cartridge-portable and is the prerequisite
 for the model-profile + failure-harvest layers.
+
+Second step (parallelizable): implement `signals_lora_generator.py` from
+`docs/SIGNAL_TAGS_REFERENCE.md` Part A + B — one template per tag, emitting the
+same ChatML shape as the other two generators. The paging half is already
+solved by `lora_dataset_generator.py`; the new work is the bracket-tag emit/
+parse/round-trip scenarios and the snapshot/checkpoint Director dialogues.
+

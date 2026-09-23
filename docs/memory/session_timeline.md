@@ -1,3 +1,4047 @@
+## Session Event  2026-09-23T09:02:57.077074
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate AttractionConstants.modifiers and helper functions above OnLoadStatic - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+## User-Selected Direction (MANDATORY)
+Follow the GDD Strongman High Striker: player swings a mallet to strike the lever, launching a puck up a tower toward a shifting bell. Score by puck height/force with the wager-gated streak multiplier from the dual-currency economy.
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman
+The player swings a mallet to launch a puck up a tower toward a shifting bell; score by height with streak multiplier.
+
+### Declared Handles
+  _mallet (handle)  Mallet static body [owner: physics, lifecycle: OnLoadStatic]
+  _lever_kinematic (handle)  Lever kinematic body [owner: physics, lifecycle: OnLoadStatic]
+  _puck_dynamic (handle)  Puck dynamic body [owner: physics, lifecycle: runtime]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  dt (number) = '0.0' - LuaBridge tick dt passed from the engine each step. [task 1]
+  streak_tokens_awarded_this_step (boolean) = 'false' - Flag for whether streak tokens have been awarded this step so they are only given once per swing even if it takes multiple steps to resolve scoring. [task 2]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(_step)
+  2. LuaBridge.Attraction_OnLoad()
+
+### Event Flow
+  (MidwayInput.IsButtonPressed("strongman_mallet")) and (_launch_cooldown <= 0) and (not _is_launched) → MidwayAudio.PlaySound(1); MidwayPhysics.ApplyImpulse(_mallet, 0.0, -500.0, 0.0); _is_launched = true; _launch_timer=0.2
+  _launch_timer > 0 → _launch_timer=_launch_timer-dt
+  _puck_handle == nil or not MidwayPhysics.IsValidBodyHandle(_puck_handle) → _spawn_puck=true
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTokens called on win/score events
+  - Engine.GetStreak() multiplier applied to ticket/token payouts
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+### Issues
+## ⛔ Open Pre-Flight Violations
+## No Code Block  Task task_4
+Task task_4 response contains only prose with no code construct. The agent must produce at least one concrete code block that implements the task specification.
+
+## No Code Block  Task task_6
+Task task_6 response contains only prose with no code construct. The agent must produce at least one concrete code block that implements the task specification.
+
+## No Code Block  Task task_7
+Task task_7 response contains only prose with no code construct. The agent 
+[... output truncated ...]
+---
+## Session Event  2026-09-22T16:51:05.257798
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for Strongman geometry (platform, mallet, puck, bell) and initialize state variables (swing phase, puck height, streak wager) inside the TODO anchor for module state - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival strength game where the player swings a mallet to launch a puck up a tower, facing dynamic modifiers like shifting bells, rusted rails, and sabotaged mallets.
+
+### Declared Handles
+  mallet_handle (userdata)  The heavy mallet swung by the player. [owner: Player held, lifecycle: SpawnDynamicCapsule in OnLoad, Destroy in OnUnload]
+  puck_handle (userdata)  The puck launched up the tower. [owner: Physics object, lifecycle: SpawnDynamicSphere in OnLoad, Destroy/Respawn in OnStep]
+  bell_handle (userdata)  The bell target that shifts position. [owner: Physics object, lifecycle: SpawnStaticCapsule in OnLoad, MoveKinematic in OnStep]
+  platform_handle (userdata)  The wobbly base platform. [owner: Physics object, lifecycle: SpawnStaticBox in OnLoad]
+  sensor_hit_zone (userdata)  Sensor to detect mallet impact on the lever. [owner: Physics object, lifecycle: SpawnSensorBox in OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_count (integer) = 0 - Current streak multiplier for the Streak Protocol. [task init_physics]
+  mallet_integrity (float) = 1.0 - Current power of the mallet (1.0 = full, <1.0 = splintered). [task init_physics]
+  bell_shift_timer (float) = 0.0 - Timer for the Bell's Curse shift cooldown. [task init_physics]
+  shock_plate_cooldown (float) = 0.0 - Timer preventing player from standing on shock plates. [task init_physics]
+  echo_strike_count (integer) = 0 - Consecutive hits on same spot for Echo Strikes modifier. [task init_physics]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_handle)
+  2. SpawnStaticCapsule(bell_handle)
+  3. SpawnSensorBox(sensor_hit_zone)
+  4. SpawnDynamicCapsule(mallet_handle)
+  5. SpawnDynamicSphere(puck_handle)
+  6. CreatePool('puck_pool', 5, 2)
+
+### Event Flow
+  IsSensorTriggered(sensor_hit_zone) → ApplyImpulse to puck_handle; Check modifiers; MoveKinematic bell_handle; AwardTickets if height threshold met
+  OnStep(dt) → Read AttractionConstants.modifiers; Apply friction to puck; Apply wobble to platform; Check Shock Plate cooldowns
+  Engine.GetStreak() > 1 → Multiply Ticket payout; Trigger Streak Protocol warning if failure imminent
+
+### Pool Requirements
+  puck_pool: 5
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails friction modifier
+  - Weighted Puck mass reduction
+  - Counter-Weight Springs tension
+  - Bell's Curse shifting
+  - Cracked Base wobble
+  - Echo Strikes rhythm
+  - Sabotaged Mallet splintering
+  - Shock Plates zap mechanic
+  - To
+[... output truncated ...]
+---
+## Session Event  2026-09-22T00:11:02.160984
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for puck mass, mallet dimensions, tower height, and friction modifiers, then insert the helper function to apply dynamic friction based on AttractionConstants.modifiers - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival game where players swing a heavy mallet to launch a puck up a vertical tower, navigating variable friction, shifting bells, and sabotaged equipment.
+
+### Declared Handles
+  platform (userdata)  The cracked base platform containing the wobble sensor and shock plates. [owner: Static base with wobble sensor, lifecycle: OnLoad]
+  mallet (userdata)  The heavy mallet head that splinters over time. [owner: Dynamic swinging object, lifecycle: OnLoad]
+  lever (userdata)  The weighted lever with randomized counter-weight springs. [owner: Kinematic pivot, lifecycle: OnLoad]
+  puck (userdata)  The puck subject to rusty rails friction and weight variants. [owner: Dynamic projectile, lifecycle: OnLoad]
+  bell (userdata)  The bell that shifts vertically between swings. [owner: Kinematic target, lifecycle: OnLoad]
+  puck_pool (userdata)  Pool for spawning/respawning pucks when the tower gauge shifts. [owner: Object Pool, lifecycle: OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  mallet_integrity (number) = 1.0 - Current power multiplier of the mallet head (decreases when splintered) [task Sabotaged Mallet]
+  echo_streak (number) = 0 - Consecutive hits on the same spot for Echo Strikes tension [task Echo Strikes]
+  bell_shift_active (boolean) = False - Flag indicating if the bell has shifted and needs adaptation [task The Bell's Curse]
+  shock_plate_cooldown (number) = 0.0 - Timer for Shock Plates zap immunity [task Shock Plates]
+  tower_gauge_offset (number) = 0.0 - Random height offset for the Tower Gauge Shift [task Tower Gauge Shift]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform)
+  2. SpawnSensorBox(platform_sensor)
+  3. SpawnDynamicBox(mallet)
+  4. SpawnKinematicBox(lever)
+  5. SpawnDynamicSphere(puck)
+  6. SpawnKinematicCapsule(bell)
+  7. CreatePool(puck_pool)
+
+### Event Flow
+  IsSensorTriggered(platform_sensor) → ApplyImpulse(mallet) to swing down
+  IsSensorTriggered(puck_sensor) → Check bell collision and award tickets
+  OnStep loop → Read AttractionConstants.modifiers for friction, mass, and shift events
+  Tower Gauge Shift event → DestroyBody(puck) and PoolAcquire(puck_pool) at new height
+
+### Pool Requirements
+  puck_pool: 5
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails variable friction
+  - Weighted Puck mass reduction
+  - Counter-Weight Springs tension
+  - The Bell's Curse shifting
+  - Cracked Base wobble
+  - Echo Strikes rhythm
+  - Sabotaged Mallet splintering
+  - Shock Plates z
+[... output truncated ...]
+---
+## Session Event  2026-09-21T19:37:08.804520
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for the Strongman attraction (mallet, puck, lever, bell dimensions and masses) and helper function for calculating swing impulse — fill the module-level state anchor in attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival strength game where the player swings a heavy mallet to launch a puck up a tower with randomized physics modifiers like rusted rails and shifting bells.
+
+### Declared Handles
+  mallet (userdata)  The heavy swinging mallet held by the player. [owner: Player, lifecycle: SpawnDynamicCapsule]
+  puck (userdata)  The projectile puck launched up the tower. [owner: Game, lifecycle: SpawnDynamicSphere]
+  bell (userdata)  The target bell that shifts vertically. [owner: Game, lifecycle: SpawnDynamicCapsule]
+  platform (userdata)  The wobbly base platform. [owner: Game, lifecycle: SpawnStaticBox]
+  tower (userdata)  The vertical track structure. [owner: Game, lifecycle: SpawnStaticCylinder]
+  rust_sensor (userdata)  Sensor detecting 'Rusty Rails' friction zones. [owner: Game, lifecycle: SpawnSensorBox]
+  shock_sensor (userdata)  Sensor detecting 'Shock Plates' on the platform. [owner: Game, lifecycle: SpawnSensorSphere]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.0 - Time since last swing to prevent spam. [task swing]
+  puck_mass_modifier (number) = 1.0 - Multiplier for puck mass (Weighted Puck). [task launch]
+  bell_offset (number) = 0.0 - Vertical shift for The Bell's Curse. [task win]
+  mallet_integrity (number) = 1.0 - Power multiplier for Sabotaged Mallet (splintering). [task swing]
+  echo_streak (number) = 0 - Consecutive hits on same spot for Echo Strikes. [task launch]
+  tower_gauge_shift (boolean) = False - Flag indicating Tower Gauge Shift is active. [task fail]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform)
+  2. SpawnStaticCylinder(tower)
+  3. SpawnDynamicCapsule(bell)
+  4. SpawnDynamicCapsule(mallet)
+  5. SpawnDynamicSphere(puck)
+  6. SpawnSensorBox(rust_sensor)
+  7. SpawnSensorSphere(shock_sensor)
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to mallet, then ApplyImpulse to puck upon collision.
+  IsSensorTriggered(rust_sensor) → ApplyAngularImpulse or SetFriction to puck to simulate rust.
+  IsSensorTriggered(shock_sensor) → ApplyImpulse to player or end turn if standing too long.
+  GetPosition(puck) > bell_height → AwardTickets, check Streak Protocol, destroy puck.
+  puck falls below threshold → DestroyBody(puck), respawn puck at new height via Tower Gauge Shift.
+
+### Pool Requirements
+  puck: 2
+  bell: 1
+
+### Economy Hooks: Engine.AwardTickets, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails variable friction
+  - Weighted Puck mass reduction
+  - Counter-Weight Springs random tension
+  - The Bell's Curse
+[... output truncated ...]
+---
+## Session Event  2026-09-21T13:04:13.115466
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for mallet, puck, tower, and lever dimensions, plus helper function for spawning the puck at the current tower height - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival game where the player swings a heavy mallet to launch a puck up a tower, battling variable friction, shifting bells, and sabotaged mallets.
+
+### Declared Handles
+  mallet_handle (userdata)  The heavy mallet swung by the player to strike the lever. [owner: Player controlled kinematic box, lifecycle: OnLoad]
+  lever_pivot (userdata)  The static cylinder acting as the fulcrum for the lever. [owner: Static hinge mechanism, lifecycle: OnLoad]
+  lever_arm (userdata)  The lever arm that translates mallet impact into puck launch force. [owner: Kinematic box, lifecycle: OnLoad]
+  puck (userdata)  The puck launched up the tower, subject to friction and weight modifiers. [owner: Dynamic sphere, lifecycle: OnLoad]
+  bell_sensor (userdata)  Sensor at the tower top to detect puck arrival. [owner: Sensor sphere, lifecycle: OnLoad]
+  tower_base (userdata)  The base platform, potentially wobbling or containing shock plates. [owner: Static box, lifecycle: OnLoad]
+  puck_pool (string)  Pool for spawning/replacing pucks when the tower gauge shifts. [owner: Object pool manager, lifecycle: OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  lever_angle (number) = 0 - Current rotation angle of the lever arm [task init_physics]
+  puck_velocity (number) = 0 - Current vertical velocity of the puck [task process_input]
+  mallet_integrity (number) = 1.0 - Current power multiplier of the mallet (1.0 = new) [task process_input]
+  bell_height_offset (number) = 0 - Current vertical displacement of the bell target [task init_physics]
+  streak_active (boolean) = False - Flag indicating if the player is currently in a streak [task handle_economy]
+  echo_hit_count (number) = 0 - Consecutive hits on the same spot for Echo Strikes [task process_input]
+  base_wobble_offset (number) = 0 - Randomized horizontal offset of the tower base [task init_physics]
+  shock_plate_timer (number) = 0 - Time remaining before shock plates reset [task process_input]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(tower_base)
+  2. SpawnStaticCylinder(lever_pivot)
+  3. SpawnKinematicBox(lever_arm)
+  4. SpawnDynamicSphere(puck)
+  5. SpawnSensorSphere(bell_sensor)
+  6. CreatePool(puck_pool)
+
+### Event Flow
+  IsSensorTriggered(bell_sensor) → AwardTickets, AwardTokens, TriggerStreakProtocol
+  ApplyImpulse(mallet_handle) → MoveKinematic(lever_arm), UpdatePuckVelocity
+  OnStep (frame) → ReadModifiers, ApplyFriction, CheckShockPlates, UpdateBellHeight
+
+### Pool Requirements
+  puck_pool: 4
+
+### Economy Hooks: Engine.AwardTic
+[... output truncated ...]
+---
+## Session Event  2026-09-21T10:17:25.729167
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for Strongman geometry (mallet, puck, bell, tower), physics parameters (friction, mass, restitution), and difficulty modifiers (Rusty Rails, Weighted Puck, Counter-Weight Springs) as local tables in the state anchor - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival game where the player swings a heavy mallet to launch a puck up a tower with randomized physics modifiers like rusted rails and shifting bells.
+
+### Declared Handles
+  mallet (userdata)  The heavy swinging mallet controlled by player input. [owner: player_controlled, lifecycle: dynamic]
+  puck (userdata)  The puck launched up the tower, subject to variable friction and mass. [owner: projectile, lifecycle: dynamic]
+  bell (userdata)  The target bell that shifts position between swings. [owner: target, lifecycle: kinematic]
+  platform (userdata)  The base platform that may wobble or contain shock plates. [owner: environment, lifecycle: static]
+  tower_track (userdata)  The vertical track containing rusty rails for friction. [owner: environment, lifecycle: static]
+  counter_weight (userdata)  The spring-loaded weight on the lever affecting rebound. [owner: environment, lifecycle: dynamic]
+  sensor_hit_zone (userdata)  Sensor detecting consecutive hits for the Echo Strikes modifier. [owner: sensor, lifecycle: sensor]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.0 - Time since last swing to prevent spamming [task swing_mechanic]
+  streak_count (number) = 0 - Current streak multiplier counter [task apply_modifiers]
+  echo_hits (number) = 0 - Consecutive hits on same spot for Echo Strikes [task apply_modifiers]
+  mallet_integrity (number) = 1.0 - Remaining power of the mallet head [task swing_mechanic]
+  bell_target_y (number) = 0.0 - Current vertical position of the bell [task bell_shift]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform)
+  2. SpawnStaticCylinder(tower_track)
+  3. SpawnKinematicBox(bell)
+  4. SpawnDynamicCapsule(mallet)
+  5. SpawnDynamicSphere(puck)
+  6. SpawnDynamicBox(counter_weight)
+  7. SpawnSensorBox(sensor_hit_zone)
+
+### Event Flow
+  MidwayInput.IsActionDown('fire') → ApplyImpulse to mallet to swing down
+  Collision between mallet and puck → Launch puck up tower; read modifiers
+  IsSensorTriggered(sensor_hit_zone) → Apply tension modifier or reset streak
+  GetPosition(puck) reaches bell height → Award Tickets/Tokens based on streak multiplier
+  Engine.GetStreak() > 0 → Apply exponential payout multiplier
+
+### Pool Requirements
+  puck: 1
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails friction variable
+  - Weighted Puck mass reduction
+  - Counter-Weight Springs tension
+  - Bell's Curse shifting position
+  - Cracked Base wobble offset
+  - Echo
+[... output truncated ...]
+---
+## Session Event  2026-09-20T22:44:07.087852
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level state variables (puck handle, mallet handle, lever handle, tower handle, bell handle, platform handle, score counter, streak counter) and helper constants (spawn positions, physics parameters) inside the pre-generated state anchor - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like strength game where the player swings a mallet to launch a puck up a tower, battling variable friction, shifting bells, and sabotaged physics.
+
+### Declared Handles
+  mallet (userdata)  The heavy swinging mallet head. [owner: Player controlled swing, lifecycle: SpawnDynamicCapsule]
+  puck (userdata)  The puck launched up the tower. [owner: Projectile, lifecycle: SpawnDynamicSphere]
+  bell (userdata)  The bell at the top of the tower. [owner: Target, lifecycle: SpawnStaticCapsule]
+  platform (userdata)  The wobbly base platform. [owner: Environment, lifecycle: SpawnStaticBox]
+  rusty_rails (userdata)  Variable friction rails on the tower. [owner: Environment, lifecycle: SpawnStaticCylinder]
+  spring (userdata)  Counter-weight spring on the lever. [owner: Environment, lifecycle: SpawnStaticCapsule]
+  shock_plate (userdata)  Zap hazard on the platform. [owner: Hazard, lifecycle: SpawnSensorBox]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.0 - Time since last swing to prevent spamming [task swing_init]
+  streak_wager (number) = 0 - Current wagered Soul Tokens for the streak [task score_check]
+  mallet_integrity (number) = 1.0 - Current power multiplier of the mallet head [task swing_init]
+  bell_offset (number) = 0.0 - Current vertical shift of the bell target [task score_check]
+  platform_wobble (number) = 0.0 - Current horizontal offset of the platform [task swing_init]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform)
+  2. SpawnStaticCylinder(rusty_rails)
+  3. SpawnStaticCapsule(bell)
+  4. SpawnStaticCapsule(spring)
+  5. SpawnSensorBox(shock_plate)
+  6. SpawnDynamicCapsule(mallet)
+  7. SpawnDynamicSphere(puck)
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to mallet to swing down
+  IsSensorTriggered(shock_plate) → ApplyImpulse to player (damage) or cancel swing
+  IsSensorTriggered(bell) → Award Tickets, Check Streak Protocol, Reset puck
+  IsSensorTriggered(rusty_rails) → Apply friction/damping to puck
+  IsActionDown('power_up') → Spawn new mallet head (swap)
+
+### Pool Requirements
+  puck: 1
+  mallet: 1
+
+### Economy Hooks: Engine.AwardTickets, Engine.GetStreak
+
+### Feature Checklist
+  - Variable friction on puck track
+  - Randomized spring tension
+  - Shifting bell height
+  - Wobbly platform aim offset
+  - Sabotaged mallet splintering
+  - Shock plate hazards
+  - Streak Protocol wagering
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## 
+[... output truncated ...]
+---
+## Session Event  2026-09-20T20:05:53.691831
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level state variables, constants, and helper-function anchors including puck handle, mallet handle, lever handle, tower base height, bell height, streak multiplier, current streak counter, and a helper function to apply swing impulse - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival game where the player swings a heavy mallet to launch a puck up a tower, facing randomized environmental hazards like shifting bells, rusty rails, and sabotaged mallets.
+
+### Declared Handles
+  mallet_handle (userdata)  The heavy mallet held by the player, subject to splintering and rebound physics. [owner: player, lifecycle: spawned in OnLoad, destroyed on failure]
+  puck_handle (userdata)  The puck launched up the tower, affected by rusty rails and weight modifiers. [owner: game, lifecycle: spawned in OnLoad, destroyed/respawned mid-game]
+  bell_handle (userdata)  The target bell that shifts position between swings. [owner: game, lifecycle: spawned in OnLoad, moved dynamically]
+  platform_handle (userdata)  The base platform that may wobble or contain shock plates. [owner: game, lifecycle: spawned in OnLoad]
+  rail_sensor (userdata)  Sensor detecting puck contact with rusty rails to apply friction. [owner: game, lifecycle: spawned in OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_wager (number) = 0 - Current accumulated wager in Soul Tokens and Tickets for the Streak Protocol. [task init_physics]
+  is_streak_active (boolean) = False - Flag indicating if the player is currently rolling over into the next difficulty tier. [task init_physics]
+  mallet_integrity (number) = 1.0 - Current mass/power multiplier of the mallet (1.0 = full, <1.0 = splintered). [task init_physics]
+  bell_offset (number) = 0.0 - Current vertical offset of the bell from its spawn position. [task init_physics]
+  platform_wobble (number) = 0.0 - Current lateral offset of the platform base. [task init_physics]
+  echo_hit_count (number) = 0 - Counter for consecutive hits on the same spot for Echo Strikes modifier. [task init_physics]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_handle)
+  2. SpawnDynamicCapsule(mallet_handle)
+  3. SpawnDynamicSphere(puck_handle)
+  4. SpawnStaticCapsule(bell_handle)
+  5. SpawnSensorBox(rail_sensor)
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to mallet_handle; check puck collision with bell; handle streak wagering
+  IsSensorTriggered(rail_sensor) → ApplyImpulse to puck_handle opposite to motion (rusty rails friction)
+  puck_handle reaches bell height → AwardTickets; check for streak multiplier; trigger bell shift if active
+  mallet_handle mass drops below threshold → DestroyBody(mallet_handle); SpawnDynamicCapsule(mallet_handle) with new mass
+
+### Pool Requirements
+  puck_pool: 2
+  mallet_pool: 1
+
+### Economy Hooks: Engine.Award
+[... output truncated ...]
+---
+## Session Event  2026-09-20T15:14:27.375711
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for Strongman geometry (lever, mallet, puck, bell, tower) and helper functions for spawn parameters inside the TODO anchor for module state - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival strength game where the player swings a heavy mallet to launch a puck up a tower, battling modifiers like rusty rails, shifting bells, and cracked bases.
+
+### Declared Handles
+  mallet (userdata)  The heavy mallet used to strike the lever. [owner: Player controlled swing object, lifecycle: SpawnDynamicCapsule in OnLoad]
+  lever (userdata)  The lever that launches the puck when struck. [owner: Kinematic platform, lifecycle: SpawnKinematicBox in OnLoad]
+  puck (userdata)  The puck launched up the tower. [owner: Projectile, lifecycle: SpawnDynamicSphere in OnLoad]
+  bell (userdata)  The target bell at the top of the tower. [owner: Sensor/Target, lifecycle: SpawnStaticSphere in OnLoad]
+  tower_base (userdata)  The base platform with potential wobble. [owner: Environment, lifecycle: SpawnStaticBox in OnLoad]
+  rusty_rails (userdata)  Rails adding variable friction to the puck track. [owner: Environment modifier, lifecycle: SpawnStaticCylinder in OnLoad]
+  counter_spring (userdata)  Spring providing randomized tension to the lever. [owner: Modifier, lifecycle: SpawnStaticCapsule in OnLoad]
+  shock_plate (userdata)  Plate that zaps the player if they stand too long. [owner: Sensor, lifecycle: SpawnStaticBox in OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.0 - Time since last mallet swing [task swing]
+  streak_multiplier (number) = 1.0 - Current streak multiplier for ticket awards [task streak]
+  tower_gauge_shift (number) = 0.0 - Random offset for puck respawn height [task score]
+  platform_wobble (number) = 0.0 - Current angular offset of the cracked base [task launch]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(tower_base)
+  2. SpawnKinematicBox(lever)
+  3. SpawnDynamicSphere(puck)
+  4. SpawnStaticSphere(bell)
+  5. SpawnDynamicCapsule(mallet)
+  6. SpawnStaticCylinder(rusty_rails)
+  7. SpawnStaticCapsule(counter_spring)
+  8. SpawnStaticBox(shock_plate)
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to mallet to swing down
+  IsSensorTriggered(bell) → Award Tickets, check Streak Protocol, reset puck
+  IsSensorTriggered(shock_plate) → ApplyImpulse to player (damage) or stop timer
+  GetVelocity(puck) > threshold → ApplyAngularImpulse to counter_spring to simulate rebound
+  OnStep → Update friction on puck, check streak multiplier, apply tower gauge shift
+
+### Pool Requirements
+  puck: 2
+
+### Economy Hooks: Engine.AwardTickets, Engine.GetStreak
+
+### Feature Checklist
+  - Heavy mallet swing physics
+  - Lever launch mechanics
+
+[... output truncated ...]
+---
+## Session Event  2026-09-20T12:27:58.380221
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for Strongman geometry (lever, mallet, puck, bell, tower) and initialize state variables (swing phase, puck handle, streak multiplier) inside the TODO anchor for module-level state - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like strength game where players swing a mallet to launch a puck up a tower, navigating dynamic obstacles like shifting bells, wobbly bases, and variable friction rails.
+
+### Declared Handles
+  mallet (userdata)  The heavy mallet head and handle used to strike the lever. [owner: Player controlled swing object, lifecycle: SpawnDynamicCapsule]
+  lever (userdata)  The horizontal bar that pivots when struck to launch the puck. [owner: Kinematic pivot, lifecycle: SpawnKinematicBox]
+  puck (userdata)  The puck launched up the tower, subject to friction and mass modifiers. [owner: Projectile, lifecycle: SpawnDynamicSphere]
+  bell (userdata)  The target bell at the top of the tower, which shifts position randomly. [owner: Target, lifecycle: SpawnStaticSphere]
+  platform (userdata)  The base platform, potentially wobbling or containing shock plates. [owner: Ground, lifecycle: SpawnStaticBox]
+  rail (userdata)  The vertical track for the puck, modified by Rusty Rails friction. [owner: Track, lifecycle: SpawnStaticCylinder]
+  spring (userdata)  Counter-weight spring attached to the lever for randomized tension. [owner: Modifier, lifecycle: SpawnStaticCapsule]
+  puck_pool (userdata)  Object pool for pucks to handle respawn and destruction efficiently. [owner: Resource, lifecycle: CreatePool]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_multiplier (number) = 1.0 - Current streak multiplier for exponential payout calculation. [task manage_streak]
+  echo_hit_count (number) = 0 - Consecutive hits on the same spot for Echo Strikes rhythm. [task swing_mallet]
+  mallet_integrity (number) = 1.0 - Current power efficiency of the mallet (1.0 to 0.0). [task swing_mallet]
+  bell_height_offset (number) = 0.0 - Current vertical offset for the bell's curse shift. [task hit_bell]
+  platform_wobble_angle (number) = 0.0 - Current rotation angle for the cracked base wobble. [task swing_mallet]
+  shock_plate_timer (number) = 0.0 - Time elapsed since last shock plate activation. [task swing_mallet]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform)
+  2. SpawnStaticCylinder(rail)
+  3. SpawnStaticSphere(bell)
+  4. SpawnStaticCapsule(spring)
+  5. SpawnKinematicBox(lever)
+  6. SpawnDynamicCapsule(mallet)
+  7. CreatePool(puck_pool)
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to mallet to swing it down onto lever
+  IsSensorTriggered(bell) → Award Tickets, check Streak Protocol, destroy bell, respawn at new height
+  IsSensorTriggered(puck) → Reset puck position if falling or stuck, apply 
+[... output truncated ...]
+---
+## Session Event  2026-09-19T23:17:44.589707
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for Strongman geometry (mallet, puck, bell, tower, platform), physics parameters (friction, restitution, mass), and difficulty modifiers by filling the TODO anchor for constants in attractions/strongman/strongman.lua - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival game where the player swings a heavy mallet to launch a puck up a vertical tower, facing randomized environmental hazards like shifting bells, wobbly bases, and rusty rails.
+
+### Declared Handles
+  mallet (userdata)  Kinematic box representing the heavy swinging mallet. [owner: player, lifecycle: OnLoad -> OnStep -> OnUnload]
+  puck (userdata)  Dynamic sphere representing the puck being launched. [owner: physics, lifecycle: OnLoad -> OnStep -> OnUnload]
+  bell (userdata)  Kinematic sphere representing the target bell. [owner: environment, lifecycle: OnLoad -> OnStep -> OnUnload]
+  base (userdata)  Kinematic box representing the wobbly platform base. [owner: environment, lifecycle: OnLoad -> OnStep -> OnUnload]
+  sensor_zone (userdata)  Sensor box detecting puck height for scoring. [owner: environment, lifecycle: OnLoad -> OnStep -> OnUnload]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.0 - Time elapsed since last swing to enforce rhythm or cooldowns. [task swing_timing]
+  bell_offset (number) = 0.0 - Current vertical displacement of the bell due to The Bell's Curse. [task height_tracking]
+  base_wobble (number) = 0.0 - Current horizontal offset of the base platform. [task swing_timing]
+  mallet_integrity (number) = 1.0 - Current power multiplier of the mallet (1.0 = full, 0.0 = broken). [task swing_timing]
+  streak_active (boolean) = False - Flag indicating if the player is currently rolling over the Streak Protocol. [task streak_wager]
+  echo_count (number) = 0 - Consecutive hits on the same spot for Echo Strikes modifier. [task swing_timing]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox for base
+  2. SpawnKinematicBox for mallet
+  3. SpawnDynamicSphere for puck
+  4. SpawnKinematicSphere for bell
+  5. SpawnSensorBox for sensor_zone
+  6. Initialize module_state_variables
+
+### Event Flow
+  Mallet swing completes → ApplyImpulse to puck
+  Puck hits bell → AwardTickets, Check Streak Protocol
+  Puck reaches max height → Destroy puck, Spawn new puck at random height (Tower Gauge Shift)
+  Player stands too long → ApplyImpulse to player (Shock Plates)
+
+### Pool Requirements
+  puck: 2
+
+### Economy Hooks: Engine.AwardTickets, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails friction modifier
+  - Weighted Puck mass reduction
+  - Counter-Weight Springs tension
+  - The Bell's Curse random shift
+  - Cracked Base wobble offset
+  - Echo Strikes rhythm mechanic
+  - Sabotaged Mallet splintering
+  - Shock Plates hazard
+  - Sound Dampeners audio
+[... output truncated ...]
+---
+## Session Event  2026-09-19T18:49:14.939656
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for Strongman geometry (mallet, puck, lever, tower, bell) and helper function anchors inside the TODO anchor for module state - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## Phase 4: Mesh Execution (6 tasks)
+
+
+### Phase 5: Conflict Resolution (SKIPPED — real-time SEARCH/REPLACE patching occurred per-task)
+
+
+## Phase 6: Integration Review & Fix Loop
+
+### Review Cycle 1
+### Issues
+## ⛔ Lua Syntax Error — attractions/strongman/strongman.lua
+```
+C:\Users\Admin\AppData\Local\Programs\Lua\bin\luac.EXE: ...\source\repos\midway\attractions\strongman\strongman.lua:77: unexpected symbol near ')'
+```
+
+## ⚡ Runtime Simulation Errors
+  [attractions/strongman/strongman.lua] Live harness: ...t2dog/attractions_strongman_strongman.lua_attraction.lua:86: unexpected symbol near ')'
+
+## ⛔ Open Pre-Flight Violations
+## ⚡ Runtime Simulation Errors
+  [attractions/strongman/strongman.lua] Live harness: ...2lex9/attractions_strongman_strongman.lua_attraction.lua:86: unexpected symbol near ')'
+
+## 🧩 Unfinished Tasks / Missing Features
+The following planned tasks/features are NOT yet implemented in the output. Implement EACH one before this run can pass:
+  - Task 2 — Implement the mallet swing logic using SpawnDynamicCapsule for the mallet body - attractio
+  - Task 3 — Spawn the puck using SpawnDynamicSphere and the lever using SpawnStaticCapsule, - attracti
+  - Task 4 — Configure friction and restitution via SetFriction and SetRestitution on puck spawn in OnL
+
+### Verdict
+[VERDICT: FAIL]  (deterministic gate)
+
+### Domain Agent Fix Cycle 1
+
+### Lua Fix (task_7)
+
+
+### Review Cycle 2
+### Issues
+## ⛔ Open Pre-Flight Violations
+## ⚡ Runtime Simulation Errors
+  [attractions/strongman/strongman.lua] Live harness: ...rk1li/attractions_strongman_strongman.lua_attraction.lua:79: 'end' expected (to close 'function' at line 61) near <eof>
+
+## 🧩 Unfinished Tasks / Missing Features
+The following planned tasks/features are NOT yet implemented in the output. Implement EACH one before this run can pass:
+  - Task 2 — Implement the mallet swing logic using SpawnDynamicCapsule for the mallet body - attractio
+  - Task 3 — Spawn the puck using SpawnDynamicSphere and the lever using SpawnStaticCapsule, - attracti
+  - Task 4 — Configure friction and restitution via SetFriction and SetRestitution on puck spawn in OnL
+  - Task 5 — Create an object pool for pucks using MidwayPhysics.CreatePool with shape/mass/restitution
+  - Anchor TASK_4 - required APIs never written (-- [TASK_4_INSERT_HOOK] -- object pool creation (MidwayPhysics.CreateP)
+  - Anchor TASK_10 - required APIs never written (-- [TASK_10_INSERT_HOOK] -- payout wiring: Engine.AwardTokens streak b)
+
+### Verdict
+[VERDICT: FAIL]  (deterministic gate)
+
+### Domain Agent Fix Cycle 2
+
+### Lua Fix (task_7)
+
+
+### Review Cycle 3
+### Issues
+## 🧩 Unfinished Tasks / Missing
+[... output truncated ...]
+---
+## Session Event  2026-09-18T20:02:45.748413
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Initialize module-level state constants including tower geometry dimensions, physics handle variables for the mallet, puck, and base components, input action alias mappings, and helper function anchors for swing mechanics and score validation - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A strength-testing game where players swing a mallet to launch a puck up a randomized tower with varying friction and shifting obstacles.
+
+### Declared Handles
+  platform (StaticBox)  The cracked base/wobbly platform where the puck rides. [owner: attraction_root, lifecycle: spawn]
+  lever_system (KinematicCapsule)  The heavy mallet attached to a counter-weight spring assembly. [owner: attraction_root, lifecycle: spawn]
+  puck (DynamicSphere)  The weighted puck subject to Rusty Rails friction and Curse shifts. [owner: pools, lifecycle: pool_acquire]
+  tower_wall (StaticCylinder)  The vertical guide track with variable friction surfaces. [owner: attraction_root, lifecycle: spawn]
+  bell_sensor (SensorSphere)  Sensor at the top to register clearance and trigger economy. [owner: attraction_root, lifecycle: spawn]
+  shock_plates (StaticBox)  Optional hazard boxes zapping the player during wind-up. [owner: attraction_root, lifecycle: spawn]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_count (integer) = 0 - Tracks consecutive successful swings for the Let It Ride multiplier. [task initialization]
+  puck_y_offset (number) = 0.0 - Stores the Bell's Curse random height shift delta. [task initialization]
+  lever_tension (number) = 1.0 - Current counter-weight spring multiplier (randomized per round). [task initialization]
+  mallet_integrity (number) = 1.0 - Sabotaged Mallet health factor (decreases after split impact). [task initialization]
+  echo_hit_timer (number) = 0.0 - Frames elapsed since last Echo Strike hit to check rhythm. [task physics_loop]
+  shock_plate_active (boolean) = False - Flag for Shock Plate hazard zone during wind-up. [task initialization]
+
+### OnLoad Registration Order
+  1. spawn_static_box('platform')
+  2. spawn_static_box('tower_wall')
+  3. spawn_kinematic_capsule('lever_system')
+  4. spawn_sensor_box('bell_sensor')
+  5. spawn_static_box('shock_plates')
+  6. create_pool('puck', 5, 5)
+  7. modify_properties_random()
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to lever_system to swing down
+  GetVelocity('lever_system') > threshold → Release lever system to impact puck via collision
+  GetPosition('puck').y > bell_sensor.y → Trigger economy award (Streak Protocol)
+  IsSensorTriggered('bell_sensor') → Execute OnUnload/Reset for next round
+  Engine.GetStreak() > 1 → Calculate exponential ticket multiplier
+
+### Pool Requirements
+  puck: 5
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Variable Rusty Rails
+[... output truncated ...]
+---
+## Session Event  2026-09-18T17:31:31.580948
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level state variables (ball count, score, round index, lever handle, bell handle, puck handle, counterweight handle) and helper constants for strongman attraction inside the TODO anchor for module-level state - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman Striker
+A rogue-like carnival game where the player swings a mallet to launch a puck up a tower with unpredictable rails, shifting bells, and environmental sabotage.
+
+### Declared Handles
+  tower_base (StaticCylinder)  The central vertical support structure for the game mechanics. [owner: attraction, lifecycle: static]
+  puck (DynamicCylinder)  The player's projectile mass that travels up the tower. [owner: player_projectile, lifecycle: spawned]
+  mallet_handle (KinematicCylinder)  The part of the mallet held by the player, moved via kinematic updates. [owner: player_controller, lifecycle: controlled]
+  mallet_head (DynamicSphere)  The heavy striking head of the mallet, subject to damage modifiers. [owner: player_controller, lifecycle: spawned]
+  lever_pivot (KinematicBox)  The fulcrum of the lever mechanism connecting the mallet to the puck. [owner: mechanism, lifecycle: spawned]
+  bell_sensor (SensorSphere)  Detects puck arrival at the target height to trigger the bell event. [owner: scoring, lifecycle: static]
+  sabotage_plate (StaticBox)  A hazard block that appears on the platform to zap the player. [owner: environmental, lifecycle: dynamic]
+  spring_weight (DynamicBox)  Represents the counter-weight spring tension on the lever. [owner: mechanism, lifecycle: spawned]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_multiplier (number) = 1.0 - Multiplier for payouts when rolling over the Streak Protocol. [task init_game]
+  mallet_integrity (number) = 1.0 - Current power of the mallet head; decrements on Sabotaged Mallet hits. [task init_player]
+  bell_height_offset (number) = 0.0 - Current vertical shift for The Bell's Curse. [task init_game]
+  echo_strike_count (number) = 0 - Counter for consecutive hits on same spot for Echo Strikes. [task init_game]
+  is_stomp_active (boolean) = False - Flag indicating if Shock Plate is currently active. [task init_game]
+  tower_gauge_active (boolean) = False - Flag indicating if Tower Gauge Shift event is pending. [task init_game]
+  sabotage_queue (table) = {} - List of scheduled sabotage plate spawn locations. [task init_game]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox: tower_base
+  2. SpawnDynamicCylinder: puck
+  3. SpawnKinematicCylinder: mallet_handle
+  4. SpawnDynamicSphere: mallet_head
+  5. SpawnKinematicBox: lever_pivot
+  6. SpawnDynamicBox: spring_weight
+  7. SpawnSensorSphere: bell_sensor
+  8. CreatePool: puck_pool
+  9. CreatePool: sabotage_plate_pool
+
+### Event Flow
+  Mallet swing impact → ApplyImpulse to lever_pivot; Check spring_wei
+[... output truncated ...]
+---
+## Session Event  2026-09-18T15:10:38.918861
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define game constants (spawn positions, puck radius, mallet impulse, tower height limits) and populate the helper function pool for spawning dynamic game objects - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A carnival strength-test where players swing a mallet to launch a puck against a volatile, cursed tower featuring variable physics and sabotage.
+
+### Declared Handles
+  mallet (userdata)  The heavy hammer the player swings; subject to 'Sabotaged Mallet' splintering logic. [owner: SpawnDynamicCapsule, lifecycle: OnLoad/OnStep]
+  puck (userdata)  The projectile launched up the track; affected by 'Rusty Rails' friction and 'Weighted Puck' mass changes. [owner: SpawnDynamicSphere/PoolAcquire, lifecycle: OnLoad/OnStep]
+  lever (userdata)  The trigger mechanism hit by the mallet; features randomized 'Counter-Weight Springs' tension. [owner: SpawnStaticBox, lifecycle: OnLoad]
+  bell (userdata)  The prize target at the tower top; shifts vertically due to 'The Bell's Curse'. [owner: SpawnStaticCapsule, lifecycle: OnLoad]
+  platform (userdata)  The base floor; wobbles ('Cracked Base') and hosts 'Shock Plates' sensors. [owner: SpawnKinematicBox, lifecycle: OnLoad]
+  puck_pool (userdata)  Reusable puck objects for instant respawning after 'Tower Gauge Shift' or destruction. [owner: CreatePool, lifecycle: OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_wager (number) = 0 - Accumulated Soul Tokens and Tickets wagered for the current Streak Protocol run. [task wager_check]
+  echo_hit_count (number) = 0 - Counter for consecutive hits on the same spot for 'Echo Strikes' rhythm modifier. [task swing_calc]
+  bell_target_y (number) = 0 - Current randomized vertical offset for the bell due to 'The Bell's Curse'. [task bell_randomizer]
+  sabotage_damage (number) = 0 - Accumulated power loss on mallet head due to 'Sabotaged Mallet' splintering. [task swing_calc]
+  platform_wobble_offset (number) = 0 - Current sinusoidal offset applied to the platform mesh position for 'Cracked Base'. [task puck_physics]
+  is_active_level (boolean) = True - Flag to prevent actions during penalty states like 'Shock Plates' or 'Bell's Curse' recovery. [task wager_check]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox for lever
+  2. SpawnStaticCapsule for bell
+  3. SpawnStaticCapsule for platform
+  4. CreatePool 'puck_pool'
+  5. SpawnDynamicCapsule for mallet
+  6. SpawnDynamicSphere (from pool) for puck
+  7. SpawnSensorBox for shock_plates
+  8. SpawnSensorBox for bell_sensor
+  9. Setup friction modifiers for puck
+  10. Setup spring tension for lever
+
+### Event Flow
+  IsActionDown('fire') → ApplyAngularImpulse to mallet to swing down
+  IsSensorTriggered(bell_sensor) → AwardTickets, ApplyImpulse to lever, MoveKinema
+[... output truncated ...]
+---
+## Session Event  2026-09-18T12:43:51.208853
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate module-level state, constants, and helper-function anchors inside OnLoadStatic to define spawn positions for the mallet, puck, lever, bell, and rails, declaring the Lua counters for ball count and score, and establishing the local TODO markers for geometry, pools, input binding, scoring, and cleanup hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A strength-testing attraction where players swing a heavy mallet to launch pucks up a variable-height tower against modifiers like rusty rails, shifting bells, and cracked bases.
+
+### Declared Handles
+  mallet (DynamicCapsule)  The heavy swinging tool the player controls to strike the puck. [owner: Player input target, lifecycle: spawned]
+  puck (DynamicSphere)  The object launched upward; varies in mass and friction properties. [owner: Projectile target, lifecycle: spawned/pooled]
+  lever (KinematicBox)  The pivot that converts mallet impact into puck vertical velocity. [owner: Mechanism controller, lifecycle: spawned]
+  bell_sensor (SensorSphere)  Sensor at the current bell height to register a successful hit. [owner: Win condition detector, lifecycle: spawned]
+  platform_base (StaticBox)  The ground plane, potentially modified by 'Cracked Base' wobble logic. [owner: Environmental anchor, lifecycle: spawned]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_timer (number) = 0.0 - Tracks wind-up duration for shock plate and echo strike logic. [task init_physics]
+  streak_wager (integer) = 0 - Current amount of Tickets/Tokens staked in the Streak Protocol. [task handle_impact]
+  mallet_health (integer) = 100 - Remaining integrity of the mallet head (reduces power when < 100). [task handle_impact]
+  echo_combo (integer) = 0 - Consecutive hits on same spot to build tension for Echo Strikes. [task handle_impact]
+  bell_height_offset (number) = 0.0 - Dynamic offset applied to the bell sensor position per swing. [task handle_impact]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_base)
+  2. SpawnKinematicBox(lever)
+  3. SpawnDynamicCapsule(mallet)
+  4. SpawnSensorSphere(bell_sensor)
+  5. CreatePool(puck)
+
+### Event Flow
+  Mallet impact on lever → Calculate impulse vector; ApplyImpulse to lever; SpawnDynamicSphere(puck) at pivot; MoveKinematic(lever) to release puck.
+  Puck ascent past bell → Check IsSensorTriggered(bell_sensor); If true, AwardTickets/AwardTokens; Trigger Streak Protocol logic.
+  Tower Gauge Shift event → DestroyBody(puck); MoveKinematic(bell_sensor) to new height; SpawnDynamicSphere(puck) at new height.
+
+### Pool Requirements
+  puck: 2
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails friction modifier
+  - Weighted Puck mass variation
+  - Counter-Weight Springs tension variance
+  - Bell height shift logic
+  - Cracked Base wobble
+  - Echo Strikes rhythm detection
+  - Sabotaged Mallet damage accumu
+[... output truncated ...]
+---
+## Session Event  2026-09-18T09:42:32.824176
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate module-level state variables, local geometry constants, and helper-function anchors (spawn positions, bell offsets, mallet config) - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman Striker
+A rogue-like strength tester where players swing a mallet on a randomized spring lever to launch a puck up a tower with shifting targets, variable friction rails, and dynamic environmental hazards like wobbly bases and shock plates.
+
+### Declared Handles
+  mallet (DynamicSphere/Capsule)  The heavy mallet head swung by the player. [owner: Player controlled impactor, lifecycle: spawned at load, destroyed on win/reset]
+  lever_arm (DynamicCapsule)  The beam the mallet strikes, connected to a spring. [owner: Kinematic or Dynamic with high friction, lifecycle: spawns on the fulcrum, destroyed on reset]
+  counterweight (DynamicSphere/Capsule)  Adds mass and randomizes swing arc. [owner: Dynamic body at lever tip, lifecycle: spawns on load]
+  puck (DynamicSphere)  The projectile traveling up the tower. [owner: Dynamic body, mass varies by variant, lifecycle: SpawnDynamic, DestroyBody on reset, Spawn new]
+  tower_base (StaticBox)  The platform with potential 'Cracked Base' wobble logic (simulated via MoveKinematic on a kinematic base or visual only). [owner: Static mesh or box, lifecycle: spawned at load]
+  bell_target (SensorSphere)  The moving target to hit. [owner: Sensor, lifecycle: MoveKinematic to shift height]
+  rusty_rails (DynamicCapsule/StaticCapsule)  Variable friction obstacles slowing the puck. [owner: Dynamic for friction interaction, lifecycle: Spawn inside tower track]
+  shock_plate (SensorBox)  Zaps player if windup is too long. [owner: Sensor on platform, lifecycle: Spawn/Destroy on timer]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_multiplier (number) = 1 - Current streak multiplier for Ticket awards [task economy]
+  windup_timer (number) = 0 - Time since mallet stop to track Shock Plate trigger [task risk]
+  echo_combo (number) = 0 - Consecutive hits on same spot for Echo Strikes [task rhythm]
+  mallet_integrity (number) = 1 - 0-1 scale of mallet power (Sabotage) [task risk]
+  bell_offset (number) = 0 - Random Y shift for next bell position [task challenge]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(tower_base)
+  2. SpawnSensorSphere(bell_target)
+  3. SpawnDynamicCapsule(counterweight)
+  4. SpawnDynamicCapsule(lever_arm)
+  5. SpawnDynamicSphere(mallet)
+  6. SpawnDynamicSphere(puck)
+  7. SpawnDynamicCapsule(rusty_rails)
+  8. SpawnSensorBox(shock_plate)
+
+### Event Flow
+  Mallet collision with Lever → ApplyImpulse to lever; Monitor Puck launch
+  Puck reaches Bell → Award Tickets/Tokens; Check for Streak; Spawn new puck; Move bell target
+  ShockPlate IsSensorTrigge
+[... output truncated ...]
+---
+## Session Event  2026-09-17T18:24:54.335416
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for mallet, puck, bell, tower, base geometries, pool configs, and modifier thresholds within the TODO anchor - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A physics-based strength test where the player swings a heavy mallet to launch a puck up a variable-height tower, facing randomized environmental modifiers like rusty rails and shifting bells.
+
+### Declared Handles
+  platform_sensor (userdata)  Sensor box on the ground to trigger 'Shock Plates' logic or detect player entry. [owner: Static ground sensor, lifecycle: OnLoad/OnUnload]
+  puck_pool (userdata)  Pool of weighted pucks that can be destroyed and respawned at new heights. [owner: Dynamic sphere, lifecycle: OnStep/OnUnload]
+  mallet_handle (userdata)  The player-held mallet swung via kinematic movement or impulse application. [owner: Kinematic capsule, lifecycle: OnLoad/OnUnload]
+  lever_system (userdata)  The lever structure and its trigger sensor to detect mallet impact. [owner: Static cylinder + Sensor, lifecycle: OnLoad/OnUnload]
+  bell_sensor (userdata)  Sensor at the tower peak to detect puck arrival and award points/tokens. [owner: Static capsule at tower top, lifecycle: OnLoad/OnUnload]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  streak_multiplier (number) = 1 - Current streak multiplier for exponential payout scaling. [task score_accumulation]
+  bell_height_offset (number) = 0 - Vertical shift for the Bell's Curse modifier. [task environmental_randomization]
+  platform_wobble_x (number) = 0 - Horizontal offset for the Cracked Base aim disruption. [task environmental_randomization]
+  mallet_integrity (number) = 1.0 - Durability value for the Sabotaged Mallet splintering effect. [task score_accumulation]
+  shock_plate_timer (number) = 0 - Timer preventing standing too long on Shock Plates. [task environmental_randomization]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_sensor, 0, -5, 1, 1, 50)
+  2. SpawnStaticCylinder(lever_system, 0, 0, 1, 0.2, 5)
+  3. SpawnSensorBox(lever_sensor, 0, -5, 0.5, 0.2, 0.1)
+  4. CreatePool('puck_pool', 5, 0)
+  5. SpawnKinematicCapsule(mallet_handle, -2, 2, 0, 0.4, 1)
+
+### Event Flow
+  IsSensorTriggered(lever_sensor) → ApplyImpulse(mallet_handle, 0, 5, 0); ApplyImpulse(puck, vx, vy, vz)
+  GetPosition(bell_sensor) → Engine.AwardTickets(n, 'score'); Engine.AwardTokens(n, 'tokens')
+  IsActionDown('fire') → MoveKinematic(mallet_handle, new_x, y, 0)
+
+### Pool Requirements
+  puck_pool: 5
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Variable puck mass (Weighted Puck)
+  - Dynamic bell height (Bell's Curse)
+  - Platform offset (Cracked Base)
+  - Friction modifiers (Rusty Rails)
+  -
+[... output truncated ...]
+---
+## Session Event  2026-09-17T16:38:28.754732
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level state variables (puck handle, lever handle, mallet handle, bell handle, rack handles), helper function for mallet impulse, and geometry constants including tower offset, platform wobble offsets, bell shift heights, and lever tension values - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x4)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman
+Swing a heavy mallet to launch a puck up a variable tower toward a shifting bell, dealing with rusted rails, sabotaged tools, and cursed physics modifiers.
+
+### Declared Handles
+  platform_box (userdata)  The wobbling base platform. [owner: Attraction, lifecycle: SpawnStaticBox in OnLoad, DestroyBody in OnUnload]
+  puck_handle (userdata)  The projectile launched by the lever. [owner: Player/Logic, lifecycle: SpawnDynamicSphere in OnLoad, DestroyBody on miss/reset]
+  bell_handle (userdata)  The target bell at the tower top. [owner: Attraction, lifecycle: SpawnStaticCapsule in OnLoad, DestroyBody if shifted]
+  mallet_handle (userdata)  The player-controlled swinging weapon. [owner: Player/Logic, lifecycle: SpawnKinematicBox in OnLoad, DestroyBody if swapped]
+  sensor_hit_zone (userdata)  Triggers when the puck strikes the lever platform. [owner: Attraction, lifecycle: SpawnSensorBox in OnLoad]
+  sensor_bell_zone (userdata)  Triggers when the puck hits the bell. [owner: Attraction, lifecycle: SpawnSensorCapsule in OnLoad]
+  puck_pool (userdata)  Object pool for pucks to handle respawn logic. [owner: Attraction, lifecycle: CreatePool in OnLoad, PoolAcquire in OnStep, PoolReturn in OnStep]
+  mallet_pool (userdata)  Object pool for mallets to handle swapping logic. [owner: Attraction, lifecycle: CreatePool in OnLoad, PoolAcquire in OnStep, PoolReturn in OnStep]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  puck_height (number) = 0.0 - Current vertical position of the active puck. [task init_attraction]
+  streak_count (number) = 0 - Current streak multiplier count for Streak Protocol. [task init_attraction]
+  tension_counter (number) = 0 - Echo Strikes consecutive hit counter. [task init_attraction]
+  mallet_integrity (number) = 1.0 - Remaining power/mass of current mallet (0.0 to 1.0). [task init_attraction]
+  bell_offset (number) = 0.0 - Current vertical shift of the bell caused by curse. [task init_attraction]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_box)
+  2. SpawnStaticCapsule(bell_handle)
+  3. SpawnSensorBox(sensor_hit_zone)
+  4. SpawnSensorCapsule(sensor_bell_zone)
+  5. CreatePool(puck_pool)
+  6. CreatePool(mallet_pool)
+  7. SpawnDynamicSphere(puck_handle, from_pool)
+  8. SpawnKinematicBox(mallet_handle, from_pool)
+
+### Event Flow
+  IsSensorTriggered(sensor_hit_zone) → Launch puck upwards, check mallet integrity, apply variable friction.
+  IsSensorTriggered(sensor_bell_zone) → Check puck height, resolve victory/loss, trigger Streak Protocol, award Tickets.
+  IsSensorTriggered(be
+[... output truncated ...]
+---
+## Session Event  2026-09-17T14:24:02.058365
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate module-level state constants and helper-function anchors including swing timer, puck handle, tower height variable, difficulty multiplier, streak counter, and local dimension tables for the platform - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like strength test where players strike a lever to launch a puck against variable physics like Rusty Rails and the shifting Bell's Curse, risking Soul Tokens on every Streak Protocol roll.
+
+### Declared Handles
+  mallet_handle (userdata)  Kinematic box representing the heavy mallet head [owner: Player input device, lifecycle: spawned_once]
+  puck_handle (userdata)  Dynamic sphere representing the puck subject to variable friction [owner: Dynamic projectile, lifecycle: spawned_once]
+  lever_pivot (userdata)  Kinematic cylinder acting as the lever fulcrum [owner: Mechanism anchor, lifecycle: spawned_once]
+  bell_sensor (userdata)  Sensor sphere detecting puck impact at tower height [owner: Goal trigger, lifecycle: spawned_once]
+  platform_sensor (userdata)  Sensor box for Shock Plates on the platform [owner: Trap trigger, lifecycle: spawned_once]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  is_winding_up (bool) = False - Tracks if player is currently charging a swing to handle Shock Plate timing [task handle_input]
+  echo_streak_count (int) = 0 - Consecutive hits on the same spot for Echo Strikes modifier [task check_economy]
+  mallet_health (int) = 100 - Current integrity of the mallet head for Sabotaged Mallet mechanic [task update_physics]
+  bell_offset_y (float) = 0.0 - Current vertical displacement for The Bell's Curse [task update_physics]
+  platform_wobble_x (float) = 0.0 - Current horizontal offset for Cracked Base wobble [task update_physics]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_base)
+  2. SpawnStaticBox(walls)
+  3. SpawnStaticBox(bell_chime)
+  4. SpawnSensorBox(platform_sensor)
+  5. SpawnSensorSphere(bell_sensor)
+  6. SpawnKinematicCylinder(lever_pivot)
+  7. SpawnDynamicBox(mallet_handle)
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to lever_pivot then ApplyImpulse to puck_handle
+  IsSensorTriggered(bell_sensor) → Trigger OnLoadStatic win logic and Economy hooks
+  IsSensorTriggered(platform_sensor) → ApplyAngularImpulse to player (damage effect)
+
+### Pool Requirements
+  puck_handle: 2
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails friction variance
+  - Weighted Puck mass variation
+  - Counter-Weight Springs tension randomization
+  - The Bell's Curse height shifting
+  - Cracked Base aim offset
+  - Echo Strikes rhythm detection
+  - Sabotaged Mallet splintering
+  - Shock Plates standing traps
+  - Tower Gauge Shift puck respawning
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+##
+[... output truncated ...]
+---
+## Session Event  2026-09-17T12:02:32.778507
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Initialize module-level constants for geometry, physics parameters, and object pools within the state anchor block - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival game where the player swings a heavy mallet to launch a puck up a volatile tower, managing physics inconsistencies like shifting bases and sabotaged tools while risking a Soul Token wager on the 'Let It Ride' streak protocol.
+
+### Declared Handles
+  mallet (userdata)  Heavy dynamic object representing the player's strike tool; subject to mass reduction and splintering effects. [owner: Player held weapon, lifecycle: dynamic]
+  lever (userdata)  Base lever anchored to the ground that translates vertical force into puck ascent. [owner: Static interaction point, lifecycle: static]
+  counter_weight (userdata)  Randomized tension spring mass attached to the lever to simulate inconsistent rebound physics. [owner: Hidden modifier, lifecycle: dynamic]
+  puck (userdata)  Vertical projectile subject to friction modifiers, mass variance, and random tower height shifts. [owner: Target projectile, lifecycle: dynamic]
+  platform (userdata)  Base platform that wobbles (offsets aim) and may host shock plate hazards. [owner: Ground hazard, lifecycle: kinematic]
+  bell (userdata)  Target bell that shifts vertically along the tower track, requiring precise timing to ring. [owner: Win condition sensor, lifecycle: dynamic]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  current_wager (number) = 1 - The amount of Soul Tokens currently staked on the streak. [task SoulWager]
+  echo_strike_count (integer) = 0 - Consecutive hits on the same spot to build Echo Strike tension. [task EchoStrikes]
+  sabotage_stage (integer) = 0 - Current degradation level of the mallet head (0=new, 3=splintered). [task SabotagedMallet]
+  tower_shift_active (boolean) = False - Flag indicating if the Tower Gauge Shift event is occurring. [task TowerGaugeShift]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform)
+  2. SpawnKinematicBox(platform_hazard_sensor)
+  3. SpawnStaticBox(lever_base)
+  4. SpawnStaticCapsule(bell)
+  5. SpawnDynamicBox(mallet)
+  6. SpawnDynamicSphere(puck)
+  7. SpawnDynamicCapsule(counter_weight)
+
+### Event Flow
+  Mallet impact detected → ApplyImpulse to puck; SpawnKinematicBox(lever); MoveKinematic(lever, 0, impulse_force, 0)
+  Counter-weight trigger hit → ApplyAngularImpulse to counter_weight; ApplyImpulse to mallet_handle
+  Puck reaches bell height → DestroyBody(lever); DestroyBody(counter_weight); DestroyBody(bell); AwardTickets(10, 'Streak') or Engine.AwardTokens(-1, 'Soul')
+  Puck falls below threshold → DestroyBody(puck); MoveKinematic(bell, 0, -1.0, 0); SpawnDynamicSphere(puck, n
+[... output truncated ...]
+---
+## Session Event  2026-09-17T09:42:43.282756
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Initialize module-level constants, variable declarations, helper functions, and TODO anchor comments for strongman mechanics within the pre-generated skeleton - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A carnival strength game where the player swings a mallet to launch a puck through a randomized, cursed tower while managing stamina and adapting to rusted rails and shifting bells.
+
+### Declared Handles
+  ground (userdata)  Static platform ground box for player collision and shock plate sensors. [owner: Attraction, lifecycle: OnLoadStatic]
+  player (userdata)  Kinematic box representing the player character capable of applying impulse to the mallet. [owner: Attraction, lifecycle: SpawnKinematicBox]
+  mallet (userdata)  Dynamic capsule representing the heavy mallet head and handle, subject to weight modifiers. [owner: Attraction, lifecycle: SpawnDynamicCapsule]
+  lever_pivot (userdata)  Static pivot box defining the fulcrum point for the lever arm physics simulation. [owner: Attraction, lifecycle: SpawnStaticBox]
+  lever_arm (userdata)  Dynamic box representing the lever arm attached to the pivot, influenced by spring tension. [owner: Attraction, lifecycle: SpawnDynamicBox]
+  bell_sensor (userdata)  Sensor box triggering the win condition when the puck collides near the bell's position. [owner: Attraction, lifecycle: SpawnSensorBox]
+  tower_track (userdata)  Kinematic cylinder representing the vertical track with potential rust friction modifiers. [owner: Attraction, lifecycle: SpawnKinematicCylinder]
+  puck (userdata)  Dynamic sphere representing the puck being launched up the tower. [owner: Attraction, lifecycle: SpawnDynamicSphere]
+  shock_plate (userdata)  Sensor sphere on the platform that triggers player health loss if touched during wind-up. [owner: Attraction, lifecycle: SpawnSensorSphere]
+  bell_object (userdata)  Kinematic box representing the bell that shifts vertically based on curse modifiers. [owner: Attraction, lifecycle: SpawnKinematicBox]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  mallet_integrity (number) = 1.0 - Current effectiveness multiplier of the mallet head based on sabotage [task init_attraction]
+  lever_tension_base (number) = 0.5 - Randomized base tension for the counter-weight springs [task init_attraction]
+  bell_height_offset (number) = 0.0 - Current vertical offset for the Bell's Curse shifting [task init_attraction]
+  tower_gauge_active (bool) = False - Flag indicating if the Tower Gauge Shift modifier is active [task init_attraction]
+  echo_hit_count (number) = 0 - Consecutive hit count on the same spot for Echo Strikes tension [task init_attraction]
+  player_stamina (number) = 1.0 - Current stamina resource affected by shock plates and power act
+[... output truncated ...]
+---
+## Session Event  2026-09-16T21:43:50.271108
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for puck physics properties (density, elasticity), bell scoring thresholds, and scaffold state anchors (puckHandle, bellHandle, baseHandle, malletHandle, poolName, streakCount) inside the OnLoad anchor block - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A strength-testing carnival game where players swing a heavy mallet to launch a puck up a vertical tower toward a shifting bell, featuring rogue-like modifiers like rusty rails, cursed gravity, and splintering mallet heads.
+
+### Declared Handles
+  platform (userdata)  The game platform/wobble surface. [owner: Static box with wobble animation handled via periodic MoveKinematic calls if base type changed, or just a static box for Cracked Base., lifecycle: load]
+  mallet (userdata)  The heavy mallet swung by the player. [owner: Kinematic or Dynamic capsule representing the heavy swinging tool., lifecycle: load]
+  puck (userdata)  The projectile puck launched up the tower. [owner: Dynamic sphere or cylinder representing the puck to be launched., lifecycle: load]
+  lever (userdata)  The lever activated by the mallet. [owner: Kinematic cylinder or box acting as the trigger mechanism., lifecycle: load]
+  bell (userdata)  The bell target that shifts position (The Bell's Curse). [owner: Sensor or static mesh hanging from the tower., lifecycle: load]
+  trigger_zone (userdata)  Sensor to detect successful strikes. [owner: Sensor box at lever height to detect mallet impact., lifecycle: load]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  puck_height (number) = 0.0 - Current vertical position of the active puck for Tower Gauge Shift logic. [task swing_detection]
+  mallet_integrity (number) = 1.0 - Remaining mass/strength of the mallet head (0 = broken, 1 = full). [task swing_detection]
+  echo_streak (number) = 0 - Counter for consecutive hits on the same spot for Echo Strikes modifier. [task impact_detection]
+  bell_offset (number) = 0.0 - Current displacement of the bell for The Bell's Curse. [task swing_detection]
+  is_shock_active (bool) = False - Flag for Shock Plates hazard on the platform. [task swing_detection]
+  lever_tension (number) = 1.0 - Randomized multiplier for the counter-weight spring tension. [task impact_detection]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform)
+  2. SpawnKinematicBox(lever)
+  3. SpawnDynamicCapsule(mallet)
+  4. SpawnDynamicSphere(puck)
+  5. SpawnStaticSphere(bell_sensor)
+  6. SpawnSensorBox(trigger_zone)
+
+### Event Flow
+  IsActionDown('fire') → Calculate swing impulse, apply to mallet, check collision with trigger_zone, if triggered launch puck.
+  IsSensorTriggered(bell_sensor) → Register score, check for Streak Protocol eligibility, award Tickets, handle Tower Gauge Shift.
+  IsSensorTriggered(bell_sensor) AND modifiers.active('echo') → Increment echo
+[... output truncated ...]
+---
+## Session Event  2026-09-16T20:06:56.799655
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level constants for mallet mass, puck radius, lever tension, and tower height variants - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival strength game where the player swings a mallet to launch a puck up a variable tower plagued by rust, curses, and shifting physics.
+
+### Declared Handles
+  platform_base (handle)  The wobbly platform base supporting the strike zone. [owner: static_world, lifecycle: SpawnStaticBox]
+  lever_arm (handle)  The heavy lever arm the player swings (kinematic for player control or dynamic with spring forces). [owner: static_or_kinematic, lifecycle: SpawnKinematicBox]
+  strike_mallet (handle)  The heavy mallet used by the player, splintering after use in 'Sabotaged' mode. [owner: dynamic_object, lifecycle: SpawnDynamicBox]
+  game_puck (handle)  The projectile puck launched up the tower, affected by 'Rusty Rails' friction. [owner: dynamic_projectile, lifecycle: SpawnDynamicSphere]
+  tower_structure (handle)  The vertical tower containing the track and the target bell. [owner: static_tower, lifecycle: SpawnStaticCapsule]
+  target_bell (handle)  The bell sensor at the top, which shifts position via 'The Bell's Curse'. [owner: dynamic_sensor, lifecycle: SpawnSensorSphere]
+  shock_plate_zone (handle)  Zap zone on the platform for 'Shock Plates' modifier. [owner: sensor_hazard, lifecycle: SpawnSensorBox]
+  puck_pool (pool_handle)  Reusablesphere pool for spawning/respawning pucks after destroy. [owner: resource_manager, lifecycle: CreatePool]
+  mallet_pool (pool_handle)  Pool for mallets, handling 'Sabotaged Mallet' swaps. [owner: resource_manager, lifecycle: CreatePool]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_angle (number) = 0.0 - Current angular position of the lever arm. [task lever_calibration]
+  puck_height (number) = 0.0 - Current vertical position of the active puck. [task tower_assembly]
+  bell_offset (number) = 0.0 - Random displacement applied to the bell sensor. [task hazard_deployment]
+  mallet_integrity (number) = 1.0 - Health of current mallet (1.0 = new, 0.0 = splintered/skippable). [task base_construction]
+  streak_wager (number) = 0 - Amount of tokens/wagers rolled over into the streak. [task economy_hooks]
+  rhythm_countdown (number) = 1.0 - Count for Echo Strikes modifier (consecutive hits). [task hazard_deployment]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_base)
+  2. SpawnStaticCapsule(tower_structure)
+  3. SpawnKinematicBox(lever_arm)
+  4. SpawnDynamicBox(strike_mallet)
+  5. SpawnSensorSphere(target_bell)
+  6. PoolCullBelow(puck_pool)
+  7. CreatePool(puck_pool)
+  8. CreatePool(mallet_pool)
+
+### Event Flow
+  IsActionDown('power_
+[... output truncated ...]
+---
+## Session Event  2026-09-16T18:50:17.821539
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Implement module-level configuration constants, helper functions, and state variables for the Strongman attraction at the pre-declared anchor - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like strength test where the player swings a heavy mallet to launch a puck up a friction-affected tower toward a shifting bell, featuring randomized sabotage modifiers like rusty rails and wobbly bases.
+
+### Declared Handles
+  puck_handle (userdata)  The dynamic sphere representing the puck, which may be destroyed and respawned mid-game. [owner: physics_manager, lifecycle: spawned_in_OnLoad]
+  lever_handle (userdata)  The static or kinematic lever base and pivot mechanism. [owner: physics_manager, lifecycle: spawned_in_OnLoad]
+  mallet_handle (userdata)  The dynamic heavy mallet held by the player, subject to mass reduction via modifiers. [owner: physics_manager, lifecycle: spawned_in_OnLoad]
+  bell_handle (userdata)  The target sensor/sphere at the top of the tower that shifts vertically. [owner: physics_manager, lifecycle: spawned_in_OnLoad]
+  rusty_rails_handle (userdata)  Static box sensors placed along the track to simulate variable friction zones. [owner: physics_manager, lifecycle: spawned_in_OnLoad]
+  base_wobble_sensor (userdata)  A kinematic box or sphere that applies random offsets to the launch point. [owner: physics_manager, lifecycle: spawned_in_OnLoad]
+  shock_plate_sensor (userdata)  Floor sensors that trigger penalties if the player delays their swing too long. [owner: physics_manager, lifecycle: spawned_in_OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  current_streak (int) = 0 - Tracks consecutive successful swings to calculate streak multiplier. [task T-01]
+  rhythm_counter (int) = 0 - Tracks consecutive hits on the same spot for Echo Strikes. [task T-02]
+  mallet_health (float) = 100.0 - Represents the integrity of the mallet head before splintering. [task T-01]
+  tower_gauge_offset (float) = 0.0 - The random vertical shift amount applied to the bell spawn. [task T-01]
+  is_rusty_mode (bool) = False - Flag indicating if variable friction rails are active. [task T-01]
+  is_wobble_mode (bool) = False - Flag indicating if the base is offset randomly. [task T-01]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox for tower walls
+  2. SpawnStaticCylinder for the bell
+  3. SpawnStaticBox for rusty rails
+  4. SpawnKinematicBox for lever base
+  5. SpawnDynamicBox for player controller/stand
+  6. SpawnSensorBox for shock plates
+  7. SpawnSensorSphere for bell target
+  8. SpawnDynamicSphere for puck
+  9. SpawnDynamicBox for mallet
+
+### Event Flow
+  Mallet Impact Event → ApplyImpulse to puck_handle upwards; Check collision with bell_handle.
+  Puck Reaches Peak H
+[... output truncated ...]
+---
+## Session Event  2026-09-16T14:01:31.849160
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Initialize module-level constants for physics tuning (mallet mass, puck friction, spring tension) and local state variables (puck handle, swing state, score tracking, bell strike counter) in the helper-function anchor - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like strength-testing game where players swing mallets to launch pucks up a tower facing randomized obstacles like shifting bells, rusty rails, and sabotaged tools.
+
+### Declared Handles
+  malletHandle (DynamicCapsule)  The heavy mallet swingable by the player. [owner: Spawned directly, managed via impulse and damping., lifecycle: Spawn/Step/Destroy]
+  puck (DynamicSphere)  The projectile puck subject to friction and random mass modifiers. [owner: Pool managed entity., lifecycle: Pool/Spawn/Step/Destroy]
+  bell (DynamicCapsule)  The target bell that moves vertically between swings. [owner: Spawns at variable height based on 'The Bell's Curse'., lifecycle: Spawn/Step/Destroy]
+  basePlatform (StaticBox)  The ground platform potentially wobbling or containing shock plates. [owner: Static floor., lifecycle: Spawn/Step]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  isSwinging (bool) = 'false' - Tracks if mallet is currently in motion. [task swing_mechanic]
+  swingCooldown (number) = '0' - Time remaining before mallet can be swung again. [task swing_mechanic]
+  currentStreak (number) = '0' - Consecutive successful swings for Streak Protocol multiplier. [task economy_reward]
+  bellHeightOffset (number) = '0' - Current vertical shift of the bell. [task rogue_modifier]
+  platformWobbleOffset (number) = '0' - Current lateral offset of the base platform. [task rogue_modifier]
+  puckMassModifier (number) = '1.0' - Current mass multiplier of the puck. [task rogue_modifier]
+  malletDamageAccumulator (number) = '0' - Tracks cumulative damage to mallet head. [task rogue_modifier]
+  echoHitStreak (number) = '0' - Counter for consecutive hits on same spot for Echo Strikes. [task swing_mechanic]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(basePlatform)
+  2. SpawnDynamicCapsule(malletHandle)
+  3. PoolCreate(puck)
+  4. OnStep: Modify mallet velocity/damping based on modifiers
+  5. OnStep: Check puck height vs bell height
+  6. OnStep: Apply friction/randomization to puck track
+  7. OnStep: Handle bell repositioning
+  8. OnStep: Check win condition and award economy
+  9. OnStep: Check loss condition (Soul Tokens deplete)
+
+### Event Flow
+  MidwayInput.IsActionDown('fire') → ApplyImpulse(malletHandle, calculated swing force)
+  IsSensorTriggered(bell) → AwardTickets and trigger Streak Protocol
+  SoulTokens <= 0 → Trigger near-death state/loss
+
+### Pool Requirements
+  puck: 2
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak
+
+### Feature Checklist
+  - Rusty Rails (variable
+[... output truncated ...]
+---
+## Session Event  2026-09-16T12:02:26.199199
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Initialize module-level attraction constants, object pool definitions, and helper-function anchors within the pre-existing skeleton structure — attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: StrongmanStriker
+A carnival strength-testing game featuring a heavy mallet, a vertical tower with variable friction (Rusty Rails), and a bell. It implements rogue-like elements including randomized counter-weights, shifting bell heights, platform wobble, and economy hooks for Soul Tokens and Tickets via the Streak Protocol. Players must adapt to environmental hazards like Shock Plates and tower gauge shifts.
+
+### Declared Handles
+  mallet (handle)  Dynamic handle for the heavy swinging mallet. [owner: physics, lifecycle: runtime]
+  puck (handle)  Dynamic sphere for the puck launched up the tower. [owner: physics, lifecycle: runtime]
+  bell (handle)  Sensor/collider for the target bell at the tower top. [owner: physics, lifecycle: runtime]
+  tower_base (handle)  Kinematic base structure subject to wobble physics. [owner: physics, lifecycle: runtime]
+  rails (handle)  Kinematic guide rails introducing friction (Rusty Rails). [owner: physics, lifecycle: runtime]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  current_streak (number) = 0 - Current consecutive successful swing count for Streak Protocol [task 1]
+  puck_handle (handle) = 'nil' - Current active puck body handle (nil if waiting for spawn) [task 2]
+  mallet_handle (handle) = 'nil' - Current active mallet body handle [task 2]
+  is_shock_plates_active (boolean) = 'false' - Flag to track if Shock Plates hazard is currently active [task 1]
+  tower_height_offset (number) = 0 - Current vertical offset of the bell for 'Bell's Curse' [task 1]
+
+### OnLoad Registration Order
+  1. MidwayPhysics.OnStep(...)
+  2. Engine.Economy.OnTick(...)
+  3. Engine.Audio.OnPlay(...)
+  4. Engine.AwardTickets(...)
+
+### Event Flow
+  OnStep: mallet impact threshold → domain:call(midway_physics.ApplyImpulse, mallet, impact_force)
+  OnStep: puck touches bell sensor → domain:call(midway_economy.AwardTickets, engine, payout_calc)
+  OnStep: puck misses or fails to ring → domain:call(midway_physics.DestroyBody, puck)
+  OnStep: Shock Plate active → domain:call(midway_physics.ApplyImpulse, player, damage_impulse)
+  OnStep: Tower Gauge Shift condition → domain:call(midway_physics.DestroyBody, puck) AND domain:call(midway_physics.SpawnDynamicSphere, new_height)
+
+### Pool Requirements
+  bell_sensors: 1
+  rail_sections: 2
+
+### Economy Hooks: AttractionConstants.modifiers, Engine.AwardTickets, Engine.GetStreak
+
+### Feature Checklist
+  - OnStep reads AttractionConstants.modifiers every frame (never cached at load time)
+  - Economy hook: Engine.AwardTickets or Engine.AwardTokens called on win/score e
+[... output truncated ...]
+---
+## Session Event  2026-09-16T08:18:09.959080
+**Agent Assigned:** C++, C++, Lua, C++, Lua
+**User Input:** Refactor the strongman striker for correctness z following best practices for lua
+**Tools/Files Accessed:** director, file_context(C++), file_context(Lua), ledger_toc(C++), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+## Task Breakdown: Strongman Refactoring
+
+### Task 1: [C++] - Define gameplay constants and helper functions for Strongman mechanics (puck mass scaling, rust friction table, weight variants, counter-weight spring tension variance) in module-level state
+#### DependsOn: None
+#### Inputs: None
+#### Outputs: None
+#### Hooks: OnLoadStatic|OnLoad|OnStep|OnUnload
+#### File: attractions/strongman/strongman_constants.h
+
+### Task 2: [Lua] - Populate OnLoadStatic() by spawning the permanent booth geometry, lever assembly with kinematic counter-weight spring support, and static platform sensors for shock plates using SpawnStaticBox, SpawnStaticCapsule, and SpawnSensorBox
+#### DependsOn: Task 1
+#### Inputs: None
+#### Outputs: StrongmanBoothHandle, LeverAssemblyHandle, ShockPlateSensors
+#### Hooks: OnLoadStatic
+#### File: attractions/strongman/skeeball.lua
+
+### Task 3: [Lua] - Initialize OnLoad() by creating the puck object pool, mallet impulse generator, bell sensor, and registering MidwayPhysics.OnStep callback with game state tracking variables
+#### DependsOn: Task 2
+#### Inputs: None
+#### Outputs: PuckPoolHandle, MalletImpulseGenerator, BellSensorHandle
+#### Hooks: OnLoad
+#### File: attractions/strongman/skeeball.lua
+
+### Task 4: [Lua] - Implement OnStep() physics loop to apply variable friction to puck via SetFriction, recalculate mallet rebound impulse accounting for counter-weight tension, update bell height via MoveKinematic, and read AttractionConstants.modifiers for active game rules each frame
+#### DependsOn: Task 3
+#### Inputs: None
+#### Outputs: None
+#### Hooks: OnStep
+#### File: attractions/strongman/skeeball.lua
+
+### Task 5: [Lua] - Wire input handling to trigger mallet swings via ApplyImpulse on lever when IsActionDown("fire") is true, and manage mallet head splintering via SetMass reduction after consecutive hits
+#### DependsOn: Task 4
+#### Inputs: None
+#### Outputs: None
+#### Hooks: OnStep
+#### File: attractions/strongman/skeeball.lua
+
+### Task 6: [Lua] - Implement bell trigger logic on IsSensorTriggered(bell_handle), evaluate win/fail conditions based on puck peak height, and award economy rewards via Engine.AwardTickets or Engine.AwardTokens using Engine.GetStreak() as streak multiplier
+#### DependsOn: Task 5
+#### Inputs: None
+#### Outputs: None
+#### Hooks: OnStep|OnUnload
+#### File: attractions/strongman/skeeball.lua
+
+### Task 7: [Lua] - Add rogue-like event triggers for Rusty Rails (SetFriction variance), Weighted Puck (SetMass increase), and Tower Gauge Shift (DestroyBody old puck, SpawnDynamicSphere at new height) during
+[... output truncated ...]
+---
+## Session Event  2026-09-15T21:35:03.371793
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define gameplay constants and helper functions for Strongman mechanics (puck mass scaling, rust friction table, weight variants, counter-weight spring tension variance) in module-level state - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A rogue-like carnival strength game where a player swings a mallet to launch pucks up a vertical tower affected by variable friction, shifting bells, wobble, and sabotaged mechanics.
+
+### Declared Handles
+  puck_handle (userdata)  Current active puck object being launched; returned from pool or created. [owner: player, lifecycle: transient]
+  bell_handle (userdata)  Dynamic sensor/sphere at tower top that moves vertically based on 'The Bell's Curse'. [owner: game, lifecycle: persistent]
+  lever_handle (userdata)  Kinematic box representing the swing lever; triggers impulse on contact. [owner: game, lifecycle: persistent]
+  platform_handle (userdata)  Static or kinematic base plate subject to random 'Cracked Base' wobble offsets. [owner: game, lifecycle: persistent]
+  mallet_handle (userdata)  Dynamic mallet held by player; mass reduces if 'Sabotaged'. [owner: player, lifecycle: transient]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  puck_height (number) = 0.0 - Tracks current active puck vertical position [task launch_puck]
+  current_mallet_mass (number) = 10.0 - Effective mass of mallet, reduced by sabotage [task sabotaged_mallet]
+  bell_target_y (number) = 10.0 - Target Y coordinate for bell movement [task shift_tower]
+  is_streak_active (boolean) = False - Flags if player is rolling over wager [task trigger_bell]
+  echo_hit_count (number) = 0 - Consecutive hit counter for echo strikes [task launch_puck]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox for platform_handle
+  2. SpawnDynamicBox for lever_handle
+  3. SpawnStaticSphere for bell_handle (initial pos)
+  4. CreatePool('puck', 3, 0)
+  5. Acquire first puck and set mass/friction from modifiers
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to lever_handle to launch puck via physics interaction
+  IsSensorTriggered(bell_handle) → Award Tickets, check streak, reset bell, destroy old puck, spawn new puck
+  Engine.Modifier('tower_gauge_shift') → MoveKinematic bell_handle to new height, DestroyBody old puck, PoolAcquire new puck
+  Engine.Modifier('sabotaged_mallet') → SetMass(mallet_handle, reduced_mass)
+
+### Pool Requirements
+  puck: 3
+
+### Economy Hooks: Engine.AwardTickets, Engine.GetStreak, Engine.AwardTokens, ENGINE_MOD_*
+
+### Feature Checklist
+  - Variable friction via SetFriction
+  - Random bell height movement
+  - Platform wobble simulation
+  - Mallet mass degradation
+  - Streak Protocol logic integration
+  - Dynamic puck respawn on tower gauge shift
+
+
+## Phase 4: Mesh Execution (11 tasks)
+
+
+### Phase 5: Conflict Res
+[... output truncated ...]
+---
+## Session Event  2026-09-15T19:38:30.732906
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Define module-level state variables for mallet handle, lever pivot, and tower gauge physics, plus helper function anchors for spawning, resetting, and destroying bodies inside the OnLoadStatic and OnLoad hooks - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x2)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman Striker
+A rogue-like strength game where a player swings a heavy mallet to launch a puck up a tower towards a shifting bell, featuring randomized rails, wobbling bases, and penalty zones.
+
+### Declared Handles
+  platform_base (userdata)  The cracked base plate with shock plates. [owner: SpawnStaticBox, lifecycle: global]
+  mallet_handle (userdata)  The static cylinder the player holds. [owner: SpawnStaticCylinder, lifecycle: global]
+  mallet_head (userdata)  The dynamic mallet head that splinters and loses mass. [owner: SpawnDynamicBox, lifecycle: global]
+  counter_spring (userdata)  The kinetic counter-weight that creates inconsistent rebound. [owner: SpawnKinematicCapsule, lifecycle: global]
+  puck_possess (userdata)  The puck currently in play (weighted variant possible). [owner: SpawnDynamicSphere, lifecycle: global]
+  bell_target (userdata)  The cursed bell that shifts height between swings. [owner: SpawnDynamicCapsule, lifecycle: global]
+  rusty_rail_sensor (userdata)  Sensor detecting friction modifiers on the track. [owner: SpawnSensorCylinder, lifecycle: global]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  mallet_mass (number) = 1.0 - Current effective mass of the mallet head (decreases when splintered). [task init]
+  puck_mass (number) = 0.5 - Current mass of the active puck (increased by modifiers). [task init]
+  bell_height_offset (number) = 0.0 - Current vertical displacement of the bell from its base position. [task init]
+  swing_cooldown (number) = 0.0 - Time elapsed since last swing (for shock plate logic). [task init]
+  echo_hit_count (number) = 0 - Consecutive hits on same spot for Echo Strikes multiplier. [task init]
+  is_splintering (boolean) = False - Flag indicating if the mallet is currently losing integrity. [task init]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(platform_base)
+  2. SpawnStaticCylinder(mallet_handle)
+  3. SpawnDynamicBox(mallet_head)
+  4. SpawnKinematicCapsule(counter_spring)
+  5. SpawnDynamicCapsule(bell_target)
+  6. SpawnSensorCylinder(rusty_rail_sensor)
+  7. SpawnDynamicSphere(puck_possess)
+  8. PoolReturn(puck_possess)
+
+### Event Flow
+  OnLoad → Initialize all static handles; set mallet_head mass to 1.0; set puck mass based on difficulty modifier.
+  MidwayInput.IsActionDown('fire') → ApplyImpulse to mallet_handle downward; reset puck position if bell has shifted; handle counter-spring collision.
+  puck_possess touches bell_target → AwardTickets based on Streak Protocol; destroy puck_possess; spawn new puck at bell height; reset mallet.
+  IsSensor
+[... output truncated ...]
+---
+## Session Event  2026-09-15T16:40:26.413139
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate module-level constants (tower dimensions, mallet properties, puck mass variants, sensor thresholds) and helper functions (rusty friction lookup, weight penalty calculation) at the designated TODO anchor, then re-insert the `-- TODO: Fill module-level constants and helpers` marker - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A physics-based carnival game where the player swings a mallet to launch a puck up a tower toward a moving bell, featuring randomized friction, wobble, and sabotage mechanics.
+
+### Declared Handles
+  static_platform (userdata)  The cracked base platform with shock plate sensor and wobble kinematic properties. [owner: attraction, lifecycle: spawn_once]
+  dynamic_mallet (userdata)  The heavy mallet head and handle, spawning via pool, with dynamic mass and damping. [owner: player_controller, lifecycle: pool_acquire]
+  dynamic_puck (userdata)  The puck traveling up the track, subject to variable friction and tower gauge shifts. [owner: game_play, lifecycle: pool_acquire]
+  kinematic_bell (userdata)  The target bell at the tower top, kinematically moved up/down via TrackCull or custom logic. [owner: game_play, lifecycle: spawn_once]
+  sensor_clock (userdata)  Time-based sensor to trigger Shock Plates on the platform. [owner: game_play, lifecycle: spawn_once]
+  sensor_gate (userdata)  Height sensor at the tower top to detect puck arrival and resolve streak wins. [owner: game_play, lifecycle: spawn_once]
+  static_tower (userdata)  The main tower structure acting as a static collider. [owner: attraction, lifecycle: spawn_once]
+  sensor_rails (userdata)  Rusty Rails sensor box defining the track boundaries for friction calculation. [owner: attraction, lifecycle: spawn_once]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  current_streak (integer) = 0 - Tracks consecutive successful swings for the Streak Protocol multiplier. [task win_condition]
+  mallet_integrity (integer) = 100 - Health of the mallet head; decreases with 'Sabotaged Mallet' events. [task puck_respawn]
+  bell_elevation_offset (number) = 0.0 - Randomized vertical offset for the kinematic bell between swings. [task puck_respawn]
+  is_shock_active (boolean) = False - Flag to prevent player input or punish for standing too long near shock plates. [task hazard_trigger]
+  track_friction_coeff (number) = 0.15 - Variable friction coefficient updated by 'Rusty Rails' events. [task puck_respawn]
+  last_hit_rhythm_tick (number) = 0.0 - Timestamp of last hit to enable 'Echo Strikes' rhythm mechanics. [task puck_respawn]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(static_platform)
+  2. SpawnStaticMesh(static_tower)
+  3. SpawnStaticBox(sensor_rails)
+  4. SpawnSensorBox(sensor_clock)
+  5. SpawnSensorSphere(sensor_gate)
+  6. SpawnStaticCapsule(kinematic_bell)
+  7. CreatePool(dynamic_mallet)
+  8. CreatePool(dynamic_puck)
+
+### Event Flow
+  M
+[... output truncated ...]
+---
+## Session Event  2026-09-15T14:53:54.864756
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate module-level state constants, define local geometry tables for the Strongman base, lever, and tower, and initialize the launch puck object pool using `MidwayPhysics.CreatePool` - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman Striker
+A rogue-like carnival game where a player swings a heavy mallet to launch a puck up a tower with variable friction, wobbly platforms, and a shifting bell, utilizing a dual-currency economy and a streak-based risk mechanic.
+
+### Declared Handles
+  mallet (Handle)  Kinematic box representing the heavy mallet swung by the player. [owner: player_controlled_kinematic, lifecycle: spawned_once]
+  puck_base (Handle)  Dynamic sphere representing the puck; spawned fresh every turn to simulate 'Tower Gauge Shift'. [owner: dynamic_body_reused, lifecycle: respawned_each_turn]
+  tower_rails (Handle)  Static cylinder/sensor defining the vertical track, used to apply 'Rusty Rails' friction logic. [owner: static_sensor_with_friction, lifecycle: spawned_once]
+  bell (Handle)  Kinematic capsule representing the bell, which shifts vertically via 'The Bell's Curse'. [owner: dynamic_kinematic, lifecycle: respawned_at_random_height]
+  platform_wobble (Handle)  Kinematic box representing the 'Cracked Base' that moves slightly to offset aim. [owner: kinematic_box, lifecycle: spawned_once]
+  spring_lever (Handle)  Kinematic capsule acting as the counter-weight spring with randomized tension. [owner: kinematic_capsule, lifecycle: spawned_once]
+  shock_plate (Sensor)  Static sensor detecting if the player stands too long on the platform. [owner: static_sensor, lifecycle: spawned_once]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  current_streak (int) = 0 - Tracks consecutive successful swings for the Streak Protocol multiplier. [task init_physics]
+  current_wager_tokens (int) = 0 - Accumulated Soul Tokens wagered in the current streak. [task init_physics]
+  bell_target_y (float) = 0.0 - Current vertical target height for the bell, randomized by Tower Gauge Shift. [task init_physics]
+  shock_plate_timeout_timer (float) = 0.0 - Time elapsed since player entered shock plate sensor, triggers zaps if exceeded. [task init_physics]
+  puck_mass_modifier (float) = 1.0 - Multiplier for puck mass when Weighted Puck variant is active. [task init_physics]
+  spring_tension_rand (float) = 0.0 - Randomized value for counter-weight spring tension affecting mallet rebound. [task init_physics]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox/BoxForPlatform (platform_base)
+  2. SpawnKinematicBox (platform_wobble)
+  3. SpawnStaticCylinder (tower_rails)
+  4. SpawnSensorSphere (shock_plate)
+  5. SpawnDynamicSphere (puck_base)
+  6. SpawnKinematicCapsule (bell)
+  7. SpawnKinematicCapsule (spring_lever)
+  8. SpawnKinematicBox (mallet)
+  9. C
+[... output truncated ...]
+---
+## Session Event  2026-09-15T10:41:31.712979
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate module-level state variables, constants, and helper function anchors for the Strongman attraction lifecycle (puck handle, tower sensor handle, lever sensor handle, score target, and gameplay flags) - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A carnival strength-testing game where a heavy mallet slams down to launch a puck up a tower affected by variable friction, shifting targets, and platform wobbles.
+
+### Declared Handles
+  ground_plane (userdata)  Static cylinder defining the base of the game platform. [owner: World, lifecycle: static]
+  cracked_base_offset (userdata)  Kinematic box representing the platform wobble offset. [owner: World, lifecycle: dynamic]
+  mallet (userdata)  Dynamic box acting as the player-controlled swinging hammer. [owner: Player, lifecycle: dynamic]
+  spring_rod (userdata)  Static cylinder for the counter-weight spring mechanism. [owner: World, lifecycle: static]
+  puck (userdata)  Dynamic sphere representing the puck traveling up the tower. [owner: Player, lifecycle: dynamic]
+  rusty_rails_sensor (userdata)  Sensor cylinder defining the track boundaries to apply friction. [owner: World, lifecycle: sensor]
+  bell_target (userdata)  Kinematic sphere representing the target bell height. [owner: World, lifecycle: kinematic]
+  impact_zone (userdata)  Sensor box at the impact point to trigger the launch. [owner: World, lifecycle: sensor]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.0 - Timer to prevent mallet reactivation immediately after impact. [task handle_input]
+  current_puck_height (number) = 0.0 - Vertical position of the current active puck. [task manage_economy]
+  streak_wager_amount (number) = 1.0 - Current wagered Soul Tokens for the streak protocol. [task manage_economy]
+  mallet_health (number) = 1.0 - Current integrity of the mallet (1.0 = full, 0.0 = splintered). [task handle_input]
+  bell_shift_delta (number) = 0.0 - Random offset for bell position after launch. [task calculate_launch]
+  platform_wobble_offset (table) = {} - Current X/Z offset for the cracked base platform. [task calculate_launch]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(ground_plane)
+  2. SpawnKinematicBox(cracked_base_offset)
+  3. SpawnDynamicBox(mallet)
+  4. SpawnStaticCylinder(spring_rod)
+  5. SpawnDynamicSphere(puck)
+  6. SpawnSensorCylinder(rusty_rails_sensor)
+  7. SpawnKinematicSphere(bell_target)
+  8. SpawnSensorBox(impact_zone)
+  9. SetGravityFactor(mallet, 1)
+  10. SetGravityFactor(puck, 1)
+  11. SetGravityFactor(cracked_base_offset, 0)
+  12. SetFriction(mallet, 0)
+  13. SetRestitution(mallet, 0.1)
+
+### Event Flow
+  MidwayInput.IsActionDown('fire') → ApplyImpulse downward to mallet_handle via spring_rod collision or direct calculation
+  IsSensorTriggered(impact_zone) →
+[... output truncated ...]
+---
+## Session Event  2026-09-15T08:55:14.618067
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate module-level constants, helper functions, and TODO anchor markers for Strongman striker logic - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman Striker
+A rogue-like strength game where the player swings a variable-tension mallet to launch a weighted puck up a frictional tower, adapting to sabotaged rails, shifting bells, and cracked platform wobbles.
+
+### Declared Handles
+  player_box (userdata)  Static collider representing the player's standing position. [owner: Player input proxy, lifecycle: static]
+  mallet_kinematic (userdata)  Kinematic body representing the heavy hammer swung by the player. [owner: Input driven physics body, lifecycle: dynamic]
+  puck_dynamic (userdata)  Dynamic sphere representing the puck subject to friction and mass modifiers. [owner: Projectile body, lifecycle: dynamic]
+  lever_sensor (userdata)  Sensor cylinder at the tower base to detect puck impact. [owner: Trigger for bell activation, lifecycle: dynamic]
+  bell_sensor (userdata)  Sensor at the variable bell position to register a hit. [owner: Win condition trigger, lifecycle: dynamic]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  swing_cooldown (number) = 0.5 - Seconds until player can swing again after impact [task swing_1]
+  current_friction (number) = 0.0 - Current friction coefficient from modifiers [task Rusty Rails]
+  current_puck_mass (number) = 20.0 - Current mass of the puck in kg [task Weighted Puck]
+  bell_target_y (number) = 15.0 - Current Y-height of the bell target [task Bell's Curse]
+  platform_wobble_offset (number) = 0.0 - Current lateral offset of the base platform [task Cracked Base]
+  streak_active (boolean) = False - Flag indicating if player is in Streak Protocol mode [task Economy]
+  mallet_integrity (number) = 100.0 - Health of the mallet head (0 = splintered) [task Sabotaged Mallet]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(player_box)
+  2. SpawnKinematicBox(mallet_kinematic)
+  3. SpawnDynamicSphere(puck_dynamic)
+  4. SpawnStaticCapsule(lever_sensor_base)
+  5. SpawnSensorSphere(bell_sensor)
+  6. CreatePool('puck_pool', 5, 5, params)
+  7. SetupModifierReaders()
+
+### Event Flow
+  OnStep called → Check Input: IsActionDown('fire') -> ApplyImpulse to mallet_kinematic
+  OnStep called → Read modifiers: friction, puck_mass, bell_height, platform_wobble
+  IsSensorTriggered(bell_sensor) → AwardTickets; Check Streak Protocol; MoveKinematic(bell_sensor) to new height if active
+  IsSensorTriggered(lever_sensor_base) → Check puck health; if splintered, destroy puck_pool instance and swap
+  OnStep called → MoveKinematic(lever_sensor_base) to simulate platform wobble if cracked
+
+### Pool Requirements
+  puck_pool: 5
+
+### Economy Hooks: Engine.
+[... output truncated ...]
+---
+## Session Event  2026-09-15T07:28:37.700124
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Declare all module-level constants for mallet dimensions, puck mass, tower geometry, and helper function anchors for swing application, score calculation, and friction logic - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x1)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A roguelike strength-testing attraction where players swing heavy mallets to launch pucks toward a shifting bell, featuring randomized modifiers like rusty rails, cracked bases, and sabotaged mallets.
+
+### Declared Handles
+  tower_base (SpawnStaticCylinder)  The static vertical track cylinder for the puck. [owner: Attraction, lifecycle: OnLoad]
+  bell_spring (SpawnDynamicCapsule)  The kinematic bell with a spring force (randomized tension) at the tower top. [owner: Attraction, lifecycle: OnLoad]
+  puck_handle (Pool)  Reused puck handles for the projectiles. [owner: Attraction, lifecycle: OnLoad/OnStep]
+  mallet_handle (Pool)  Reused mallet handles for the player's strikes. [owner: Attraction, lifecycle: OnLoad/OnStep]
+  crack_sensor (SpawnSensorBox)  Sensor for the cracked base wobble modifier. [owner: Attraction, lifecycle: OnLoad]
+  echo_hit_zone (SpawnSensorSphere)  Sensor zone for the Echo Strikes rhythm modifier. [owner: Attraction, lifecycle: OnLoad]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  puck_streak (number) = 0 - Counter for consecutive hits on the same spot (Echo Strikes). [task T04_Safety]
+  bell_offset_timer (number) = 0 - Timer for randomized bell shift duration. [task T03_Ring]
+  mallet_durability (number) = 100 - Current integrity of the active mallet (100% to 0%). [task T01_Swing]
+  active_echo_bonus (number) = 0 - Current tension multiplier from rhythm hits. [task T02_Launch]
+
+### OnLoad Registration Order
+  1. SpawnStaticCylinder(tower_base, ...)
+  2. SpawnDynamicCapsule(bell_spring, ...)
+  3. SpawnSensorBox(crack_sensor, ...)
+  4. SpawnSensorSphere(echo_hit_zone, ...)
+  5. CreatePool('puck_handle', 4, 1)
+  6. CreatePool('mallet_handle', 2, 1)
+
+### Event Flow
+  Input.IsActionDown('fire') → PoolAcquire(mallet_handle), Calculate swing vector, ApplyImpulse to mallet, If mallet hits puck: Calculate launch velocity, SpawnDynamicCapsule(puck), ApplyImpulse to puck.
+  IsSensorTriggered(crack_sensor) → Randomly offset target Z position of the puck or bell (Cracked Base modifier).
+  IsSensorTriggered(echo_hit_zone) → Increment echo_streak counter; If streak > 0 and puck launches, add tension modifier.
+  GetPosition(bell_spring) > threshold → AwardTickets(Engine.GetStreak(), 'Bell Rung'), AwardTokens(100, 'Bell Rung'), Reset streak.
+  Engine.GetTokens() == 0 → End streak, forfeit wagered Tickets.
+
+### Pool Requirements
+  puck_handle: 4
+  mallet_handle: 2
+
+### Economy Hooks: Engine.AwardTickets, Engine.AwardTokens, Engine.GetStreak, Engine.GetTokens
+
+### Feature Checklist
+ 
+[... output truncated ...]
+---
+## Session Event  2026-09-15T00:50:47.518501
+**Agent Assigned:** Lua, Lua, Lua, Lua, Lua
+**User Input:** <execution_environment>
+  <system_directives>
+    You are operating within an isolated expert domain. Focus compilation strictly on the target subtask scope below.
+  </system_directives>
+  <macro_invariants>
+    i want you to implement a new lua game module for the deaths door mechanic.  try to make it fully feature complete (as much as possible without adding new features to the engine yet like streak protocal)  i just want to test your capabilities since i've upgraded.  refer to the GDD and build the strongman striker
+  </macro_invariants>
+  <target_subtask_scope>
+    Populate the module-level state anchor with local table constants for difficulty tiers, physics tuning (friction/restitution), and bell mechanics parameters - attractions/strongman/strongman.lua
+  </target_subtask_scope>
+</execution_environment>
+
+INSTRUCTION: Implement ONLY the functionality defined inside <target_subtask_scope> while adhering strictly to <macro_invariants>.
+**Tools/Files Accessed:** director, file_context(Lua), ledger_toc(Lua), review (x3)
+**Final Output:**
+
+## Phase 1 & 2: Autonomic Workspace Discovery
+## Active Repository Topology
+Registered C++ Implementation Symbols (internal engine layer  NOT gameplay APIs, do NOT reference in feature analysis): BodyCreationSettings, BodyID, BodyManager, BroadPhaseLayer, DebugRenderer, IslandBuilder, JPH_EXPORT, LargeIslandSplitter, SoftBodyCreationSettings, StateRecorder, StreamIn, StreamOut, TwoBodyConstraint
+
+[SYSTEM KERNEL: Essential documentation and module implementations are available via dynamic paging. Use your strict <invoke_kernel> XML tools to pre-mount reference blocks securely.]
+
+## Project Structure (relevant directories)
+
+### GDD/
+  - Midway_to_Nowhere_Master_GDD_v19.md
+
+### assets/textures/
+  - environment/
+  - ui/
+
+### attractions/
+  - booth_shared.lua
+  - README.md
+  - _REFERENCE/
+  - _shared/
+  - coin_cascade/
+  - crumblingfacade/
+  - game/
+  - plinko/
+  - skeeball/
+  - strongman/
+
+### docs/
+  - api_index.md
+  - attraction_specs.md
+  - BOOTH_DIAGNOSTICS_QUICK_REF.md
+  - BOOTH_SPAWN_DIAGNOSTICS.md
+  - box2d_api.md
+  - completed_features.md
+  - cpp17_api.md
+  - engine_lua_bridge_contract.md
+  - fetch_api_docs.py
+  - index.md
+  - ... (20 more)
+  - .pipeline_journal/
+  - __pycache__/
+  - _raw/
+  - memory/
+
+### src/
+  - AttractionManager.cpp
+  - AttractionManager.h
+  - DebugRenderer.cpp
+  - DebugRenderer.h
+  - DevConsole.cpp
+  - DevConsole.h
+  - EconomyManager.cpp
+  - EconomyManager.h
+  - Engine.cpp
+  - Engine.h
+  - ... (11 more)
+  - imgui_backends/
+
+
+
+## Phase 3: Director - Task Decomposition
+
+
+## 🏗 Attraction Design Document
+## 🎯 Attraction Design: Strongman High Striker
+A vertical slingshot arcade game where the player times swings on a randomized lever to launch a puck through shifting targets against friction, sabotage, and wobble modifiers.
+
+### Declared Handles
+  world_anchor (userdata)  Static anchor for game entities [owner: Module Root, lifecycle: static]
+  base_kinematic (userdata)  Wobbly platform at the bottom [owner: Physics, lifecycle: dynamic]
+  mallet (userdata)  Heavy swinging head (DynamicBox) [owner: Physics, lifecycle: dynamic]
+  mallet_handle_kin (userdata)  Pivot handle for mallet swing [owner: Physics, lifecycle: kinematic]
+  lever_cylinder (userdata)  Pivoting lever arm with spring tension [owner: Physics, lifecycle: dynamic]
+  puck (userdata)  Target object launched by lever [owner: Physics, lifecycle: dynamic]
+  bell_sensor (userdata)  Win condition sensor at tower top [owner: Physics, lifecycle: dynamic]
+  rusted_track (userdata)  Friction modifier cylinder [owner: Physics, lifecycle: dynamic]
+  shock_plate (userdata)  Timer sensor for shock hazards [owner: Physics, lifecycle: sensor]
+
+### Module State Variables (declared at module root by the skeleton builder)
+  lever_rotation (number) = '0' - Current angle of the lever in radians [task swing_pivot]
+  spring_tension (number) = '0.5' - Randomized force multiplier for lever return [task swing_pivot]
+  base_wobble_offset (number) = '0' - Offset applied to base position per frame [task base_wobble]
+  shock_timer (number) = '0' - Time remaining before shock plate activates [task shock_timer]
+  bell_target_y (number) = '10' - Vertical position of the bell sensor [task win_condition]
+  track_friction_coeff (number) = '0' - Friction value if rusty rails active [task friction_apply]
+  swing_cooldown (number) = '0' - Time since last swing to prevent spamming [task swing_pivot]
+
+### OnLoad Registration Order
+  1. SpawnStaticBox(world_anchor)
+  2. SpawnKinematicBox(base_kinematic)
+  3. SpawnDynamicBox(mallet)
+  4. SpawnKinematicBox(mallet_handle_kin)
+  5. SpawnDynamicCylinder(lever_cylinder)
+  6. SpawnDynamicSphere(puck)
+  7. SpawnDynamicBox(rusted_track)
+  8. SpawnDynamicCapsule(bell_sensor)
+  9. SpawnSensorBox(shock_plate)
+
+### Event Flow
+  IsActionDown('fire') → ApplyImpulse to lever_cylinder via handle_kinematic
+  IsSensorTriggered(bell_sensor) → Engine.AwardTokens(100, 'Success'), Engine.DestroyBody(puck), Engine.DestroyBody(lever_cylinder), Eng
+[... output truncated ...]
+---
 ## Session Event  2026-09-14T11:20:09.082333
 **Agent Assigned:** Lua, Lua, Lua, Lua, Lua
 **User Input:** <execution_environment>

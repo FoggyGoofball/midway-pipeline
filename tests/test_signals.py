@@ -29,6 +29,15 @@ class TestSignalParsing:
         assert len(signals) >= 1
         assert signals[0]["type"] == "VETO"
 
+    def test_extract_ambiguity_signal(self):
+        """AMBIGUITY format: [AMBIGUITY:target:what is underspecified]."""
+        text = "[AMBIGUITY:Director:scoring bands for the bell are not specified]"
+        signals = extract_signals(text)
+        assert len(signals) >= 1
+        assert signals[0]["type"] == "AMBIGUITY"
+        assert signals[0]["target"] == "Director"
+        assert "scoring bands" in signals[0]["content"]
+
     def test_extract_fetch_signal_returns_empty(self):
         """FETCH is deprecated  superseded by PagingKernel <invoke_kernel> schema.
         Legacy FETCH pattern key is removed from SIGNAL_PATTERNS.

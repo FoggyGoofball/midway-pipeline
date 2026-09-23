@@ -54,43 +54,23 @@ os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 os.environ["TORCH_CUDNN_DETERMINISTIC"] = "1"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DATASET_PATH = os.path.join(SCRIPT_DIR, "paging_lora_dataset.jsonl")
-DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "lora_output")
 
-# Cartridge-specific defaults
-CARTRIDGE_DATASET_PATH = os.path.join(SCRIPT_DIR, "midway_lora_dataset.jsonl")
-CARTRIDGE_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "lora_output_cartridge")
-
-# -- Hyperparameters ------------------------------------------------------
-BASE_MODEL_NAME = "unsloth/Qwen2.5-Coder-7B"
-
-LORA_R = 16
-LORA_ALPHA = 32
-LORA_DROPOUT = 0
-
-# ---------------------------------------------------------------------------
-# LOCKED QLoRA hyperparameters (16 GB VRAM constraint — DO NOT MODIFY).
-#   load_in_4bit                = True           (enforced at load time)
-#   r                           = 16             (LORA_R)
-#   per_device_train_batch_size = 2              (TRAIN_BATCH_SIZE)
-#   gradient_accumulation_steps = 4              (GRADIENT_ACCUM_STEPS)
-#   optim                       = "adamw_8bit"   (TrainingArguments)
-#   use_gradient_checkpointing  = "unsloth"      (enforced at load time)
-# ---------------------------------------------------------------------------
-# max_seq_length is NEVER hardcoded — it is computed dynamically from the
-# longest training item (see compute_dynamic_max_seq_length).  Allocating a
-# fixed 4096/8192 window wastes VRAM on padded empty tokens.
-MAX_SEQ_LENGTH_FLOOR = 512
-MAX_SEQ_LENGTH_CEILING = 32768  # native window of the base model
-
-LEARNING_RATE = 2e-5
-WARMUP_STEPS = 50
-NUM_EPOCHS = 3
-
-TRAIN_BATCH_SIZE = 2
-GRADIENT_ACCUM_STEPS = 4
-SAVE_STEPS = 500
-LOGGING_STEPS = 25
+# -- Configuration (single source of truth: lora_config.py) ---------------
+# Every tunable is imported from lora_config so future changes are one-line
+# edits there, not scattered constants here.
+from lora_config import (
+    BASE_MODEL_NAME,
+    PAGING_DATASET as DEFAULT_DATASET_PATH,
+    OUTPUT_DIR as DEFAULT_OUTPUT_DIR,
+    CARTRIDGE_DATASET as CARTRIDGE_DATASET_PATH,
+    CARTRIDGE_OUTPUT_DIR,
+    LORA_R, LORA_ALPHA, LORA_DROPOUT, LORA_TARGET_MODULES,
+    MAX_SEQ_LENGTH_FLOOR, MAX_SEQ_LENGTH_CEILING,
+    LEARNING_RATE, WARMUP_STEPS, NUM_EPOCHS,
+    TRAIN_BATCH_SIZE, GRADIENT_ACCUM_STEPS, SAVE_STEPS, LOGGING_STEPS,
+    LOAD_IN_4BIT, USE_GRADIENT_CHECKPOINTING,
+    resolve_train_on_inputs,
+)
 
 
 # -- Dataset helpers ------------------------------------------------------
@@ -115,6 +95,35 @@ def load_and_format_dataset(path: str) -> List[Dict]:
     return samples
 
 
+# Qwen2.5-Coder ships WITHOUT a chat_template; apply the standard Qwen ChatML
+# template so tokenizer.apply_chat_template() works for both measurement and
+# loss masking. Centralized so the measurement tokenizer and the trainer
+# tokenizer use the exact same template.
+_CHATML_TEMPLATE = (
+    "{% for message in messages %}"
+    "{% if message['role'] == 'system' %}"
+    "<|im_start|>system\n{{ message['content'] }}<|im_end|>\n"
+    "{% elif message['role'] == 'user' %}"
+    "<|im_start|>user\n{{ message['content'] }}<|im_end|>\n"
+    "{% elif message['role'] == 'assistant' %}"
+    "<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n"
+    "{% endif %}"
+    "{% endfor %}"
+)
+
+
+def _ensure_chat_template(tokenizer) -> None:
+    """Set the ChatML template if the tokenizer lacks one (idempotent)."""
+    if getattr(tokenizer, "chat_template", None) is None:
+        tokenizer.chat_template = _CHATML_TEMPLATE
+        print("  [tokenizer] no chat_template found - applied Qwen ChatML.")
+
+
+# NOTE: No custom data collator here. Loss masking is done at TOKENIZATION
+# time (see [5/5]) by pre-computing labels -- custom collators fight Unsloth's
+# internal tokenizer and silently zero out the loss (loss=0, grad_norm=0).
+
+
 def compute_dynamic_max_seq_length(
     samples: List[Dict],
     tokenizer,
@@ -131,6 +140,7 @@ def compute_dynamic_max_seq_length(
     the EXACT length of the longest one (rounded up to ``multiple_of`` for GPU
     alignment, clamped to [floor, ceiling]).
     """
+    _ensure_chat_template(tokenizer)
     lengths: List[int] = []
     for sample in samples:
         messages = sample.get("messages")
@@ -197,6 +207,18 @@ def parse_args():
         default=None,
         help=f"Override LEARNING_RATE (default: {LEARNING_RATE})",
     )
+    parser.add_argument(
+        "--train-on-inputs",
+        choices=["auto", "true", "false"],
+        default="auto",
+        help="Loss-mask policy: auto (infer from dataset filename), true (full sequence), false (completion-only)",
+    )
+    parser.add_argument(
+        "--save-steps",
+        type=int,
+        default=None,
+        help=f"Override SAVE_STEPS (default: {SAVE_STEPS})",
+    )
     return parser.parse_args()
 
 
@@ -217,6 +239,7 @@ def main():
     # Override hyperparams from env (for trainer server) or CLI
     num_epochs = args.epochs or int(os.environ.get("LORA_OVERRIDE_EPOCHS", NUM_EPOCHS))
     learning_rate = args.lr or float(os.environ.get("LORA_OVERRIDE_LR", LEARNING_RATE))
+    save_steps = args.save_steps or int(os.environ.get("LORA_OVERRIDE_SAVE_STEPS", SAVE_STEPS))
 
     mode_name = "Cartridge API" if args.cartridge else "Paging Protocol"
     print("=" * 72)
@@ -226,10 +249,19 @@ def main():
     print(f"  Output:     {output_dir}")
     print(f"  Epochs:     {num_epochs}")
     print(f"  LR:         {learning_rate}")
-    if args.cartridge:
-        print("  Loss mask:  train_on_inputs=true (full sequence, factual API knowledge)")
+    # Resolve the loss-mask policy (auto -> from dataset filename, else explicit).
+    if args.train_on_inputs == "true":
+        train_on_inputs = True
+    elif args.train_on_inputs == "false":
+        train_on_inputs = False
     else:
-        print("  Loss mask:  response template only (train_on_inputs=false)")
+        train_on_inputs = resolve_train_on_inputs(dataset_path)
+
+    print(
+        "  Loss mask:  "
+        + ("full sequence (train_on_inputs=true)" if train_on_inputs
+           else "assistant-only (completion-only)")
+    )
     print("=" * 72)
 
     # Step 1: Load dataset ------------------------------------------------
@@ -275,28 +307,14 @@ def main():
         model_name=BASE_MODEL_NAME,
         max_seq_length=max_seq_length,
         dtype=None,
-        load_in_4bit=True,
+        load_in_4bit=LOAD_IN_4BIT,
         device_map="auto",
-        # Unsloth-native gradient checkpointing — recomputes activations on the
-        # backward pass so batch_size=2 x grad_accum=4 fits in 16 GB VRAM.
-        use_gradient_checkpointing="unsloth",
+        use_gradient_checkpointing=USE_GRADIENT_CHECKPOINTING,
     )
     print(f"  Model loaded successfully (max_seq_length={max_seq_length})")
 
-    # Verify tokenizer has a chat_template
-    if tokenizer.chat_template is None:
-        print("WARNING: tokenizer has no chat_template; applying Qwen ChatML.")
-        tokenizer.chat_template = (
-            "{% for message in messages %}"
-            "{% if message['role'] == 'system' %}"
-            "<|im_start|>system\n{{ message['content'] }}<|im_end|>\n"
-            "{% elif message['role'] == 'user' %}"
-            "<|im_start|>user\n{{ message['content'] }}<|im_end|>\n"
-            "{% elif message['role'] == 'assistant' %}"
-            "<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n"
-            "{% endif %}"
-            "{% endfor %}"
-        )
+    # Verify tokenizer has a chat_template (Qwen2.5-Coder ships without one).
+    _ensure_chat_template(tokenizer)
 
     # Set pad_token if missing
     if tokenizer.pad_token is None:
@@ -309,10 +327,7 @@ def main():
         r=LORA_R,
         lora_alpha=LORA_ALPHA,
         lora_dropout=LORA_DROPOUT,
-        target_modules=[
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj",
-        ],
+        target_modules=LORA_TARGET_MODULES,
         use_rslora=False,
         loftq_config=None,
         bias="none",
@@ -323,27 +338,48 @@ def main():
     print(f"  Trainable params: {trainable:,} / {total:,} "
           f"({100 * trainable / total:.2f}%)")
 
-    # Step 5: Prepare dataset with loss masking ---------------------------
-    print("\n[5/5] Preparing dataset with assistant-only loss masking...")
+    # Step 5: Tokenize with exact loss masking ---------------------------
+    print("\n[5/5] Tokenizing dataset with loss masking...")
 
     from datasets import Dataset as HFDataset
-    from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
     from transformers import TrainingArguments
+    from trl import SFTTrainer
 
-    # Preserve raw messages for the tokenizer's chat template.
-    # We do NOT flatten to text here -- the trainer will use
-    # DataCollatorForCompletionOnlyLM to apply loss masking.
-    dataset = HFDataset.from_list(samples)
+    # We pre-tokenize every sample OURSELVES and hand Unsloth ready-made
+    # input_ids + labels. This is the only loss-masking method that survives
+    # the TRL/Unsloth version churn: their completion-only collator was
+    # removed, and custom collators fight Unsloth's internal tokenizer and
+    # silently zero the loss. BPE is prefix-stable and Qwen has no BOS, so
+    # tokenize(full) == tokenize(prompt) + tokenize(assistant part) exactly
+    # (verified against the saved tokenizer).
+    def _tokenize(messages):
+        full_text = tokenizer.apply_chat_template(messages, tokenize=False)
+        ids = tokenizer.encode(full_text, add_special_tokens=False)
+        labels = list(ids)
+        if not train_on_inputs:
+            prompt_msgs = [m for m in messages if m["role"] != "assistant"]
+            prompt_text = tokenizer.apply_chat_template(
+                prompt_msgs, tokenize=False
+            )
+            prompt_ids = tokenizer.encode(prompt_text, add_special_tokens=False)
+            # Defensive: never mask the entire sequence.
+            n_mask = min(len(prompt_ids), len(ids) - 1)
+            for i in range(n_mask):
+                labels[i] = -100
+        return {"input_ids": ids, "labels": labels}
 
-    # The response template is the start of an assistant turn.
-    # Everything before is masked from loss.
-    response_template = "<|im_start|>assistant"
-    collator = DataCollatorForCompletionOnlyLM(
-        response_template=response_template,
-        tokenizer=tokenizer,
+    dataset = HFDataset.from_list(
+        [_tokenize(s["messages"]) for s in samples]
     )
 
-    # Show one sample as a sanity check
+    # Sanity check: how many tokens per sample actually drive the loss.
+    _l0 = dataset[0]["labels"]
+    _n_train = sum(1 for x in _l0 if x != -100)
+    print(f"  Sample 0: {len(dataset[0]['input_ids'])} tokens, "
+          f"{_n_train} drive the loss "
+          f"({'full-sequence' if train_on_inputs else 'assistant-only'})")
+
+    # Show one formatted sample for eyeballing.
     sample_text = tokenizer.apply_chat_template(
         samples[0]["messages"], tokenize=False
     )
@@ -362,7 +398,7 @@ def main():
         fp16=not is_bfloat16_supported(),
         bf16=is_bfloat16_supported(),
         logging_steps=LOGGING_STEPS,
-        save_steps=SAVE_STEPS,
+        save_steps=save_steps,
         save_total_limit=3,
         optim="adamw_8bit",
         weight_decay=0.01,
@@ -373,16 +409,20 @@ def main():
         dataloader_num_workers=0,
     )
 
-    trainer = SFTTrainer(
+    # No formatting_func, no data_collator: the dataset already carries
+    # input_ids + labels, so Unsloth just pads them (standard HF pattern).
+    _sft_kwargs = dict(
         model=model,
-        tokenizer=tokenizer,
         args=training_args,
         train_dataset=dataset,
         max_seq_length=max_seq_length,
         dataset_num_proc=1,
         packing=False,
-        data_collator=collator,  # <-- CRITICAL: masks non-assistant tokens
     )
+    try:
+        trainer = SFTTrainer(processing_class=tokenizer, **_sft_kwargs)
+    except TypeError:
+        trainer = SFTTrainer(tokenizer=tokenizer, **_sft_kwargs)
 
     # -- Train ------------------------------------------------------------
     print("\n  Starting training...")
@@ -390,7 +430,7 @@ def main():
     print(f"  LR:        {learning_rate}")
     print(f"  Batch:     {TRAIN_BATCH_SIZE} (accum {GRADIENT_ACCUM_STEPS})")
     print(f"  Seq len:   {max_seq_length} (dynamic — longest training item)")
-    print(f"  Loss mask: assistant-only (<|im_start|>assistant template)")
+    print(f"  Loss mask: {'full sequence' if train_on_inputs else 'assistant-only (completion-only)'}")
     print()
 
     start_time = time.time()

@@ -349,6 +349,13 @@ def ollama_format(name: str, model: str = "") -> str:
     _key = f"{name}:{model}"
     if _SCHEMA_FORMAT_CACHE.get(_key) == "rejected":
         return "json"
+    # LoRA-merged adapters (midway-*-lora) crash Ollama 0.21.2's schema-
+    # constrained decoding: the grammar state blows the runner (HTTP 500
+    # "model runner has unexpectedly stopped", which the client mislabels as
+    # OOM).  Plain JSON mode is memory-safe, and the tolerant parser + Pydantic
+    # still validate the result, so the schema is simply skipped for them.
+    if "lora" in (model or "").lower():
+        return "json"
     try:
         schema = get_schema(name).model_json_schema()
         return _json.dumps(_sanitize_ollama_schema(schema))

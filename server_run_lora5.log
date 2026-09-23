@@ -1,0 +1,709 @@
+
+============================================================
+  Midway Pipeline Stream Server (Hardened)
+  Listening on http://0.0.0.0:8765
+  Run log: C:\Users\Admin\source\repos\midway-pipeline\pipeline_run.log
+============================================================
+
+  [Watchdog] started (ntfy -> https://ntfy.sh/midway-f4a5ec27, interval 30s; commands: send !help on the topic)
+  [Session] Started new session: pipeline_20260923_112804_e04c8570
+  [APILedger] ✓ Internal API ledger reset for new run.
+  [DecisionLog] ✓ Reset for new run ().
+  [Kernel] Mounted cartridge for project: Midway to Nowhere
+  [Kernel] No cartridge config present  using built-in defaults.
+  [Kernel] Prompt factories refreshed from cartridge.
+
+======================================================================
+  [11:28:04] Phase 1 & 2: Autonomic Workspace Discovery
+======================================================================
+  [Librarian] Executing programmatic repository indexing...
+  [Librarian] Verified active C++ AST symbols: 13
+  [Scope Classifier] Mode=NEW_ATTRACTION, target=strongman
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [Kernel] Cartridge provided scoped context (scope=NEW_ATTRACTION, attraction='strongman', 2257 chars)
+  [Kernel] Bridge contract appended to agent context (2388 chars)
+  [Adaptive ctx] Input ~1372 tok → KV cache pinned at 32768 (stable allocation, no resize).
+  [VRAM Budget] 📊 Loaded 'midway-reasoner-lora' (6.6 GB). Used: 6.6/12.0 GB (55%)
+
+============================================================
+  [11:28:05] [START] [Clarification Gate] Calling Ollama (midway-reasoner-lora)...
+  [VRAM Guard] num_ctx=32768, user=3197 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:28:05] [START] [Clarification Gate] Calling Ollama (midway-reasoner-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=e1b78e122877)
+SPECIFICITY: VAGUE  
+1. Basic Lever Strike – The striker swings the mallet down onto a lever which launches a puck up a vertical bell-puck track.
+2. Streak Modifiers - Apply all listed modifiers ("Rusty Rails", "Weighted Puck" etc.) as streak multipliers without scoring logic.
+3. Target Scoring Only - Award Tickets for landing the puck in the bell regardless of streaks or modifier effects.  [Telemetry] Clarification Gate (midway-reasoner-lora)  TTFT: 23.81s | Speed: 12.3 tok/s (739 TPM) | Effective: 2.9 tok/s
+  [11:28:36] [END] [Clarification Gate] Execution complete.
+  [Clarify Gate] Specificity: VAGUE
+
+================================================================
+  [Clarify Gate] ⚠ This feature request is ambiguous.
+================================================================
+  Choose ONE of the following directions (or describe your own):
+    1) Streak Modifiers — Apply all listed modifiers ("Rusty Rails", "Weighted Puck" etc.) as streak multipliers without scoring logic.
+    2) Target Scoring Only — Award Tickets for landing the puck in the bell regardless of streaks or modifier effects.
+    0) I'll describe the direction myself.
+  [Clarify Gate] ✓ Direction locked: Follow the GDD Strongman High Striker: player swings a mallet to strike the lever, launching a puck up a tower toward a shifting bell. Score by puck height/force with the wager-gated streak multiplier from the dual-currency economy.
+
+  [Lead Producer] Scope is NEW_ATTRACTION — scope gate skipped (blueprint is mandatory for new attractions).
+  [Lead Producer] AST index: 10 files indexed (3 large).
+  [Blueprint] 🔒 Auto-enforced file constraint: attractions/strongman/strongman.lua
+  [Adaptive ctx] Input ~6637 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:29:43] [START] [Blueprint Generation (round 1)] Calling Ollama (midway-reasoner-lora)...
+  [VRAM Guard] num_ctx=32768, user=12579 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:29:43] [START] [Blueprint Generation (round 1)] Calling Ollama (midway-reasoner-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=4bc20eb54194)
+- [ ] Task 1: Initialize module constants and helper functions above OnLoadStatic - strongman.lua  [Telemetry] Blueprint Generation (round 1) (midway-reasoner-lora)  TTFT: 63.73s | Speed: 0.0 tok/s (0 TPM) | Effective: 0.3 tok/s 🚨 SLOW
+  [11:30:46] [END] [Blueprint Generation (round 1)] Execution complete.
+  [Blueprint Validator] ⚠ Auto-rejecting blueprint  3 structural issue(s):
+  - Only 1 task(s) for NEW_ATTRACTION  minimum 11 required (one per scaffold anchor). There are 11 deterministic anchor markers in the scaffold file that must each be filled by exactly one task. Expand the plan to cover every lifecycle phase and gameplay concern.
+  - ECONOMY VIOLATION: No task reads AttractionConstants.modifiers inside OnStep. Add an explicit task: 'Integrate modifier system  read AttractionConstants.modifiers every OnStep frame and apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND to gameplay variables'.
+  - ECONOMY VIOLATION: No task calls Engine.AwardTickets or Engine.AwardTokens. Add an explicit task: 'Implement economy hooks  call Engine.AwardTickets(n, label) with Engine.GetStreak() multiplier on win/score events'.
+  [Adaptive ctx] Input ~4124 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:30:46] [START] [Blueprint Generation (round 1)] Calling Ollama (midway-reasoner-lora)...
+  [VRAM Guard] num_ctx=32768, user=5039 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:30:46] [START] [Blueprint Generation (round 1)] Calling Ollama (midway-reasoner-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=a51d27396e4b)
+  [Watchdog] ⚠ 🚨 Midway: TPS collapse — Effective 0.3 tok/s on 'Blueprint Generation (round 1)' — possible VRAM thrash
+- [ ] Task 1: Initialize module constants and helper functions above OnLoadStatic - attractions/strongman/strongman.lua  
+- [ ] Task 2: Spawn permanent static geometry (the target stand + base posts) in OnLoadStatic - strongman.lua  
+- [ ] Task 3: Register MidwayPhysics.OnStep callback inside OnLoad - strongman.lua  
+- [ ] Task 4: Implement ball launch on player input using SpawnDynamicSphere and ApplyImpulse - strongman.lua  
+- [ ] Task 5: Track remaining balls with a Lua counter - strongman.lua  
+- [ ] Task 6: Integrate modifier system — read AttractionConstants.modifiers every OnStep frame and apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND to gameplay variables - strongman.lua  
+- [ ] Task 7: Award tickets/tokens on win events via Engine.AwardTickets(n * streakMultiplier, label) from within OnStep after checking sensor trigger conditions - strongman.lua  
+- [ ] Task 8: Create an object pool named 'striker_pools' with hot=20,cold=2 params at load time in OnLoad - strongman.lua  
+- [ ] Task 9: Pool-acquire the striker mallet handle each physics step if not already acquired; reset velocity before re-use - strongman.lua  
+- [ ] Task 10: Print diagnostics only in OnUnload without attempting to destroy any bodies or pools (they auto-reclaim) - strongman.lua  [Telemetry] Blueprint Generation (round 1) (midway-reasoner-lora)  TTFT: 20.08s | Speed: 8.9 tok/s (536 TPM) | Effective: 5.7 tok/s
+  [11:31:41] [END] [Blueprint Generation (round 1)] Execution complete.
+  [Blueprint Validator] ⚠ Auto-rejecting blueprint  1 structural issue(s):
+  - Only 10 task(s) for NEW_ATTRACTION  minimum 11 required (one per scaffold anchor). There are 11 deterministic anchor markers in the scaffold file that must each be filled by exactly one task. Expand the plan to cover every lifecycle phase and gameplay concern.
+  [Adaptive ctx] Input ~4356 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:31:41] [START] [Blueprint Generation (round 1)] Calling Ollama (midway-reasoner-lora)...
+  [VRAM Guard] num_ctx=32768, user=5734 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:31:41] [START] [Blueprint Generation (round 1)] Calling Ollama (midway-reasoner-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=41b3b4015a10)
+- [ ] Task 1: Initialize module constants and helper functions above OnLoadStatic - attractions/strongman/strongman.lua  
+- [ ] Task 2: Spawn permanent static geometry (the target stand + base posts) in OnLoadStatic - attractions/strongman/strongman.lua  
+- [ ] Task 3: Register MidwayPhysics.OnStep callback inside OnLoad - attractions/strongman/strongman.lua  
+- [ ] Task 4: Implement ball launch on player input using SpawnDynamicSphere and ApplyImpulse - attractions/strongman/strongman.lua  
+- [ ] Task 5: Track remaining balls with a Lua counter - attractions/strongman/strongman.lua  
+- [ ] Task 6: Integrate modifier system — read AttractionConstants.modifiers every OnStep frame and apply ENGINE_MOD_HEAT/LUCK/SLEIGHT_OF_HAND to gameplay variables - attractions/strongman/strongman.lua  
+- [ ] Task 7: Award tickets/tokens on win events via Engine.AwardTickets(n * streakMultiplier, label) from within OnStep after checking sensor trigger conditions - attractions/strongman/strongman.lua  
+- [ ] Task 8: Create an object pool named 'striker_pools' with hot=20,cold=2 params at load time in OnLoad - attractions/strongman/strongman.lua  
+- [ ] Task 9: Pool-acquire the striker mallet handle each physics step if not already acquired; reset velocity before re-use - attractions/strongman/strongman.lua  
+- [ ] Task 10: Print diagnostics only in OnUnload without attempting to destroy any bodies or pools (they auto-reclaim) - attractions/strongman/strongman.lua  [Telemetry] Blueprint Generation (round 1) (midway-reasoner-lora)  TTFT: 10.40s | Speed: 8.8 tok/s (526 TPM) | Effective: 7.0 tok/s
+  [11:32:32] [END] [Blueprint Generation (round 1)] Execution complete.
+  [Blueprint Validator] ⚠ 3 retries exhausted — force-accepting blueprint despite 1 issue(s)
+  [Blueprint Validator] Issues bypassed: Only 10 task(s) for NEW_ATTRACTION  minimum 11 required (one per scaffold anchor). There are 11 deterministic anchor markers in the scaffold file that must each be filled by exactly one task. Expand the plan to cover every lifecycle phase and gameplay concern.
+  [Blueprint Validator] 🔧 Padded 1 filler task(s) to reach 11 anchors (was 10)
+  [Lead Producer] Saved to docs/project_blueprint.md.
+
+==================================================
+  BLUEPRINT GATE  Review the architectural blueprint
+  Location: C:\Users\Admin\source\repos\midway\docs\project_blueprint.md
+==================================================
+
+  ┌─ WHAT IS THE BLUEPRINT GATE? ─────────────────────────────────────┐
+  │ Before writing any code, the pipeline drew up a plan  the        │
+  │ blueprint  describing every task it intends to carry out and      │
+  │ which systems it will touch.                                       │
+  │                                                                   │
+  │ This is your chance to read that plan and catch mistakes BEFORE   │
+  │ any code is generated. Open the file shown above, read it, then   │
+  │ come back here.                                                   │
+  │                                                                   │
+  │  Y   plan looks good, start generating code.                    │
+  │  n   something is wrong; you will be asked what to fix.         │
+  └───────────────────────────────────────────────────────────────────┘
+  [Blueprint Gate] Blueprint auto-approved (AUTO_APPROVE_GATES=True).
+
+  [Lead Producer] Auto-feeding first task while preserving block constraints: Initialize module constants and helper functions above OnLoadStatic - attractions/strongman/strongman.lua
+  [Lead Producer] Continuing to Phase 3...
+
+======================================================================
+  [11:32:32] Phase 3: Director - Task Decomposition
+======================================================================
+  [Director] Skipped — NEW_ATTRACTION blueprint path owns task decomposition (bulk enricher rebuilds the full task list).
+  [Blueprint Enricher] Attempt 1/3: sending 11 flat task(s)...
+  [Blueprint Enricher] NEW_ATTRACTION → deterministic enrichment (no LLM).
+  [Blueprint Enricher] ✓ Attempt 1: parsed 11 tasks (matches expected 11).
+  [Blueprint Enricher] Parsed 11 enriched task(s) with dependency metadata.
+  [Blueprint Enricher] Bulk-enriched 11 blueprint task(s) with full DAG metadata  wave sorter will handle dependency ordering in a single pass. All tasks run in one iteration.
+
+============================================================
+  [Architect] 🏗 Running pre-decomposition design pass...
+============================================================
+  [Architect] Extracting structured design (single-turn, native JSON)...
+  [Adaptive ctx] Input ~2205 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:32:32] [START] [Architect Design Pass (structured JSON)] Calling Ollama (midway-reasoner-lora)...
+  [VRAM Guard] num_ctx=32768, user=4164 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:32:32] [START] [Architect Design Pass (structured JSON)] Calling Ollama (midway-reasoner-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=88005a3f4a14)
+{
+  "title": "Strongman High Striker",
+  "summary": "Launch a puck up a tower using a mallet; score by height and streak multiplier.",
+  "handles": [
+    { "name": "mallet", "lua_type": "handle", "owner_hint": "Lua", "lifecycle": "OnLoadStatic", "description": "Mallet kinematic body" },
+    { "name": "lever", "lua_type": "handle", "owner_hint": "Lua", "lifecycle": "OnLoadStatic", "description": "Lever dynamic body with hinge constraint" },
+    { "name": "puck_pool", "lua_type": "table", "initial_value": {}, "description": "Pool of static sphere pucks for reuse" }
+  ],
+  "lifecycle_order": [ "SpawnPuckAtHeight(0)", "MidwayPhysics.CreateSensorBox(...)" ],
+  "event_flow": [
+    { "trigger": "MidwayInput.IsActionDown('fire') && MidwayPhysics.GetPosition(mallet)[2] < -1.", "action": "ApplyImpulse(mallet, 0, 500 * AttractionConstants.modifiers.power_up, 0)" },
+    { "trigger": "IsSensorTriggered(sensor_handle)", "action": "AwardTickets(GetStreak() + 1, 'Strongman Streak')" }
+  ],
+  "pool_requirements": {
+    "static_sphere_puck": 3
+  },
+  "economy_hooks": ["Engine.AwardTokens"],
+  "feature_checklist": [
+    "Launch puck on mallet strike",
+    "Use streak multiplier from Tickets economy"
+  ]
+}  [Telemetry] Architect Design Pass (structured JSON) (midway-reasoner-lora)  TTFT: 18.87s | Speed: 6.9 tok/s (415 TPM) | Effective: 5.0 tok/s
+  [11:33:42] [END] [Architect Design Pass (structured JSON)] Execution complete.
+  [Architect] ✅ Structured design extracted: 'Strongman High Striker' (3 handles, 2 event edges, 2 checklist items, 0 state vars).
+  [Architect] ✅ Design doc created (structured): 'Strongman High Striker'
+             3 handles, 2 event edges, 2 checklist items
+
+======================================================================
+  🎨 BLUEPRINT APPROVAL  Review the Architect's design document
+======================================================================
+## 🎯 Attraction Design: Strongman High Striker
+Launch a puck up a tower using a mallet; score by height and streak multiplier.
+
+### Declared Handles
+  mallet (handle)  Mallet kinematic body [owner: Lua, lifecycle: OnLoadStatic]
+  lever (handle)  Lever dynamic body with hinge constraint [owner: Lua, lifecycle: OnLoadStatic]
+  puck_pool (table)  Pool of static sphere pucks for reuse [owner: , lifecycle: OnLoad]
+
+### OnLoad Registration Order
+  1. SpawnPuckAtHeight(0)
+  2. MidwayPhysics.CreateSensorBox(...)
+
+### Event Flow
+  MidwayInput.IsActionDown('fire') && MidwayPhysics.GetPosition(mallet)[2] < -1. → ApplyImpulse(mallet, 0, 500 * AttractionConstants.modifiers.power_up, 0)
+  IsSensorTriggered(sensor_handle) → AwardTickets(GetStreak() + 1, 'Strongman Streak')
+
+### Pool Requirements
+  static_sphere_puck: 3
+
+### Economy Hooks: Engine.AwardTokens
+
+### Feature Checklist
+  - Launch puck on mallet strike
+  - Use streak multiplier from Tickets economy
+
+----------------------------------------------------------------------
+  This design will guide every task agent in this run.
+  a  Approve and continue (recommended)
+  r  Reject and abort pipeline
+  s  Skip design (run without a design document)
+----------------------------------------------------------------------
+  [Blueprint Gate] ✓ Design auto-approved (AUTO_APPROVE_GATES=True).
+
+======================================================================
+  [11:33:42] Phase 4: Mesh Execution (Omni-Batch DAG)  11 Task(s)
+======================================================================
+  [Skeleton Builder] 🧬 Injected 3 handle(s) + 0 state var(s) + 1 pool name(s) at module root of C:\Users\Admin\source\repos\midway\attractions\strongman\strongman.lua
+  [Anchor Invariant] ✓ attractions/strongman/strongman.lua: 11 canonical + 0 extra anchor(s) — one per task. (baseline snapshotted for revert)
+
+============================================================
+  Mechanics Scaffold: reasoning 11 Lua task(s) → bounded scaffold
+============================================================
+  [Scaffold] ⏭ Task 3: structural hook — skipped.
+  [Scaffold] ⏭ Task 1: structural hook — skipped.
+  [Adaptive ctx] Input ~1825 tok → KV cache pinned at 32768 (stable allocation, no resize).
+  [System] VRAM Flush: Evicting midway-reasoner-lora from unified memory...
+  [VRAM Budget] 📊 Evicted 'midway-reasoner-lora' (6.6 GB). Used: 0.0/12.0 GB
+  [VRAM Budget] 📊 Loaded 'midway-coder-lora' (6.6 GB). Used: 6.6/12.0 GB (55%)
+
+============================================================
+  [11:33:42] [START] [Mechanics Scaffold (task 4, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4214 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:33:42] [START] [Mechanics Scaffold (task 4, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=a62df9de8ec2)
+### Mechanic: Register OnLoad callback
+INTENT: register per-frame logic named 'strongman_on_step'
+PSEUDO:
+  function strongman_on_step(dt)
+    local mods = AttractionConstants.modifiers
+    -- read sensor triggers and award tickets there
+  end
+API:
+  MidwayPhysics.OnStep(strongman_on_step)  [Telemetry] Mechanics Scaffold (task 4, attempt 1) (midway-coder-lora)  TTFT: 28.34s | Speed: 13.8 tok/s (828 TPM) | Effective: 2.1 tok/s
+  [11:34:15] [END] [Mechanics Scaffold (task 4, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 4: 'Register OnLoad callback' (1 API call(s)).
+  [Scaffold] ⏭ Task 2: structural hook — skipped.
+  [Adaptive ctx] Input ~1827 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:34:15] [START] [Mechanics Scaffold (task 5, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4221 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:34:15] [START] [Mechanics Scaffold (task 5, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=1510b3595234)
+### Mechanic: Ball Counter
+INTENT: Track remaining balls and display on UI until none remain.
+PSEUDO:
+  local ball_count = 5
+  OnStep(function(dt)
+    if ball_count <= 0 then
+      AttractionConstants.is_complete = true
+    end
+  end)
+API:
+  Engine.OnLoad(function()
+    local row = AttractionConstants.row_handle
+    local col = AttractionConstants.col_handle
+    SpawnStaticBox(2.7, -1.9, -4.6, 0.8, 0.8, 1.7)
+    SpawnDynamicSphere(-0.2, -0.9, -0.7, 0.3)
+  end)  [Telemetry] Mechanics Scaffold (task 5, attempt 1) (midway-coder-lora)  TTFT: 14.06s | Speed: 10.2 tok/s (614 TPM) | Effective: 5.3 tok/s
+  [11:34:44] [END] [Mechanics Scaffold (task 5, attempt 1)] Execution complete.
+  [Adaptive ctx] Input ~1899 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:34:44] [START] [Mechanics Scaffold (task 5, attempt 2)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4438 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:34:44] [START] [Mechanics Scaffold (task 5, attempt 2)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=28d1665a4b6f)
+### Mechanic: Ball Counter
+INTENT: Track remaining balls using a shared counter between slots
+PSEUDO:
+  local sensor_handle = MidwayPhysics.CreateSensorSphere(2.7, -0.8, -1.9, 0.4)
+  local tickets_awarded = false
+API:
+  local handle = MidwayPhysics.SpawnStaticBox(-0.5, 1.6, -1.7, 1.5, 0.5, 0.7)  [Telemetry] Mechanics Scaffold (task 5, attempt 2) (midway-coder-lora)  TTFT: 4.40s | Speed: 11.4 tok/s (683 TPM) | Effective: 7.7 tok/s
+  [11:34:58] [END] [Mechanics Scaffold (task 5, attempt 2)] Execution complete.
+  [Scaffold] ✓ Task 5: 'Ball Counter' (1 API call(s)).
+  [Adaptive ctx] Input ~1866 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:34:58] [START] [Mechanics Scaffold (task 7, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4337 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:34:58] [START] [Mechanics Scaffold (task 7, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=4a5e23d6e4eb)
+### Mechanic: Modifier Scaling
+INTENT: Apply luck and power-up modifiers to mallet mass each frame
+PSEUDO:
+  local mod_luck = AttractionConstants.modifiers.luck
+  local mod_power = AttractionConstants.modifiers.power_up
+  local mallet_mass = 5.0 * mod_luck * mod_power
+API:
+  SetMass(mallet, mallet_mass)  [Telemetry] Mechanics Scaffold (task 7, attempt 1) (midway-coder-lora)  TTFT: 14.30s | Speed: 12.6 tok/s (759 TPM) | Effective: 4.0 tok/s
+  [11:35:19] [END] [Mechanics Scaffold (task 7, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 7: 'Modifier Scaling' (1 API call(s)).
+  [Adaptive ctx] Input ~1864 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:35:19] [START] [Mechanics Scaffold (task 8, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4332 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:35:19] [START] [Mechanics Scaffold (task 8, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=d7db8b23a11b)
+### Mechanic: Award Tickets on Win Event
+INTENT: Check sensor trigger and award tickets with streak multiplier after each ball launch.
+PSEUDO:
+if IsSensorTriggered(sensor_handle) then
+    local n = 2 * GetStreak()
+    Engine.AwardTickets(n, 'Strongman Ball')
+end
+API:
+MidwayPhysics.OnStep(function(dt)
+local mods = AttractionConstants.modifiers
+-- per-frame logic here
+end)  [Telemetry] Mechanics Scaffold (task 8, attempt 1) (midway-coder-lora)  TTFT: 14.31s | Speed: 12.0 tok/s (722 TPM) | Effective: 4.2 tok/s
+  [11:35:41] [END] [Mechanics Scaffold (task 8, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 8: 'Award Tickets on Win Event' (1 API call(s)).
+  [Adaptive ctx] Input ~1826 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:35:41] [START] [Mechanics Scaffold (task 6, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4218 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:35:41] [START] [Mechanics Scaffold (task 6, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=782fb45c1337)
+### Mechanic: Object pooling striker_pools
+INTENT: Pre-spawn many puck bodies and share them via a pool named 'striker_pools'
+PSEUDO:
+  OnLoad spawns the pool
+  Use PoolAcquire to get balls during play
+API:
+  local h = MidwayPhysics.CreatePool('striker_pools', 0, 2, { shape='sphere', radius=1 })  [Telemetry] Mechanics Scaffold (task 6, attempt 1) (midway-coder-lora)  TTFT: 14.03s | Speed: 12.5 tok/s (747 TPM) | Effective: 4.1 tok/s
+  [11:36:02] [END] [Mechanics Scaffold (task 6, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 6: 'Object pooling striker_pools' (1 API call(s)).
+  [Adaptive ctx] Input ~1852 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:36:02] [START] [Mechanics Scaffold (task 9, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4295 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:36:02] [START] [Mechanics Scaffold (task 9, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=359de0249682)
+### Mechanic: Striker Mallet Handle Acquisition
+INTENT: Each step, acquire striker mallet from pool if not already held; reset velocity on re-acquisition.
+PSEUDO:
+  local mallet = PoolAcquire('dynamic_sphere_puck', -0.9, 1.2, -4.6)
+  if mallet > 0 then
+    SetLinearVelocity(mallet, 0, 0, 0)
+  end
+API:
+  PoolAcquire(dynamic_sphere_puck, -0.9, 1.2, -4.6)
+  SetLinearVelocity(handle, 0, 0, 0)  [Telemetry] Mechanics Scaffold (task 9, attempt 1) (midway-coder-lora)  TTFT: 14.29s | Speed: 10.5 tok/s (630 TPM) | Effective: 5.0 tok/s
+  [11:36:29] [END] [Mechanics Scaffold (task 9, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 9: 'Striker Mallet Handle Acquisition' (2 API call(s)).
+  [Adaptive ctx] Input ~1836 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:36:29] [START] [Mechanics Scaffold (task 11, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4247 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:36:29] [START] [Mechanics Scaffold (task 11, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=78dc2b95961e)
+### Mechanic: Print Diagnostics
+INTENT: between shots report ticket and token counts plus streak multiplier
+PSEUDO:
+  if sensor_triggered then
+    local tkts = Engine.GetTickets()
+    local toks = Engine.GetTokens()
+    local mult = Engine.GetStreak()
+    print('tickets=' .. tkts .. ' tokens=' .. toks .. ' x' .. math.floor(mult))
+  end
+API:
+  Engine.OnStep(function(dt)
+      local mods = AttractionConstants.modifiers or {}
+      local luck = mods.luck or 0
+      local mass = mods.mass or 1.0
+  end)  [Telemetry] Mechanics Scaffold (task 11, attempt 1) (midway-coder-lora)  TTFT: 14.26s | Speed: 10.6 tok/s (636 TPM) | Effective: 5.0 tok/s
+  [11:36:56] [END] [Mechanics Scaffold (task 11, attempt 1)] Execution complete.
+  [Adaptive ctx] Input ~1909 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:36:56] [START] [Mechanics Scaffold (task 11, attempt 2)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4466 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:36:56] [START] [Mechanics Scaffold (task 11, attempt 2)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=ef514be41955)
+### Mechanic: Print Diagnostics
+INTENT: OnUnload prints ticket/economic counters without destroying bodies or pools
+PSEUDO:
+  OnUnload:
+    print(tickets_earned, tokens_awarded)
+API:
+  Engine.AwardTokens(0, 'MidwayPhysics Scaffold')  [Telemetry] Mechanics Scaffold (task 11, attempt 2) (midway-coder-lora)  TTFT: 4.43s | Speed: 16.2 tok/s (970 TPM) | Effective: 7.3 tok/s
+  [11:37:04] [END] [Mechanics Scaffold (task 11, attempt 2)] Execution complete.
+  [Scaffold] ✓ Task 11: 'Print Diagnostics' (1 API call(s)).
+  [Adaptive ctx] Input ~1821 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [11:37:04] [START] [Mechanics Scaffold (task 10, attempt 1)] Calling Ollama (midway-coder-lora)...
+  [VRAM Guard] num_ctx=32768, user=4203 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:37:04] [START] [Mechanics Scaffold (task 10, attempt 1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=a16e686450ba)
+### Mechanic: Task_10_Inbox_Ball_Eject
+INTENT: on ball entry sensor launch a puck up the target track
+PSEUDO:
+  if IsSensorTriggered(ball_in_sensor) then
+    local h = SpawnDynamicSphere(2.4, -0.8, -5.7, 0.6)
+    ApplyImpulse(h, 0, 9.0, 0)
+  end
+API:
+  SpawnDynamicSphere(lx, ly, lz, radius)
+  ApplyImpulse(handle, ix, iy, iz)  [Telemetry] Mechanics Scaffold (task 10, attempt 1) (midway-coder-lora)  TTFT: 14.15s | Speed: 11.0 tok/s (661 TPM) | Effective: 4.8 tok/s
+  [11:37:29] [END] [Mechanics Scaffold (task 10, attempt 1)] Execution complete.
+  [Scaffold] ✓ Task 10: 'Task_10_Inbox_Ball_Eject' (2 API call(s)).
+  [Scaffold] Done: 8 scaffold(s) stored on ctx.scaffolds.
+
+============================================================
+  Phase A: Deterministic Skeleton Builder (pre-task)
+============================================================
+  [Skeleton Builder] ✓ All target files already have valid skeleton structure
+  [DAG] Sorted 11 task(s) into 11 wave(s):
+    Wave 1: Task 1 [Lua]
+    Wave 2: Task 2 [Lua]
+    Wave 3: Task 3 [Lua]
+    Wave 4: Task 4 [Lua]
+    Wave 5: Task 5 [Lua]
+    Wave 6: Task 6 [Lua]
+    Wave 7: Task 7 [Lua]
+    Wave 8: Task 8 [Lua]
+    Wave 9: Task 9 [Lua]
+    Wave 10: Task 10 [Lua]
+    Wave 11: Task 11 [Lua]
+
+  ============================================================
+  Processing Wave 1/11 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_1 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_1': 4917 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 2139-char staging block for attractions/strongman/strongman.lua (full file 2960 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7180 chars; tail ≈ 6711 chars; no truncation
+
+============================================================
+  [11:37:29] [START] [Lua Scripter (Task task_1)] Calling Ollama (midway-coder-lora) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=13893 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:37:29] [START] [Lua Scripter (Task task_1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=a9642729cb17)
+<<<<<<< SEARCH
+    -- [TASK_0_INSERT_MODULE] — Register per-frame callbacks / init constant tables
+=======
+function MidwayPhysics.OnStep(dt)
+    local mods = AttractionConstants.modifiers
+    local luckMult = 1.0 + mods.luck * 0.3
+    if IsSensorTriggered(bell_sensor) then
+        AwardTickets(math.floor(50 * luckMult), "Bell Hit")
+    end
+end
+
+-- Constants:
+local RACK_TARGET_Z = -4.8
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_1) (midway-coder-lora)  TTFT: 103.12s ⚠️ EXTREME | Speed: 10.3 tok/s (618 TPM) | Effective: 1.0 tok/s 🚨 SLOW
+  [11:39:23] [END] [Lua Scripter (Task task_1)] Execution complete.
+  [Anchor Guard] ⛔ task_1 SEARCH block 1 targets wrong anchor. Expected '-- [TASK_3_INSERT_HOOK]' but found '    -- [TASK_0_INSERT_MODULE] — Register per-frame callbacks / init constant tab'. Re-prompting...
+
+============================================================
+  [11:39:23] [START] [Anchor Guard Fix (task_1)] Calling Ollama (midway-coder-lora) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=1307 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:39:23] [START] [Anchor Guard Fix (task_1)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=0090d6dbf050)
+<<<<<<< SEARCH
+    -- [TASK_3_INSERT_HOOK] -- permanent geometry: SpawnSharedBooth() + static physics bodies
+=======
+    local hBar = AttractionConstants.BAR_HANDLE
+    local mass = 2.0
+    local com = Vector(1.5,-1.4,0)
+    local inertia = Vector(0.7,1.8,0.9)
+
+    local function on_load()
+        local hBody = MidwayPhysics.SpawnStaticBox(hBar, -0.6, 0.9, -2.7, 0.5, 1.5, 0.9)
+    end
+
+    -- [TASK_3_INSERT_HOOK] -- permanent geometry: SpawnSharedBooth() + static physics bodies
+>>>>>>> REPLACE  [Telemetry] Anchor Guard Fix (task_1) (midway-coder-lora)  TTFT: 6.63s | Speed: 10.3 tok/s (619 TPM) | Effective: 7.2 tok/s
+  [11:39:45] [END] [Anchor Guard Fix (task_1)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match succeeded.
+  [Anchor Guard] ✅ Re-prompt produced corrected patch for task_1
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (3231 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Initialize_module_constants_helper_functions]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 2/11 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_2 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_2': 4917 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 2298-char staging block for attractions/strongman/strongman.lua (full file 3231 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7180 chars; tail ≈ 8407 chars; no truncation
+
+============================================================
+  [11:39:50] [START] [Lua Scripter (Task task_2)] Calling Ollama (midway-coder-lora) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=15589 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:39:50] [START] [Lua Scripter (Task task_2)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=8ddec8632b0b)
+<<<<<<< SEARCH
+    -- [TASK_3_INSERT_HOOK] -- module-level state (balls/objects table, globals)
+=======
+    local bar_handle = 0
+    local puck_pool = {}
+
+    function OnLoadStatic()
+        SpawnSharedBooth()
+
+        local hBar = MidwayPhysics.SpawnDynamicSphere(0.679, 0.841, -0.5, 0.2)
+        bar_handle = hBar
+
+        local mods = AttractionConstants.modifiers
+        local mass_mult = 1.0 + mods.mass * 0.5
+        local friction = mods.friction * 0.5 + 0.3
+    end
+
+    function OnUnload()
+        if bar_handle > 0 then
+            MidwayPhysics.DestroyBody(bar_handle)
+            bar_handle = 0
+        end
+    end
+
+    MidwayPhysics.OnStep(function(dt)
+        local mods = AttractionConstants.modifiers
+        local karma_scale = mods.karma + 1.0
+    end)
+
+>>>>>>> REPLACE  [Telemetry] Lua Scripter (Task task_2) (midway-coder-lora)  TTFT: 114.72s ⚠️ EXTREME | Speed: 8.7 tok/s (520 TPM) | Effective: 1.6 tok/s 🚨 SLOW
+  [11:42:10] [END] [Lua Scripter (Task task_2)] Execution complete.
+  [Anchor Guard] ⛔ task_2 SEARCH block 1 targets wrong anchor. Expected '-- [TASK_1_INSERT_HOOK]' but found '    -- [TASK_3_INSERT_HOOK] -- module-level state (balls/objects table, globals)'. Re-prompting...
+
+============================================================
+  [11:42:10] [START] [Anchor Guard Fix (task_2)] Calling Ollama (midway-coder-lora) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=1478 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:42:10] [START] [Anchor Guard Fix (task_2)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=f3e858b6e9b9)
+<<<<<< SEARCH
+    -- [TASK_1_INSERT_HOOK] -- module-level state (balls/objects table, globals)
+=======
+    local target  [Watchdog] ⚠ ⚠ Midway: extreme TTFT — TTFT 114.7s on 'Lua Scripter (Task task_2)' (midway-coder-lora)
+_stand = MidwayPhysics.SpawnStaticBox(2.748, 0.693, -5.266, 1.7, 1.6, 1.5)
+    local pole_base_back = MidwayPhysics.SpawnStaticCylinder(-2.13, 1.1, -0.9, 0.3, 1.6)
+    -- [TASK_1_INSERT-hook] -- module-level state (balls/object table, globals)
+>>>>>> REPLACE  [Telemetry] Anchor Guard Fix (task_2) (midway-coder-lora)  TTFT: 7.31s | Speed: 10.7 tok/s (643 TPM) | Effective: 6.8 tok/s
+  [11:42:30] [END] [Anchor Guard Fix (task_2)] Execution complete.
+  [FuzzyPatch] DEBUG: Exact match failed  trying fuzzy (normalize+slide)...
+  [FuzzyPatch] DEBUG: Fuzzy (normalize+slide) matched at line 26.
+  [Anchor Guard] ✅ Re-prompt produced corrected patch for task_2
+  [Real-time Patch] ✅ Applied 1/1 SEARCH/REPLACE block(s) to attractions/strongman/strongman.lua
+  [Anchor Verifier] 🔧 Post-patch re-injected '-- [TASK_1_INSERT_HOOK] -- module-level state (balls/objects table, globals)' into attractions/strongman/strongman.lua
+  [Snapshot] ✓ luac-clean baseline updated for attractions/strongman/strongman.lua (3491 chars)
+  [LedgerGuard] ⚠ Synthetic header prepended for Lua: [Spawn_permanent_static_geometry_target]
+  [Thermal Pacing] Cooling down for 5.0s...
+
+  ============================================================
+  Processing Wave 3/11 (1 task(s))
+  ============================================================
+  [VRAM Lock] Setting keep_alive=15m for task_3 (Lua)
+  VRAM stub: attractions/_REFERENCE/REFERENCE.lua (5691 chars -> stub)
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read: attractions/booth_shared.lua (712 chars)
+  Read 3 files from attractions/
+  VRAM stub: attractions/_shared/attraction_constants.lua (2872 chars -> stub)
+  Read 1 files from attractions/_shared/
+  VRAM stub: docs/engine_lua_bridge_contract.md (11596 chars -> stub)
+  VRAM stub: docs/rules_lua.md (6092 chars -> stub)
+  Read: init.lua (517 chars)
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [GDD Re-extract] Task 'task_3': 4917 -> 2257 chars (task-keyed extract, scope=NEW_ATTRACTION, attraction='strongman')
+  [Staging File] Injected 2816-char staging block for attractions/strongman/strongman.lua (full file 3491 chars) into 'Lua' prompt
+  [KV Cache] shared prefix ≈ 7180 chars; tail ≈ 8984 chars; no truncation
+
+============================================================
+  [11:42:35] [START] [Lua Scripter (Task task_3)] Calling Ollama (midway-coder-lora) [stateless]...
+  [VRAM Guard] num_ctx=32768, user=16166 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [11:42:36] [START] [Lua Scripter (Task task_3)] Calling Ollama (midway-coder-lora) [STREAMING]...
+============================================================

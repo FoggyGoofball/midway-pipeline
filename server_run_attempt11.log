@@ -1,0 +1,88 @@
+
+============================================================
+  Midway Pipeline Stream Server (Hardened)
+  Listening on http://0.0.0.0:8765
+  Run log: C:\Users\Admin\source\repos\midway-pipeline\pipeline_run.log
+============================================================
+
+  [Watchdog] started (ntfy -> https://ntfy.sh/midway-f4a5ec27, interval 30s; commands: send !help on the topic)
+  [Session] Started new session: pipeline_20260919_130238_a0faf546
+  [APILedger] ✓ Internal API ledger reset for new run.
+  [DecisionLog] ✓ Reset for new run ().
+  [Kernel] Mounted cartridge for project: Midway to Nowhere
+  [Kernel] No cartridge config present  using built-in defaults.
+  [Kernel] Prompt factories refreshed from cartridge.
+
+======================================================================
+  [13:02:38] Phase 1 & 2: Autonomic Workspace Discovery
+======================================================================
+  [Librarian] Executing programmatic repository indexing...
+  [Librarian] Verified active C++ AST symbols: 13
+  [Scope Classifier] Mode=NEW_ATTRACTION, target=strongman
+  [Context Extractor] Deterministic attraction match (header): 'The Strongman High Striker'
+  [Context Extractor] Deterministic cross-cutting: '3. The Dual-Currency Economy & Streak Protocol'
+  [Kernel] Cartridge provided scoped context (scope=NEW_ATTRACTION, attraction='strongman', 2257 chars)
+  [Kernel] Bridge contract appended to agent context (2388 chars)
+  [Adaptive ctx] Input ~1372 tok → KV cache pinned at 32768 (stable allocation, no resize).
+  [VRAM Budget] 📊 Loaded 'llama3.1:8b-instruct-q4_K_M' (7.0 GB). Used: 7.0/12.0 GB (58%)
+
+============================================================
+  [13:02:39] [START] [Clarification Gate] Calling Ollama (llama3.1:8b-instruct-q4_K_M)...
+  [VRAM Guard] num_ctx=32768, user=3197 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [13:02:39] [START] [Clarification Gate] Calling Ollama (llama3.1:8b-instruct-q4_K_M) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=c62c47f47f21)
+SPECIFICITY: SPECIFIC
+1. Strongman Striker Revamp — Rebuild the game with updated assets, sound effects, and visuals based on existing design documents.
+2. High Stakes Mode for Strongman Striker — Introduce a new mode where players must clear a set number of levels in succession without failing to earn exclusive rewards or penalties upon completion/failure.
+3. Dynamic Bell Placement — Implement the "The Bell's Curse" modifier, which randomly shifts the bell up or down the tower between swings, requiring the player to adapt their aim and timing accordingly.
+
+Note: The feature request is specific because it mentions a concrete game mechanic (Strongman Striker) with clear implementation directions (revamp assets, introduce new mode).  [Telemetry] Clarification Gate (llama3.1:8b-instruct-q4_K_M)  TTFT: 28.56s | Speed: 7.8 tok/s (470 TPM) | Effective: 3.1 tok/s
+  [13:03:27] [END] [Clarification Gate] Execution complete.
+  [Clarify Gate] Specificity: SPECIFIC
+  [Clarify Gate] ✓ Request is specific — proceeding to blueprint.
+
+  [Lead Producer] Scope is NEW_ATTRACTION — scope gate skipped (blueprint is mandatory for new attractions).
+  [Lead Producer] AST index: 10 files indexed (3 large).
+  [Blueprint] 🔒 Auto-enforced file constraint: attractions/strongman/strongman.lua
+  [Adaptive ctx] Input ~6547 tok → KV cache pinned at 32768 (stable allocation, no resize).
+  [System] VRAM Flush: Evicting llama3.1:8b-instruct-q4_K_M from unified memory...
+  [VRAM Budget] 📊 Evicted 'llama3.1:8b-instruct-q4_K_M' (7.0 GB). Used: 0.0/12.0 GB
+  [VRAM Budget] 📊 Loaded 'qwen3.5:9b' (7.9 GB). Used: 7.9/12.0 GB (66%)
+
+============================================================
+  [13:03:27] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=12307 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [13:03:27] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================
+  [MemGPT] Context store initialised (session=1f1c32a9c18e)
+- [ ] Task 1: Define module-level constants for puck mass, mallet dimensions, tower height, and friction modifiers inside the helper-function anchor - attractions/strongman/strongman.lua
+- [ ] Task 2: Implement the mallet swing input listener and ApplyImpulse call on release to launch the puck - attractions/strongman/strongman.lua
+- [ ] Task 3: Spawn the dynamic puck using SpawnDynamicSphere with configurable mass and friction, and register the tower geometry as static obstacles - attractions/strongman/strongman.lua
+- [ ] Task 4: Implement the bell sensor using SpawnSensorSphere and trigger scoring logic when the puck enters its radius - attractions/strongman/strongman.lua
+- [ ] Task 5: Implement the Streak Protocol by reading AttractionConstants.modifiers in OnStep and calling Engine.AwardTickets with Engine.GetStreak() as a multiplier on bell hits - attractions/strongman/strongman.lua
+- [ ] Task 6: Implement the "Rusty Rails" and "Weighted Puck" modifiers by adjusting the puck's friction and mass via SetFriction and SetMass when the corresponding modifier is active - attractions/strongman/strongman.lua
+- [ ] Task 7: Implement the "Tower Gauge Shift" by destroying the current puck with DestroyBody and spawning a new one at a random height when the modifier is active - attractions/strongman/strongman.lua
+- [ ] Task 8: Implement the "Cracked Base" wobble by applying a small random offset to the puck's spawn position or tower base geometry each round - attractions/strongman/strongman.lua  [Telemetry] Blueprint Generation (round 1) (qwen3.5:9b)  TTFT: 84.87s | Speed: 6.4 tok/s (382 TPM) | Effective: 2.4 tok/s
+  [13:05:43] [END] [Blueprint Generation (round 1)] Execution complete.
+  [Blueprint Validator] ⚠ Auto-rejecting blueprint  1 structural issue(s):
+  - Only 8 task(s) for NEW_ATTRACTION  minimum 11 required (one per scaffold anchor). There are 11 deterministic anchor markers in the scaffold file that must each be filled by exactly one task. Expand the plan to cover every lifecycle phase and gameplay concern.
+  [Adaptive ctx] Input ~4435 tok → KV cache pinned at 32768 (stable allocation, no resize).
+
+============================================================
+  [13:05:43] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b)...
+  [VRAM Guard] num_ctx=32768, user=5973 chars
+============================================================
+  [Stable ctx] num_ctx=32768 (pinned to model ceiling)
+
+============================================================
+  [13:05:43] [START] [Blueprint Generation (round 1)] Calling Ollama (qwen3.5:9b) [STREAMING]...
+============================================================

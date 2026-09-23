@@ -282,7 +282,7 @@ def _stream_messages_payload(
     payload = {
         "model": model,
         "stream": True,
-        "think": False,   # qwen3.5 is a thinking model — force direct content, not reasoning (empty-content bug)
+        "think": False,   # defensive: suppress thinking-model reasoning content (no current model emits it)
         "keep_alive": KEEP_ALIVE,
         "options": {
             "num_ctx": ctx_size,
@@ -529,6 +529,17 @@ def call_ollama_streamed(
     use_model = model or MODEL
     _evict_previous_model(use_model)
     ctx_size = resolve_ctx_size(use_model)
+    # -- Per-call context cap ------------------------------------------------
+    # Structured-JSON calls (format=<schema>) decode against a grammar state
+    # machine whose memory overhead, ON TOP of a 32K KV cache, OOMs the 12 GB
+    # Deck (reasoner resident ~8.7 GB at 32K).  Callers pass `ctx_cap` to shrink
+    # THIS one call's KV allocation so the grammar fits, without lowering the
+    # model's ceiling for genuinely large-context calls (e.g. the review pass).
+    if params:
+        _ctx_cap = params.pop("ctx_cap", None)
+        if _ctx_cap:
+            ctx_size = min(ctx_size, int(_ctx_cap))
+            print(f"  [ctx_cap] num_ctx capped to {ctx_size} for this call.")
 
     # -- Stable KV cache: pin num_ctx to the model's resolved ceiling ---------
     # A per-request "adaptive" num_ctx changes the KV-cache allocation between
@@ -567,7 +578,7 @@ def call_ollama_streamed(
     payload = {
         "model": use_model,
         "stream": True,
-        "think": False,   # qwen3.5 is a thinking model — force direct content, not reasoning (empty-content bug)
+        "think": False,   # defensive: suppress thinking-model reasoning content (no current model emits it)
         "keep_alive": KEEP_ALIVE,
         "options": {
             "num_ctx": ctx_size,

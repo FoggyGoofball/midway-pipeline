@@ -24,18 +24,18 @@ OLLAMA_HOST: str = "http://192.168.0.16:11434"
 USE_PHI35_ORACLES: bool = os.environ.get("MIDWAY_PHI35_ORACLES", "0") == "1"
 
 # -- Model Names
-CODER_MODEL: str = "qwen3.5:9b"  # best SEARCH/REPLACE instruction-follower at this size (6.1GB)
-REVIEWER_MODEL: str = "qwen3.5:9b"
+CODER_MODEL: str = "midway-coder-lora"  # LoRA-tuned qwen2.5-coder-7b-instruct (SEARCH/REPLACE + Midway contract)
+REVIEWER_MODEL: str = "midway-reasoner-lora"
 FALLBACK_REVIEWER_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL: str = "phi3.5:latest"
-LIBRARIAN_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
+LIBRARIAN_MODEL: str = "midway-reasoner-lora"
 SYNTAX_GATE_MODEL: str = "qwen2.5-coder:1.5b"
 INTENT_CLASSIFIER_MODEL: str = "llama3.2:1b"
 CHAT_MODEL: str = CODER_MODEL
 EXECUTION_MODEL: str = CODER_MODEL
 REASONING_MODEL: str = REVIEWER_MODEL
 MODEL: str = EXECUTION_MODEL
-DIRECTOR_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
+DIRECTOR_MODEL: str = "midway-reasoner-lora"
 
 # -- Timeouts & VRAM-Guarded Context Window Sizes
 # All values calibrated for 12 GB unified memory (Steam Deck).

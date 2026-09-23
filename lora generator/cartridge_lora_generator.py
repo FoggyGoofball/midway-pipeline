@@ -629,7 +629,7 @@ def generate_dataset(
         for sample in samples:
             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
 
-    print(f"\nDone! Generated {len(samples)} samples → {output}")
+    print(f"\nDone! Generated {len(samples)} samples -> {output}")
     print(f"Estimated dataset size: {output.stat().st_size / 1024:.0f} KB")
 
 
