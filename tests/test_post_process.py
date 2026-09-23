@@ -24,6 +24,7 @@ from _post_process_lua import (
     _dedupe_onstep_registrations,
     _neutralize_orphaned_else,
     _inject_onunload,
+    _repair_modifier_access,
 )
 from _preflight_helpers import _strip_search_replace_metadata
 
@@ -916,3 +917,27 @@ class TestInjectOnUnload:
     def test_no_inject_when_present(self):
         src = 'function OnUnload()\nend\n'
         assert _inject_onunload(src) == src
+
+
+# ==============================================================================
+#  Fix #31: modifier-access repair (regression: must not wrap `modifiers.field`)
+# ==============================================================================
+
+class TestRepairModifierAccess:
+    def test_wraps_bare_modifiers_read(self):
+        src = 'local MOD = AttractionConstants.modifiers\n'
+        out = _repair_modifier_access(src)
+        assert out == 'local MOD = AttractionConstants.modifiers or {}\n'
+
+    def test_does_not_mangle_field_access(self):
+        # Regression: `AttractionConstants.modifiers.luck` must stay intact;
+        # the old regex produced the invalid `AttractionConstants.modifiers or {}.luck`.
+        src = 'local mod_luck = AttractionConstants.modifiers.luck\n'
+        out = _repair_modifier_access(src)
+        assert out == src
+        assert 'or {}.luck' not in out
+
+    def test_does_not_mangle_index_access(self):
+        src = 'local luck = AttractionConstants.modifiers["luck"]\n'
+        out = _repair_modifier_access(src)
+        assert out == src

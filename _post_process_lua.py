@@ -1950,7 +1950,7 @@ def _repair_modifier_access(content: str) -> str:
     if not content:
         return content
     content, _n = re.subn(
-        r'\blocal\s+(\w+)\s*=\s*(?:CONST|AttractionConstants)\.modifiers\b(?!\s*or\b)',
+        r'\blocal\s+(\w+)\s*=\s*(?:CONST|AttractionConstants)\.modifiers\b(?!\s*or\b)(?![.\[])',
         r'local \1 = AttractionConstants.modifiers or {}',
         content,
     )
