@@ -292,3 +292,117 @@ def answer_oracle_question(question: str, code: Optional[str] = None) -> Tuple[b
         return False, ""
 
     return False, ""
+
+
+# ── External knowledge fallback (Google AI, anonymized) ──────────────────────
+# The arbiter can outsource GENERAL questions (API conflicts / unknown concepts)
+# to a Google AI answer.  Data is anonymized: never send exact code, file paths,
+# line numbers, or project-specific identifiers — always generalize.
+
+_GEMINI_ENDPOINT = (
+    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+)
+
+#: Project-specific identifiers -> generic descriptors (replaced before any
+#: query leaves the machine).
+_ANONYMIZE = [
+    ("MidwayPhysics", "a physics engine bridge API"),
+    ("MidwayInput", "an input API"),
+    ("AttractionConstants", "a shared constants module"),
+    ("Midway to Nowhere", "a physics arcade game"),
+]
+
+_CODE_LINE_RE = re.compile(
+    r"^\s*(?:local\b|function\b|if\b|then\b|else\b|elseif\b|for\b|while\b|"
+    r"do\b|end\b|return\b|--|#\b)"
+)
+
+#: Common dotted abbreviations to PRESERVE (not code).
+_DOTTED_DENYLIST = {"e.g", "i.e", "etc", "vs", "a.k.a", "w.r.t"}
+
+#: Inline call pattern: `identifier(...)` whose argument list contains a digit,
+#: comma, or quote — i.e. real code, not prose like "answer (briefly)".
+_INLINE_CALL_RE = re.compile(r"\b[A-Za-z_]\w*\s*\((?:[^()\n]*?[\d,\"'])[^()\n]*\)")
+
+
+def _scrub_dotted(m):
+    tok = m.group(0)
+    return tok if tok.lower().rstrip(".") in _DOTTED_DENYLIST else "a field access"
+
+
+def generalize_query(raw: str) -> str:
+    """Anonymize a question for external consumption.
+
+    Strips fenced code, code-looking lines, inline call/field patterns, file
+    paths, line-number references, and project-specific identifiers, leaving a
+    general domain question.
+    """
+    if not raw:
+        return ""
+    text = raw
+    # 1. Drop fenced code blocks entirely.
+    text = re.sub(r"```[\s\S]*?```", " ", text)
+    # 2. Drop code-looking lines.
+    lines = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if _CODE_LINE_RE.match(s):
+            continue
+        lines.append(s)
+    text = " ".join(lines)
+    # 3. Strip file paths and line-number references.
+    text = re.sub(r"\b[\w.-]+[\\/][\w.\\/-]*\.[A-Za-z0-9]+", "a source file", text)
+    text = re.sub(r"\b[\w.-]+\.(?:lua|py|cpp|c|h|hpp|md)\b", "a source file", text)
+    text = re.sub(r"\b(?:line|ln)\s*\d+\b", "", text, flags=re.IGNORECASE)
+    # 4. Scrub namespace-qualified members (MidwayPhysics.Foo -> generic)
+    #    BEFORE the bare-identifier pass, so the `.Foo` is consumed too.
+    for ns, generic in _ANONYMIZE:
+        text = re.sub(re.escape(ns) + r"\.[A-Za-z_]\w*", generic + " function",
+                      text, flags=re.IGNORECASE)
+    # 5. Scrub inline call patterns (Foo(0, 1, "x") -> a function call).
+    text = _INLINE_CALL_RE.sub("a function call", text)
+    # 6. Scrub dotted field chains (mods.heat -> a field access).
+    text = re.sub(r"\b[a-z_]\w*(?:\.[a-z_]\w*)+\b", _scrub_dotted, text)
+    # 7. Replace bare project identifiers.
+    for ident, generic in _ANONYMIZE:
+        text = re.sub(re.escape(ident), generic, text, flags=re.IGNORECASE)
+    # 8. Collapse whitespace.
+    return " ".join(text.split())
+
+
+def web_lookup(raw_question: str) -> Tuple[bool, str]:
+    """Answer a question via Google Gemini, with the query anonymized first.
+
+    Returns ``(answered, answer)``.  ``(False, "")`` when GOOGLE_API_KEY is not
+    set or the call fails.  NEVER sends raw code or project identifiers.
+    """
+    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+    if not api_key:
+        return False, ""
+    question = generalize_query(raw_question)
+    if not question:
+        return False, ""
+    model = os.environ.get("MIDWAY_WEB_MODEL", "gemini-2.0-flash")
+    prompt = (
+        "You are a programming knowledge assistant. Answer the following GENERAL "
+        "question in 2-4 sentences. Do not reference any proprietary identifiers "
+        "or source code.\n\nQuestion: " + question
+    )
+    import json as _json
+    import urllib.request as _ur
+    body = _json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+    req = _ur.Request(
+        _GEMINI_ENDPOINT.format(model=model) + "?key=" + api_key,
+        data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with _ur.urlopen(req, timeout=30) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+        parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+        answer = " ".join((p.get("text") or "") for p in parts).strip()
+        return (True, answer) if answer else (False, "")
+    except Exception:
+        return False, ""

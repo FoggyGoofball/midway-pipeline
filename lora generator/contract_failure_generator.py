@@ -28,8 +28,9 @@ import argparse
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -122,10 +123,37 @@ def _load_contract() -> dict:
     return build_bridge_contract()
 
 
-def derive_contract_mutations(contract: dict = None) -> Dict[str, Callable[[str], str]]:
-    """Programmatically derive the contract-dependent failure-mode mutators."""
+@dataclass
+class GuardRule:
+    """A single contract-derived failure mode WITH its arbiter metadata.
+
+    This is the deterministic bridge between the bridge contract and BOTH
+    consumers of that knowledge:
+      - the fixer/failure corpus (via ``mutate`` -> broken code), and
+      - the arbiter training-data generator (via ``objection`` + ``question``).
+    """
+    name: str
+    category: str                       # bare | arity_over | arity_under | phantom | mods_lower
+    mutate: Callable[[str], str]        # clean -> broken code producer
+    objection: str                      # REJECT justification citing the defect
+    question: Optional[str] = None      # oracle question (None = no deterministic fact)
+
+
+def derive_guard_rules(contract: dict = None) -> Dict[str, GuardRule]:
+    """Programmatically derive contract-dependent failure modes WITH their
+    arbiter metadata (objection + oracle question).
+
+    Mirrors ``derive_contract_mutations`` but returns full ``GuardRule``
+    objects so the arbiter dataset generator no longer needs a hand-written
+    objection/question table for the contract-derived modes.
+    """
     contract = contract or _load_contract()
-    out: Dict[str, Callable[[str], str]] = {}
+    out: Dict[str, GuardRule] = {}
+
+    def _add(name: str, category: str, mutate: Callable[[str], str],
+             objection: str, question: Optional[str]) -> None:
+        out[name] = GuardRule(name=name, category=category, mutate=mutate,
+                              objection=objection, question=question)
 
     # 1. Bare namespace calls + arity for every spawn API.
     for sig in contract.get("midwayphysics_spawn_api", {}):
@@ -133,10 +161,16 @@ def derive_contract_mutations(contract: dict = None) -> Dict[str, Callable[[str]
         if not params:
             continue
         short = name.rsplit(".", 1)[-1]
-        out[f"bare_{short}"] = _bare(name, params)
-        out[f"arity_over_{short}"] = _arity_over("MidwayPhysics", name, params)
+        _add(f"bare_{short}", "bare", _bare(name, params),
+             f"bare call `{short}(...)` must be namespace-qualified as MidwayPhysics.{short}",
+             f"Is {short} a real API?")
+        _add(f"arity_over_{short}", "arity_over", _arity_over("MidwayPhysics", name, params),
+             f"`{short}` is called with too many arguments",
+             f"How many arguments does {short} take?")
         if len(params) >= 2:
-            out[f"arity_under_{short}"] = _arity_under("MidwayPhysics", name, params)
+            _add(f"arity_under_{short}", "arity_under", _arity_under("MidwayPhysics", name, params),
+                 f"`{short}` is called with too few arguments",
+                 f"How many arguments does {short} take?")
 
     # 2. Bare + phantom for the economy (Engine) and input (MidwayInput) APIs.
     for section, ns in (
@@ -148,20 +182,38 @@ def derive_contract_mutations(contract: dict = None) -> Dict[str, Callable[[str]
             if not params:
                 continue
             short = name.rsplit(".", 1)[-1]
-            out[f"bare_{short}"] = _bare(name, params)
-            out[f"phantom_{short}"] = _phantom(ns, name)
+            _add(f"bare_{short}", "bare", _bare(name, params),
+                 f"bare call `{short}(...)` must be namespace-qualified as {ns}.{short}",
+                 f"Is {short} a real API?")
+            _add(f"phantom_{short}", "phantom", _phantom(ns, name),
+                 f"phantom API `{ns}.{short}X` is not in the bridge contract",
+                 f"Is {ns}.{short}X a real API?")
 
     # 3. Phantom members for the spawn namespace itself.
     for sig in contract.get("midwayphysics_spawn_api", {}):
         name, _ = parse_signature(sig)
         short = name.rsplit(".", 1)[-1]
-        out[f"phantom_{short}"] = _phantom("MidwayPhysics", name)
+        _add(f"phantom_{short}", "phantom", _phantom("MidwayPhysics", name),
+             f"phantom API `MidwayPhysics.{short}X` is not in the bridge contract",
+             f"Is MidwayPhysics.{short}X a real API?")
 
     # 4. Modifier lowercase for every modifier global key.
     for key in contract.get("modifier_globals", {}):
-        out[f"mods_lower_{key.lower()}"] = _modifier_lowercase(key)
+        _add(f"mods_lower_{key.lower()}", "mods_lower", _modifier_lowercase(key),
+             f"lowercase `mods.{key.lower()}` is not declared; modifiers must be read "
+             f"via MOD or AttractionConstants.modifiers",
+             None)
 
     return out
+
+
+def derive_contract_mutations(contract: dict = None) -> Dict[str, Callable[[str], str]]:
+    """Backward-compatible wrapper: ``{name: mutator}`` only.
+
+    Kept so existing callers/tests that only need the broken-code producer
+    continue to work unchanged.
+    """
+    return {name: rule.mutate for name, rule in derive_guard_rules(contract).items()}
 
 
 def run_mutations(file_paths: list[str]) -> int:

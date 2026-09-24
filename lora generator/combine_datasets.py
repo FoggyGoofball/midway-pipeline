@@ -51,9 +51,9 @@ PRESETS = {
         "desc": "midway-coder-lora retrain (INITIAL bootstrap + GENUINE user-driven failure corpus)",
     },
     "reasoner": {
-        "inputs": [SIGNALS_DATASET, VERDICT_DATASET, ARBITER_DATASET],
+        "inputs": [SIGNALS_DATASET, VERDICT_DATASET],
         "output": REASONER_DATASET,
-        "desc": "midway-reasoner-lora (signals + review/arbitration + deterministic debate)",
+        "desc": "midway-reasoner-lora (Director signals + review verdicts; tribunal debate is the arbiter LoRA's own job)",
     },
 }
 

@@ -560,7 +560,25 @@ def call_ollama_streamed(
     # page operation, and auto-resume with a continuation prompt.
     from paging_controller import PagingController
     from offload_store import get_offload_store
-    paging = PagingController(offload_store=get_offload_store())
+    # Stable session id (run session + label) so MemGPT crash-recovery can
+    # resolve the same window across a retry.  Sanitized for use as a filename.
+    _stable_session = None
+    try:
+        from pipeline import _CTX as _pctx
+        _mgr = getattr(_pctx, "session_mgr", None)
+        _run_sid = (getattr(_mgr, "session_id", "") or "").strip() if _mgr else ""
+        if _run_sid:
+            import re as _re_sid
+            _stable_session = _re_sid.sub(r"[^A-Za-z0-9_-]+", "_", f"{_run_sid}_{label}")[:96]
+    except Exception:
+        _stable_session = None
+    paging = PagingController(offload_store=get_offload_store(), session_id=_stable_session)
+    # Resume an interrupted checkpoint for this session (gated by
+    # MIDWAY_MEMGPT_RESTORE=1) so a crashed call resumes instead of restarting.
+    _restored = paging.restore_interrupted()
+    if _restored:
+        print(f"  [MemGPT] ⚡ Resuming interrupted session ({len(_restored)} messages).")
+        messages = _restored
     _page_resume_depth: int = 0  # Hard cap on recursive paging resumes
     # -- Phase 7: Forward the active model's context allocation ----------
     # Ensures the PagingController uses the correct context ceiling for
@@ -900,6 +918,12 @@ def call_ollama_streamed(
 
     yield from _run_stream_cycle()
 
+    # -- MemGPT: mark this session's checkpoint as completed.  Reaching this
+    # point means the call finished (success or a clean error sentinel); a
+    # process kill mid-stream never reaches here, leaving completed=False so
+    # the next attempt can restore the interrupted window.
+    paging.mark_completed()
+
     # -- Directive A: Capture paged_in_cache for Pro-Mode Inheritance --
     global _last_paged_cache
     _last_paged_cache = dict(paging.paged_in_cache)
@@ -1010,7 +1034,7 @@ def _stream_with_repetition_guard(
 
 
 def call_ollama(system: str, user: str, label: str, model: Optional[str] = None, params: Optional[dict] = None,
-                skip_pre_summarizer: bool = False) -> str:
+                skip_pre_summarizer: bool = False, images: Optional[list] = None) -> str:
     """Call Ollama's /api/chat endpoint. Returns the full response text.
 
     Delegates to call_ollama_streamed() generator, collecting all yielded
@@ -1175,7 +1199,13 @@ def call_ollama(system: str, user: str, label: str, model: Optional[str] = None,
     print(f"  [VRAM Guard] num_ctx={_e_model_ctx}, user={len(user)} chars")
     print(f"{'='*60}")
     sys.stdout.flush()
-    result = _stream_with_repetition_guard(system, user, label, model, _e_params)
+    _e_messages = None
+    if images:
+        _e_messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user, "images": list(images)},
+        ]
+    result = _stream_with_repetition_guard(system, user, label, model, _e_params, messages=_e_messages)
     ts_end = datetime.now().strftime('%H:%M:%S')
     print(f"  [{ts_end}] {paint('[END]', 'green')} [{paint(label, 'blue')}] Execution complete.")
     sys.stdout.flush()

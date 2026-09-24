@@ -81,6 +81,17 @@ async function fetchWithTimeout(url, options = {}, ms = 12000) {
   }
 }
 
+const GATE_LABELS = {
+  mechanics_scaffold: 'Mechanics scaffold',
+  failure_corpus: 'Failure corpus capture',
+  phi35_oracles: 'phi3.5 oracles',
+  memgpt_restore: 'MemGPT restore',
+  keep_director: 'Keep director',
+  gates_enabled: 'Gates enabled (approval)',
+  agentic_mode: 'Agentic mode (full autonomy)',
+  strict_isolation: 'Strict isolation (no persist)',
+}
+
 export default function App() {
   const [status, setStatus] = useState(null)
   const [ollama, setOllama] = useState(null)
@@ -91,6 +102,12 @@ export default function App() {
   const [serverUp, setServerUp] = useState(true)
   const [fullLog, setFullLog] = useState(false)
   const [fullLogs, setFullLogs] = useState([])
+  const [imageData, setImageData] = useState('')
+  const [imageName, setImageName] = useState('')
+  const [useVision, setUseVision] = useState(false)
+  const [visionReply, setVisionReply] = useState('')
+  const [ideState, setIdeState] = useState(null)
+  const [wd, setWd] = useState(null)
   const logRef = useRef(null)
 
   // The built app is also served by the Python pipeline server on :8765, but
@@ -142,6 +159,24 @@ export default function App() {
     setOllama({ host: '', reachable: false, version: null, models: [], error: 'no probe available' })
   }, [])
 
+  const refreshIdeState = useCallback(async () => {
+    try {
+      const r = await fetch('/api/state')
+      if (r.ok) setIdeState(await r.json())
+    } catch {
+      /* keep last known state */
+    }
+  }, [])
+
+  const refreshWatchdog = useCallback(async () => {
+    try {
+      const r = await fetch('/api/watchdog')
+      if (r.ok) setWd(await r.json())
+    } catch {
+      /* keep last known state */
+    }
+  }, [])
+
   const refreshFullLogs = useCallback(async () => {
     try {
       const r = await fetch('/api/logfile')
@@ -157,13 +192,19 @@ export default function App() {
   useEffect(() => {
     refreshStatus()
     refreshOllama()
+    refreshIdeState()
+    refreshWatchdog()
     const t1 = setInterval(refreshStatus, 2000)
     const t2 = setInterval(refreshOllama, 4000)
+    const t3 = setInterval(refreshIdeState, 8000)
+    const t4 = setInterval(refreshWatchdog, 10000)
     return () => {
       clearInterval(t1)
       clearInterval(t2)
+      clearInterval(t3)
+      clearInterval(t4)
     }
-  }, [refreshStatus, refreshOllama])
+  }, [refreshStatus, refreshOllama, refreshIdeState, refreshWatchdog])
 
   useEffect(() => {
     if (!fullLog) {
@@ -209,11 +250,93 @@ export default function App() {
     }
   }
 
+  const onImageSelect = (e) => {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl
+      setImageData(base64)
+      setImageName(file.name)
+      setUseVision(true)   // auto-activate vision when an image is selected
+      setVisionReply('')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const toggleGate = async (key) => {
+    const cfg = ideState?.config || {}
+    const gates = { ...(cfg.gates || {}) }
+    gates[key] = !gates[key]
+    try {
+      const r = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cfg, gates }),
+      })
+      if (r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setIdeState((prev) => ({ ...(prev || {}), config: j.config || prev?.config }))
+        setNotice('Config saved — restart the server to apply.')
+      } else {
+        setNotice('Could not save config.')
+      }
+    } catch {
+      setNotice('Could not reach the config endpoint.')
+    }
+  }
+
+  const saveWatchdog = async (patch) => {
+    try {
+      const r = await fetch('/api/watchdog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (r.ok) {
+        setWd(await r.json())
+        setNotice('Watchdog settings applied.')
+      } else {
+        setNotice('Could not apply watchdog settings.')
+      }
+    } catch {
+      setNotice('Could not reach the watchdog endpoint.')
+    }
+  }
+
+  const testNtfy = async () => {
+    setNotice('Sending test notification…')
+    try {
+      const r = await fetch('/api/ntfy/test', { method: 'POST' })
+      const j = await r.json().catch(() => ({}))
+      setNotice(j.sent ? 'Test notification sent — check your phone.' : 'Could not send (check topic/server).')
+    } catch {
+      setNotice('Could not reach the test endpoint.')
+    }
+  }
+
   const run = async () => {
     if (!prompt.trim() || busy) return
     setBusy(true)
     setNotice('')
     try {
+      if (useVision && imageData) {
+        const r = await fetchWithTimeout('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: prompt.trim(), images: [imageData] }],
+            vision: true,
+            stream: false,
+          }),
+        }, 240000)
+        const j = await r.json().catch(() => ({}))
+        const text = j?.choices?.[0]?.message?.content || j?.error || '(no response)'
+        setVisionReply(text)
+        setNotice('Vision analysis complete.')
+        return
+      }
       if (awaiting) {
         const r = await fetch('/api/input', {
           method: 'POST',
@@ -376,6 +499,22 @@ export default function App() {
           placeholder={awaiting ? (status?.input_prompt || 'Type your response…') : 'e.g. refer to the GDD and build the strongman striker'}
         />
         <div className="row">
+          <label className="filepick">
+            <input type="file" accept="image/*" onChange={onImageSelect} />
+            {imageName ? `📎 ${imageName}` : 'Attach image'}
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={useVision}
+              onChange={(e) => setUseVision(e.target.checked)}
+              disabled={!imageData}
+              title="Analyze the attached image with the vision model"
+            />
+            Use vision model
+          </label>
+        </div>
+        <div className="row">
           <button
             onClick={awaiting ? run : (running ? stop : run)}
             disabled={busy || (!awaiting && running && status?.stop_requested)}
@@ -385,6 +524,98 @@ export default function App() {
           </button>
           {notice && <span className="notice">{notice}</span>}
         </div>
+        {visionReply && (
+          <div className="vision-reply">
+            <h3 className="sub">Vision analysis</h3>
+            <pre>{visionReply}</pre>
+          </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Models &amp; Knobs</h2>
+        <div className="kv">
+          {ideState?.models && Object.entries(ideState.models).map(([k, v]) => (
+            <div key={k}>
+              <span className="k">{k}</span>
+              <span className="v model">{v || '—'}</span>
+            </div>
+          ))}
+        </div>
+        <h3 className="sub">Gates (restart to apply)</h3>
+        <div className="gates">
+          {ideState?.config?.gates && Object.entries(ideState.config.gates).map(([k, v]) => (
+            <label key={k} className="checkbox">
+              <input type="checkbox" checked={!!v} onChange={() => toggleGate(k)} />
+              {GATE_LABELS[k] || k}
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Watchdog &amp; Notify</h2>
+        {wd == null ? <div className="dim">probing…</div> : (
+          <>
+            <div className="gates">
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={!!wd.watchdog?.enabled}
+                  onChange={(e) => saveWatchdog({ watchdog: { ...(wd.watchdog || {}), enabled: e.target.checked } })}
+                />
+                Watchdog enabled
+              </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={!!wd.ntfy?.enabled}
+                  onChange={(e) => saveWatchdog({ ntfy: { ...(wd.ntfy || {}), enabled: e.target.checked } })}
+                />
+                Notify (ntfy) enabled
+              </label>
+            </div>
+            <div className="kv">
+              {wd.watchdog && ['ttft', 'tps', 'stall', 'cooldown', 'interval', 'heartbeat'].map((k) => (
+                <div key={k}>
+                  <span className="k">{k}</span>
+                  <input
+                    className="num"
+                    type="number"
+                    value={wd.watchdog[k]}
+                    onChange={(e) => setWd({ ...wd, watchdog: { ...wd.watchdog, [k]: e.target.value } })}
+                    onBlur={(e) => saveWatchdog({ watchdog: { ...wd.watchdog, [k]: parseFloat(e.target.value) } })}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="kv">
+              <div>
+                <span className="k">ntfy topic</span>
+                <input
+                  className="text"
+                  type="text"
+                  value={wd.ntfy?.topic || ''}
+                  onChange={(e) => setWd({ ...wd, ntfy: { ...wd.ntfy, topic: e.target.value } })}
+                  onBlur={(e) => saveWatchdog({ ntfy: { ...wd.ntfy, topic: e.target.value } })}
+                />
+              </div>
+              <div>
+                <span className="k">ntfy server</span>
+                <input
+                  className="text"
+                  type="text"
+                  value={wd.ntfy?.server || ''}
+                  onChange={(e) => setWd({ ...wd, ntfy: { ...wd.ntfy, server: e.target.value } })}
+                  onBlur={(e) => saveWatchdog({ ntfy: { ...wd.ntfy, server: e.target.value } })}
+                />
+              </div>
+            </div>
+            <div className="row">
+              <button onClick={testNtfy}>Send test notification</button>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="card">

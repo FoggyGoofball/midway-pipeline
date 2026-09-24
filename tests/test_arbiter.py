@@ -12,6 +12,8 @@ from arbiter import (
     answer_oracle_question,
     build_clarification_block,
     strip_thinking,
+    generalize_query,
+    web_lookup,
     _signature_for,
 )
 
@@ -131,3 +133,46 @@ class TestStripThinking:
 
     def test_empty(self):
         assert strip_thinking("") == ""
+
+
+class TestGeneralizeQuery:
+    def test_strips_code_block_paths_and_identifiers(self):
+        raw = (
+            "Fix this:\n```lua\nlocal x = MidwayPhysics.SpawnStaticBox(0,0,0,1,1,1)\n```\n"
+            "in attractions/strongman/strongman.lua line 62"
+        )
+        out = generalize_query(raw)
+        assert "```" not in out
+        assert "SpawnStaticBox" not in out
+        assert "MidwayPhysics" not in out
+        assert ".lua" not in out
+        assert "line 62" not in out
+
+    def test_anonymizes_project_identifiers(self):
+        out = generalize_query("Is MidwayPhysics.GetBodyFromHandle a real API?")
+        assert "MidwayPhysics" not in out
+        assert "physics engine bridge API" in out
+
+    def test_scrubs_inline_call(self):
+        out = generalize_query("Call SpawnStaticBox(0, 0, 0, 1, 1, 1) to build a box")
+        assert "SpawnStaticBox" not in out
+        assert "0, 0" not in out
+
+    def test_scrubs_inline_dotted_field(self):
+        out = generalize_query("use mods.heat for the tuning value")
+        assert "mods.heat" not in out
+
+    def test_preserves_common_abbreviation(self):
+        out = generalize_query("is the arity correct, e.g. six args?")
+        assert "e.g" in out
+
+    def test_empty(self):
+        assert generalize_query("") == ""
+
+
+class TestWebLookup:
+    def test_no_key_returns_unanswered(self, monkeypatch):
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        ok, ans = web_lookup("what is a static box in a physics engine?")
+        assert ok is False
+        assert ans == ""

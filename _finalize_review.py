@@ -587,7 +587,7 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
     """
     try:
         from pipeline import ARBITER_MODEL as _RM, CODER_MODEL as _CODER
-        from arbiter import extract_questions, answer_oracle_question, build_clarification_block, strip_thinking
+        from arbiter import extract_questions, answer_oracle_question, build_clarification_block, strip_thinking, web_lookup
     except Exception:
         return ""
 
@@ -624,6 +624,9 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
         "one turn if needed.\n"
         "- [QUESTION:coder:<design-intent question>] — ask the coder to explain its intent "
         "(e.g. why it chose a given structure or value).\n"
+        "- [QUESTION:web:<generalized question>] — ask an EXTERNAL knowledge service for a "
+        "GENERAL answer (language/domain best practice). NEVER include code, file paths, or "
+        "project identifiers — state the question in general, anonymized terms.\n"
         "Use QUESTION turns to interrogate the code BEFORE you render MERGE/REJECT. When "
         "unsure whether a symbol exists, ASK the oracle instead of assuming. Be surgical: "
         "object only to visible, breaking defects."
@@ -673,6 +676,7 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
         if _questions:
             _oracle_qs = [q for t, q in _questions if t == "oracle"]
             _coder_qs = [q for t, q in _questions if t == "coder"]
+            _web_qs = [q for t, q in _questions if t == "web"]
             for _q in _oracle_qs:
                 _ok, _ans = answer_oracle_question(_q, _final_code)
                 if _ok:
@@ -680,11 +684,18 @@ def _run_tribunal_coder_debate(ctx: PipelineContext, max_rounds: int = 3) -> str
                     print(f"  [Tribunal Debate] oracle: {_q[:70]!r} -> {_ans[:90]!r}")
                 else:
                     _coder_qs.append(_q)  # oracle could not answer deterministically
+            for _q in _web_qs:
+                _ok, _ans = web_lookup(_q)
+                if _ok:
+                    _clarification_log.append(("(web, anonymized) " + _q, _ans))
+                    print(f"  [Tribunal Debate] web: {_q[:60]!r} -> {_ans[:90]!r}")
+                else:
+                    _coder_qs.append(_q)  # web unavailable -> fall back to coder
             if _coder_qs:
                 _ans = _coder_answer_questions(ctx, _coder_qs, _final_code)
                 if _ans:
                     _clarification_log.append((" | ".join(_coder_qs), _ans))
-            print(f"  [Tribunal Debate] answered {len(_oracle_qs)} oracle + {len(_coder_qs)} coder question(s); continuing.")
+            print(f"  [Tribunal Debate] answered {len(_oracle_qs)} oracle + {len(_web_qs)} web + {len(_coder_qs)} coder question(s); continuing.")
             continue
 
         _is_merge = bool(re.search(r"\[MERGE[:\]]", _trib_out, re.IGNORECASE)

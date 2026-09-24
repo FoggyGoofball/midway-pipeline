@@ -24,6 +24,26 @@ PROJECT_ROOT: Path = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolv
 _STAGING_ACTIVE: bool = False
 _STAGING_DIR: Optional[Path] = None
 
+# -- Strict isolation (debug / problem-solving): when enabled, EVERY write is
+# redirected to .sandbox/ and never touches the real project.  Intended for
+# inspecting what the pipeline WOULD have changed without persisting it.
+_STRICT_ISOLATION: bool = os.environ.get("MIDWAY_STRICT_ISOLATION", "0").strip().lower() in ("1", "true", "yes")
+
+
+def is_isolation_active() -> bool:
+    return _STRICT_ISOLATION
+
+
+def get_isolation_path(target_path: Path, project_root: Optional[Path] = None) -> Path:
+    """Map a real target path to its .sandbox/ equivalent (strict isolation)."""
+    pr = (project_root or PROJECT_ROOT).resolve()
+    sandbox_root = pr / ".sandbox"
+    try:
+        rel = target_path.resolve().relative_to(pr)
+        return (sandbox_root / rel).resolve()
+    except ValueError:
+        return target_path  # outside the project — leave as-is
+
 
 def enable_staging(project_root: Optional[Path] = None) -> Path:
     """Enable staged filesystem mode. All subsequent atomic_write_text calls
@@ -1059,6 +1079,15 @@ def atomic_write_text(
     # -- Sanitize agent output before write if domain_key is provided --
     if domain_key:
         content = sanitize_agent_file_output(domain_key, content)
+
+    # -- Strict isolation: redirect ALL writes to the sandbox ----------
+    if _STRICT_ISOLATION:
+        iso_path = get_isolation_path(path)
+        iso_path.parent.mkdir(parents=True, exist_ok=True)
+        _iso_tmp = iso_path.with_suffix(iso_path.suffix + '.tmp')
+        _iso_tmp.write_text(content, encoding=encoding)
+        _iso_tmp.replace(iso_path)
+        return
 
     # -- Phase IV: Redirect to staging workspace if active ------------
     if _STAGING_ACTIVE and _STAGING_DIR is not None:

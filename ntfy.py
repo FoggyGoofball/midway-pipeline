@@ -34,11 +34,32 @@ SERVER = os.environ.get("MIDWAY_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 # MIDWAY_NTFY_TOPIC still overrides it.  Treat this as a password — if the repo
 # is ever made public, change it and set MIDWAY_NTFY_TOPIC to the new value.
 TOPIC = os.environ.get("MIDWAY_NTFY_TOPIC", "midway-f4a5ec27").strip()
+_ENABLED = os.environ.get("MIDWAY_NTFY_ENABLED", "1").strip().lower() in ("1", "true", "yes")
 
 
 def configured() -> bool:
-    """True when a topic is set (i.e. notifications can actually be sent)."""
-    return bool(TOPIC)
+    """True when a topic is set AND notifications are enabled."""
+    return bool(TOPIC) and _ENABLED
+
+
+def get_config() -> dict:
+    """Current ntfy config for the IDE."""
+    return {"topic": TOPIC, "server": SERVER, "enabled": _ENABLED, "configured": configured()}
+
+
+def set_config(topic: str = "", server: str = "", enabled=None) -> dict:
+    """Hot-apply ntfy topic/server/enabled (updates module globals + env)."""
+    global TOPIC, SERVER, _ENABLED
+    if enabled is not None:
+        _ENABLED = bool(enabled)
+        os.environ["MIDWAY_NTFY_ENABLED"] = "1" if _ENABLED else "0"
+    if topic:
+        TOPIC = str(topic).strip()
+        os.environ["MIDWAY_NTFY_TOPIC"] = TOPIC
+    if server:
+        SERVER = str(server).rstrip("/")
+        os.environ["MIDWAY_NTFY_SERVER"] = SERVER
+    return get_config()
 
 
 def fetch_messages(since: str = "", timeout: float = 5.0) -> list:

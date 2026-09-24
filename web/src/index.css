@@ -394,3 +394,61 @@ button.restart.go:hover {
   color: var(--green);
 }
 
+/* ── IDE: image picker, vision checkbox, knobs ─────────────────────────── */
+.filepick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.filepick input[type="file"] {
+  display: none;
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.checkbox input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.vision-reply {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--border, #2a2a2a);
+  padding-top: 0.5rem;
+}
+
+.vision-reply pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono, monospace);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.kv input {
+  background: var(--bg2, #1a1a1a);
+  color: var(--text);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.85rem;
+  max-width: 180px;
+}
+

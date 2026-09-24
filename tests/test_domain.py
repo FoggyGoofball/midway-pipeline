@@ -28,19 +28,23 @@ class TestDomainResolution:
 
 
 class TestGetAgentSystem:
-    """Lock in get_agent_system behavior (lines 2565-2577)."""
+    """Lock in get_agent_system behavior (cartridge-driven domain registry).
 
-    def test_get_system_for_known_domain(self):
-        system = get_agent_system("C++")
+    Language/technology domains (C++/Lua/...) are defined EXCLUSIVELY by the
+    mounted cartridge; the static ``ALL_DOMAINS`` registry holds only universal
+    roles.  With no cartridge mounted, language domains resolve to "".
+    """
+
+    def test_get_system_for_universal_role(self):
+        system = get_agent_system("REVIEWER")
         assert isinstance(system, str)
         assert len(system) > 0
 
-    def test_get_system_for_unknown_domain(self):
+    def test_get_system_unknown_returns_empty(self):
         system = get_agent_system("NONEXISTENT_DOMAIN")
-        assert isinstance(system, str)
+        assert system == ""
 
-    def test_get_system_returns_different_for_different_domains(self):
-        cpp = get_agent_system("C++")
-        lua = get_agent_system("Lua")
-        # These should differ since prompts differ per domain
-        assert cpp != lua
+    def test_get_system_differs_across_roles(self):
+        reviewer = get_agent_system("REVIEWER")
+        doc = get_agent_system("DOC")
+        assert reviewer != doc

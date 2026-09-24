@@ -103,6 +103,36 @@ def _set_setting(key: str, value) -> None:
         _settings[key] = value
 
 
+def get_settings() -> dict:
+    """Public read of the live watchdog settings (for the IDE)."""
+    return _get_settings()
+
+
+def apply_settings(settings: dict) -> dict:
+    """Hot-apply watchdog settings from the IDE.  Returns the new settings."""
+    with _settings_lock:
+        for key, value in (settings or {}).items():
+            if key == "enabled":
+                _settings[key] = bool(value)
+            elif key in _SETTABLE:
+                try:
+                    _settings[key] = float(value)
+                except (TypeError, ValueError):
+                    pass
+        return dict(_settings)
+
+
+def send_test_notification() -> bool:
+    """Send a one-shot test notification (for the IDE 'test' button)."""
+    if ntfy is not None and ntfy.configured():
+        try:
+            ntfy.notify("Midway IDE", "Test notification from the IDE.", priority="3", tags="floppy_disk")
+            return True
+        except Exception:
+            return False
+    return False
+
+
 def _alert(kind: str, title: str, message: str, tags: str = "", priority: str = "3") -> None:
     cfg = _get_settings()
     if not cfg.get("enabled", True):

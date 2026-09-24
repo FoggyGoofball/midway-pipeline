@@ -23,10 +23,10 @@ from _enforcers import (
 
 
 def _ordered_calls() -> list:
-    """Extract the ordered `content = _func(content)` calls from
-    `post_process_lua` source."""
-    src = inspect.getsource(_pp.post_process_lua)
-    return re.findall(r'content\s*=\s*([A-Za-z_]\w*)\(content\)', src)
+    """Extract the ordered fixer function names from the ``_FIX_SEQUENCE``
+    manifest — the single source of truth after the ``post_process_lua``
+    refactor consolidated the ordered calls into ``_run_fix_sequence``."""
+    return [fn.__name__ for _label, _invariant, fn in _pp._FIX_SEQUENCE]
 
 
 class TestManifestCoverage:
@@ -86,7 +86,7 @@ class TestCriticalOrderings:
 
     def test_bare_expression_before_conditional_injections(self):
         # #15 is the last unconditional transform; the lifecycle injections
-        # (#4 OnLoadStatic / #5 SLOT_ID / #10 handles) are guarded by
-        # `if not _is_patch_fragment` and must run AFTER it.
+        # (#4 OnLoadStatic / #5 SLOT_ID / #10 handles) are grouped into the
+        # `_apply_lifecycle_invariants` composite and must run AFTER it.
         c = self._calls()
-        assert c.index("_repair_bare_expression_statements") < c.index("_inject_onload_static")
+        assert c.index("_repair_bare_expression_statements") < c.index("_apply_lifecycle_invariants")

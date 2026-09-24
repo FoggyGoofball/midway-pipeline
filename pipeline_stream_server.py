@@ -28,6 +28,122 @@ import time
 
 import server_status as _status
 
+# ── IDE config (knobs) — read/written by the web IDE ─────────────────────
+# Single source of truth for user-tweakable knobs.  Applied to the environment
+# BEFORE pipeline modules import (model/gate/ntfy knobs take effect on start);
+# the watchdog settings are hot-appliable via POST /api/watchdog.
+IDE_CONFIG_PATH = (Path(__file__).resolve().parent / "pipeline.ide.json")
+
+_IDE_CONFIG_DEFAULTS = {
+    "models": {
+        "coder": "midway-coder-lora",
+        "reviewer": "midway-reasoner-lora",
+        "arbiter": "deepseek-r1:7b",
+        "vision": "qwen3.5:9b",
+        "scaffold": "midway-coder-lora",
+    },
+    "gates": {
+        "mechanics_scaffold": False,
+        "failure_corpus": False,
+        "phi35_oracles": False,
+        "memgpt_restore": False,
+        "keep_director": False,
+        "gates_enabled": False,
+        "agentic_mode": False,
+        "strict_isolation": False,
+    },
+    "watchdog": {
+        "enabled": True,
+        "ttft": 100,
+        "tps": 0.5,
+        "stall": 20,
+        "cooldown": 900,
+        "interval": 30,
+        "heartbeat": 30,
+    },
+    "ntfy": {
+        "enabled": True,
+        "topic": "midway-f4a5ec27",
+        "server": "https://ntfy.sh",
+    },
+    "external": {
+        "ollama_host": "http://192.168.0.16:11434",
+        "google_api_key": "",
+    },
+}
+
+_MODEL_ENV = {
+    "coder": "MIDWAY_CODER_MODEL",
+    "reviewer": "MIDWAY_REVIEWER_MODEL",
+    "arbiter": "MIDWAY_ARBITER_MODEL",
+    "vision": "MIDWAY_VISION_MODEL",
+    "scaffold": "MIDWAY_SCAFFOLD_MODEL",
+}
+_GATE_ENV = {
+    "mechanics_scaffold": "MIDWAY_MECHANICS_SCAFFOLD",
+    "failure_corpus": "MIDWAY_FAILURE_CORPUS",
+    "phi35_oracles": "MIDWAY_PHI35_ORACLES",
+    "memgpt_restore": "MIDWAY_MEMGPT_RESTORE",
+    "keep_director": "MIDWAY_KEEP_DIRECTOR",
+    "gates_enabled": "MIDWAY_GATES_ENABLED",
+    "agentic_mode": "MIDWAY_AGENTIC_MODE",
+    "strict_isolation": "MIDWAY_STRICT_ISOLATION",
+}
+
+
+def _read_ide_config() -> dict:
+    """Return the merged IDE config (defaults + pipeline.ide.json overlay)."""
+    import copy
+    cfg = copy.deepcopy(_IDE_CONFIG_DEFAULTS)
+    try:
+        if IDE_CONFIG_PATH.is_file():
+            overlay = json.loads(IDE_CONFIG_PATH.read_text(encoding="utf-8"))
+            for k, v in (overlay or {}).items():
+                if isinstance(v, dict) and isinstance(cfg.get(k), dict):
+                    cfg[k].update(v)
+                else:
+                    cfg[k] = v
+    except Exception:
+        pass
+    return cfg
+
+
+def _write_ide_config(cfg: dict) -> bool:
+    try:
+        IDE_CONFIG_PATH.write_text(
+            json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _apply_ide_config_to_env() -> None:
+    """Map the IDE config onto os.environ BEFORE pipeline modules import."""
+    cfg = _read_ide_config()
+    for key, env in _MODEL_ENV.items():
+        val = (cfg.get("models") or {}).get(key)
+        if val:
+            os.environ[env] = str(val)
+    for key, env in _GATE_ENV.items():
+        val = (cfg.get("gates") or {}).get(key)
+        if val:
+            os.environ[env] = "1" if val else "0"
+    ext = cfg.get("external") or {}
+    if ext.get("ollama_host"):
+        os.environ["MIDWAY_OLLAMA_HOST"] = str(ext["ollama_host"])
+    if ext.get("google_api_key"):
+        os.environ["GOOGLE_API_KEY"] = str(ext["google_api_key"])
+    ncfg = cfg.get("ntfy") or {}
+    if ncfg.get("topic"):
+        os.environ["MIDWAY_NTFY_TOPIC"] = str(ncfg["topic"])
+    if ncfg.get("server"):
+        os.environ["MIDWAY_NTFY_SERVER"] = str(ncfg["server"])
+    os.environ["MIDWAY_NTFY_ENABLED"] = "1" if ncfg.get("enabled", True) else "0"
+
+
+_apply_ide_config_to_env()
+
 # Bug S: Set deterministic-server-mode env var BEFORE any pipeline modules are
 # imported.  This ensures the reconciliation gate in _finalize_review.py detects
 # server mode via os.environ["MIDWAY_FORCED_DETERMINISTIC"] even when stdin
@@ -201,6 +317,12 @@ class StreamHandler(BaseHTTPRequestHandler):
             self._serve_logs(params)
         elif parsed.path == "/api/ollama":
             self._serve_ollama()
+        elif parsed.path == "/api/state":
+            self._serve_state()
+        elif parsed.path == "/api/config":
+            self._serve_config()
+        elif parsed.path == "/api/watchdog":
+            self._serve_watchdog()
         elif parsed.path == "/api/logfile":
             self._serve_logfile(params)
         elif parsed.path.startswith("/api/"):
@@ -280,6 +402,90 @@ class StreamHandler(BaseHTTPRequestHandler):
 
     def _serve_ollama(self):
         self._serve_json(_status.probe_ollama())
+
+    def _serve_state(self):
+        try:
+            import pipeline as _p
+            models = {
+                "coder": getattr(_p, "CODER_MODEL", ""),
+                "reviewer": getattr(_p, "REVIEWER_MODEL", ""),
+                "arbiter": getattr(_p, "ARBITER_MODEL", ""),
+                "vision": getattr(_p, "VISION_MODEL", ""),
+                "scaffold": getattr(_p, "SCAFFOLD_MODEL", ""),
+            }
+        except Exception:
+            models = {}
+        self._serve_json({
+            "run": _status.snapshot(),
+            "models": models,
+            "config": _read_ide_config(),
+        })
+
+    def _serve_config(self):
+        self._serve_json(_read_ide_config())
+
+    def _handle_config_post(self):
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        try:
+            req = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        except Exception:
+            req = {}
+        ok = _write_ide_config(req or {})
+        self._serve_json({
+            "saved": ok,
+            "restart_required": True,
+            "config": _read_ide_config(),
+        })
+
+    def _serve_watchdog(self):
+        try:
+            import watchdog as _wd
+            import ntfy as _ntfy
+            self._serve_json({"watchdog": _wd.get_settings(), "ntfy": _ntfy.get_config()})
+        except Exception as _e:
+            self._serve_json({"error": str(_e)})
+
+    def _handle_watchdog_post(self):
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        try:
+            req = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        except Exception:
+            req = {}
+        try:
+            import watchdog as _wd
+            import ntfy as _ntfy
+            wd = _wd.apply_settings(req.get("watchdog") or {})
+            ncfg = req.get("ntfy") or {}
+            if ncfg:
+                ncfg = _ntfy.set_config(
+                    topic=ncfg.get("topic", ""),
+                    server=ncfg.get("server", ""),
+                    enabled=ncfg.get("enabled"),
+                )
+            else:
+                ncfg = _ntfy.get_config()
+            # Persist both so they survive a server restart.
+            try:
+                full = _read_ide_config()
+                if req.get("watchdog"):
+                    full.setdefault("watchdog", {}).update(wd)
+                if req.get("ntfy"):
+                    full.setdefault("ntfy", {}).update(
+                        {k: v for k, v in ncfg.items() if k in ("topic", "server", "enabled")}
+                    )
+                _write_ide_config(full)
+            except Exception:
+                pass
+            self._serve_json({"watchdog": wd, "ntfy": ncfg})
+        except Exception as _e:
+            self._serve_json({"error": str(_e)})
+
+    def _handle_ntfy_test(self):
+        try:
+            import watchdog as _wd
+            self._serve_json({"sent": _wd.send_test_notification()})
+        except Exception as _e:
+            self._serve_json({"sent": False, "error": str(_e)})
 
     def _serve_static(self, path: str):
         root = WEB_DIST
@@ -507,6 +713,15 @@ class StreamHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/kill":
             self._handle_kill()
             return
+        if parsed.path == "/api/config":
+            self._handle_config_post()
+            return
+        if parsed.path == "/api/watchdog":
+            self._handle_watchdog_post()
+            return
+        if parsed.path == "/api/ntfy/test":
+            self._handle_ntfy_test()
+            return
         if parsed.path == "/api/restart":
             self._handle_restart()
             return
@@ -541,6 +756,20 @@ class StreamHandler(BaseHTTPRequestHandler):
 
         stream_mode = req.get("stream", True)
         model = req.get("model", "pipeline")
+
+        # Multimodal: attach any image payloads to the chat path; the explicit
+        # `vision` flag (UI checkbox) forces chat mode + the vision model.
+        try:
+            from pipeline import extract_images_from_messages, set_chat_images, set_force_vision
+            _imgs = extract_images_from_messages(messages)
+            if _imgs:
+                set_chat_images(_imgs)
+                print(f"  [OpenAI POST] {len(_imgs)} image(s) attached — chat routes to vision model.")
+            if req.get("vision"):
+                set_force_vision(True)
+                print("  [OpenAI POST] vision flag set — forcing vision chat mode.")
+        except Exception:
+            pass
 
         print(f"  [OpenAI POST] /v1/chat/completions  prompt='{prompt[:60]}...' stream={stream_mode}")
 
@@ -685,6 +914,7 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     # failure must never block or kill the server).
     try:
         import watchdog
+        watchdog.apply_settings(_read_ide_config().get("watchdog") or {})
         watchdog.start()
     except Exception as e:
         print(f"  [Watchdog] failed to start: {e}", flush=True)

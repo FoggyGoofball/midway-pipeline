@@ -42,6 +42,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from failure_mode_seeder import MUTATIONS  # noqa: E402
+from contract_failure_generator import derive_guard_rules  # noqa: E402
 from arbiter import answer_oracle_question  # noqa: E402
 
 TRIBUNAL_SYSTEM = (
@@ -128,8 +129,94 @@ def _user(code: str, violations: str) -> str:
     )
 
 
+def _build_registry() -> dict:
+    """(name -> (mutate, objection, question)) for hand-written + derived rules.
+
+    Hand-written ``ARBITER_META`` wins on name collision; contract-derived
+    rules (``derive_guard_rules``) fill in everything else so new contract
+    APIs automatically gain arbiter training coverage.
+    """
+    reg: dict = {}
+    for name, meta in ARBITER_META.items():
+        mutate = MUTATIONS.get(name)
+        if mutate is not None:
+            reg[name] = (mutate, meta["objection"], meta.get("question"))
+    for name, rule in derive_guard_rules().items():
+        reg.setdefault(name, (rule.mutate, rule.objection, rule.question))
+    return reg
+
+
+def _emit(fh, mutate, objection: str, question, clean: str) -> int:
+    """Emit REJECT/MERGE/QUESTION/DEBATE for one (rule, clean-file) pair.
+
+    Returns the number of samples written (0 when the fixer has no delta).
+    """
+    from _post_process_lua import post_process_lua
+    broken = mutate(clean)
+    fixed = post_process_lua(broken)
+    if fixed == broken:
+        return 0
+    n = 0
+
+    # 1. REJECT: broken code -> cite the specific defect.
+    fh.write(json.dumps({"messages": [
+        {"role": "system", "content": TRIBUNAL_SYSTEM},
+        {"role": "user", "content": _user(broken, objection)},
+        {"role": "assistant", "content": f"[REJECT:Tribunal:{objection}]"},
+    ]}) + "\n")
+    n += 1
+
+    # 2. MERGE: fixed code -> approve.
+    fh.write(json.dumps({"messages": [
+        {"role": "system", "content": TRIBUNAL_SYSTEM},
+        {"role": "user", "content": _user(fixed, "(none listed)")},
+        {"role": "assistant",
+         "content": "[MERGE:Tribunal:the flagged defect is resolved and the "
+                    "implementation is now contract-clean]"},
+    ]}) + "\n")
+    n += 1
+
+    if not question:
+        return n
+
+    # 3. QUESTION: broken code -> interrogate the oracle.
+    fh.write(json.dumps({"messages": [
+        {"role": "system", "content": TRIBUNAL_SYSTEM},
+        {"role": "user", "content": _user(broken, "(none listed)")},
+        {"role": "assistant", "content": f"[QUESTION:oracle:{question}]"},
+    ]}) + "\n")
+    n += 1
+
+    # 4. DEBATE: multi-turn ask -> oracle answer -> reject.
+    answered, fact = answer_oracle_question(question, broken)
+    if answered:
+        fh.write(json.dumps({"messages": [
+            {"role": "system", "content": TRIBUNAL_SYSTEM},
+            {"role": "user", "content": _user(broken, "(none listed)")},
+            {"role": "assistant", "content": f"[QUESTION:oracle:{question}]"},
+            {"role": "user", "content": f"[oracle] {fact}"},
+            {"role": "assistant", "content": f"[REJECT:Tribunal:{objection}]"},
+        ]}) + "\n")
+        n += 1
+
+    return n
+
+
+def collect_files(directory: str, max_files: int = 0) -> list[str]:
+    """Recursively collect clean ``*.lua`` files, excluding staging/sandbox dirs."""
+    root = Path(directory)
+    files = sorted(
+        p for p in root.rglob("*.lua")
+        if ".staging_workspace" not in p.parts and ".sandbox" not in p.parts
+    )
+    if max_files:
+        files = files[:max_files]
+    return [str(p) for p in files]
+
+
 def generate(file_paths: list[str]) -> int:
     total = 0
+    reg = _build_registry()
     out = SCRIPT_DIR / "arbiter_lora_dataset.jsonl"
     with open(out, "w", encoding="utf-8") as fh:
         for fp in file_paths:
@@ -137,71 +224,24 @@ def generate(file_paths: list[str]) -> int:
                 print(f"  SKIP missing: {fp}")
                 continue
             clean = Path(fp).read_text(encoding="utf-8")
-            for name, meta in ARBITER_META.items():
-                mutate = MUTATIONS.get(name)
-                if mutate is None:
-                    continue
-                from _post_process_lua import post_process_lua
-                broken = mutate(clean)
-                fixed = post_process_lua(broken)
-                if fixed == broken:
-                    continue
-                objection = meta["objection"]
-                question = meta.get("question")
-
-                # 1. REJECT: broken code -> cite the specific defect.
-                fh.write(json.dumps({"messages": [
-                    {"role": "system", "content": TRIBUNAL_SYSTEM},
-                    {"role": "user", "content": _user(broken, objection)},
-                    {"role": "assistant", "content": f"[REJECT:Tribunal:{objection}]"},
-                ]}) + "\n")
-                total += 1
-
-                # 2. MERGE: fixed code -> approve.
-                fh.write(json.dumps({"messages": [
-                    {"role": "system", "content": TRIBUNAL_SYSTEM},
-                    {"role": "user", "content": _user(fixed, "(none listed)")},
-                    {"role": "assistant",
-                     "content": "[MERGE:Tribunal:the flagged defect is resolved and the "
-                                "implementation is now contract-clean]"},
-                ]}) + "\n")
-                total += 1
-
-                if not question:
-                    continue
-
-                # 3. QUESTION: broken code -> interrogate the oracle.
-                fh.write(json.dumps({"messages": [
-                    {"role": "system", "content": TRIBUNAL_SYSTEM},
-                    {"role": "user", "content": _user(broken, "(none listed)")},
-                    {"role": "assistant", "content": f"[QUESTION:oracle:{question}]"},
-                ]}) + "\n")
-                total += 1
-
-                # 4. DEBATE: multi-turn ask -> oracle answer -> reject.
-                answered, fact = answer_oracle_question(question, broken)
-                if not answered:
-                    continue
-                fh.write(json.dumps({"messages": [
-                    {"role": "system", "content": TRIBUNAL_SYSTEM},
-                    {"role": "user", "content": _user(broken, "(none listed)")},
-                    {"role": "assistant", "content": f"[QUESTION:oracle:{question}]"},
-                    {"role": "user", "content": f"[oracle] {fact}"},
-                    {"role": "assistant", "content": f"[REJECT:Tribunal:{objection}]"},
-                ]}) + "\n")
-                total += 1
-
-    print(f"Wrote {total} arbiter sample(s) -> {out.name}")
+            for mutate, objection, question in reg.values():
+                total += _emit(fh, mutate, objection, question, clean)
+    print(f"Wrote {total} arbiter sample(s) from {len(reg)} rule(s) -> {out.name}")
     return total
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--files", nargs="+", help="clean Lua files to derive arbiter samples from")
+    ap.add_argument("--dir", help="recursively collect *.lua files under this directory")
+    ap.add_argument("--max-files", type=int, default=0, help="cap on files collected via --dir")
     args = ap.parse_args()
-    if not args.files:
-        ap.error("--files is required")
-    generate(args.files)
+    files = list(args.files or [])
+    if args.dir:
+        files = collect_files(args.dir, args.max_files) + files
+    if not files:
+        ap.error("provide --files or --dir")
+    generate(files)
 
 
 if __name__ == "__main__":

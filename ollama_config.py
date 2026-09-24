@@ -26,6 +26,8 @@ USE_PHI35_ORACLES: bool = os.environ.get("MIDWAY_PHI35_ORACLES", "0") == "1"
 # -- Model Names
 CODER_MODEL: str = "midway-coder-lora"  # LoRA-tuned qwen2.5-coder-7b-instruct (SEARCH/REPLACE + Midway contract)
 REVIEWER_MODEL: str = "midway-reasoner-lora"
+# Multimodal vision model (image chat / texture alignment). NOT LoRA-trainable.
+VISION_MODEL: str = "qwen3.5:9b"
 FALLBACK_REVIEWER_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
 PRE_SUMMARIZER_MODEL: str = "phi3.5:latest"
 LIBRARIAN_MODEL: str = "midway-reasoner-lora"

@@ -155,7 +155,7 @@ _CTX = PipelineContext(
 )
 
 # -- Configuration ----------------------------------------------------------
-OLLAMA_HOST = "http://192.168.0.16:11434"
+OLLAMA_HOST = os.getenv("MIDWAY_OLLAMA_HOST", "http://192.168.0.16:11434")
 
 # Execution coder: the LoRA-tuned coder (SEARCH/REPLACE + Midway contract).
 CODER_MODEL = os.getenv("MIDWAY_CODER_MODEL", "midway-coder-lora")
@@ -174,6 +174,9 @@ LIBRARIAN_MODEL = "midway-reasoner-lora"
 SYNTAX_GATE_MODEL = "qwen2.5-coder:1.5b"
 INTENT_CLASSIFIER_MODEL = "llama3.2:1b"
 CHAT_MODEL = CODER_MODEL
+# Multimodal model for image/vision chat (texture alignment, screenshots).
+# qwen3.5:9b is the SSM+vision hybrid — NOT LoRA-trainable, inference only.
+VISION_MODEL = os.getenv("MIDWAY_VISION_MODEL", "qwen3.5:9b")
 EXECUTION_MODEL = CODER_MODEL
 REASONING_MODEL = REVIEWER_MODEL
 # Supreme arbiter: a TRUE reasoning model (DeepSeek-R1-Distill-Qwen-7B) that
@@ -188,6 +191,69 @@ DIRECTOR_MODEL = "midway-reasoner-lora"
 PROJECT_ROOT = Path(os.getenv("MIDWAY_PROJECT_ROOT", Path(__file__).resolve().parent.with_name("midway")))
 MAX_ITERATIONS = 3
 MAX_CONSENSUS_ITERATIONS = 3
+# Blueprint auto-feed loop safety: abort instead of spinning forever when the
+# Director never signals completion (e.g. mocked/canned LLM responses in tests).
+BLUEPRINT_MAX_ITERATIONS = int(os.getenv("MIDWAY_BLUEPRINT_MAX_ITERATIONS", "50"))
+
+# ── Multimodal image chat support ──────────────────────────────────────
+# The HTTP layer attaches pending images for the NEXT chat request; the chat
+# branch consumes them and routes to VISION_MODEL.  Images are raw base64
+# (no data-URI prefix), matching Ollama's `images` message field.
+_CHAT_IMAGES: list = []
+
+
+def set_chat_images(images) -> None:
+    """Attach base64 images to the next chat request (vision path)."""
+    global _CHAT_IMAGES
+    _CHAT_IMAGES = list(images or [])
+
+
+def _consume_chat_images() -> list:
+    global _CHAT_IMAGES
+    imgs = _CHAT_IMAGES
+    _CHAT_IMAGES = []
+    return imgs
+
+
+def _strip_data_uri(s: str) -> str:
+    return s.split(",", 1)[1] if "," in s else s
+
+
+def extract_images_from_messages(messages) -> list:
+    """Extract raw base64 image payloads from OpenAI/Ollama-style messages."""
+    out = []
+    for msg in messages or []:
+        for img in msg.get("images") or []:
+            if img:
+                out.append(_strip_data_uri(str(img)))
+        content = msg.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict):
+                    url = (part.get("image_url") or {}).get("url")
+                    if url:
+                        out.append(_strip_data_uri(str(url)))
+        elif isinstance(content, str) and content.startswith("data:image"):
+            out.append(_strip_data_uri(content))
+    return out
+
+
+# Explicit vision mode: set by the UI checkbox when the user attaches an image
+# and wants it analyzed by the vision model.  Forces the chat branch and
+# VISION_MODEL routing regardless of intent classification.
+_FORCE_VISION = False
+
+
+def set_force_vision(v: bool) -> None:
+    global _FORCE_VISION
+    _FORCE_VISION = bool(v)
+
+
+def _consume_force_vision() -> bool:
+    global _FORCE_VISION
+    v = _FORCE_VISION
+    _FORCE_VISION = False
+    return v
 MAX_SUBTASKS_PER_AGENT = 5
 # Review-fix loop headroom.  The deterministic post-processor runs inside every
 # cycle, so structural defects clear fast; extra cycles give semantic fixes
@@ -616,7 +682,10 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     except Exception:
         _planning_mode = False
 
-    if _planning_mode:
+    if _consume_force_vision():
+        # Explicit UI checkbox: user attached an image and toggled vision mode.
+        ctx.is_chat = True
+    elif _planning_mode:
         ctx.is_chat = True
         ctx._planning_mode = True
     elif getattr(ctx, 'resumed_blocked', False):
@@ -682,7 +751,12 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
             pass
         enriched_input = "\n\n---\n\n".join(chat_context_parts)
 
-        response = call_ollama(CHAT_SYSTEM, enriched_input, "Chat", CHAT_MODEL)
+        _chat_imgs = _consume_chat_images()
+        _chat_model = VISION_MODEL if _chat_imgs else CHAT_MODEL
+        if _chat_imgs:
+            print(f"  [Chat] {len(_chat_imgs)} image(s) attached — routing to vision model {_chat_model}.")
+        response = call_ollama(CHAT_SYSTEM, enriched_input, "Chat", _chat_model,
+                               images=_chat_imgs or None)
         ctx.final_output = response
         return response
 
@@ -748,6 +822,12 @@ def run_mesh_pipeline(user_prompt: str, checkpoint_id: str = None,
     _blueprint_iteration = 0
     while True:
         _blueprint_iteration += 1
+        if _blueprint_iteration > BLUEPRINT_MAX_ITERATIONS:
+            _cap_msg = (f"[Blueprint Loop] Iteration cap reached "
+                        f"({BLUEPRINT_MAX_ITERATIONS}) without convergence; aborting.")
+            print(_cap_msg, flush=True)
+            ctx.final_output = _cap_msg
+            return ctx.final_output
         if _blueprint_iteration > 1:
             # Subsequent iterations: reset per-run accumulators but keep
             # the cartridge, project_root, session_mgr, and blueprint-session
